@@ -20,9 +20,6 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('export:log', h);
   },
   paths: () => ipcRenderer.invoke('app:paths'),
-  // ffmpeg frame server (WebCodecs preview player): frames are fetched over loopback HTTP
-  playerInfo: () => ipcRenderer.invoke('player:info'),
-  playerStop: () => ipcRenderer.invoke('player:stop'),
   openBlackbox: () => ipcRenderer.invoke('dialog:openBlackbox'),
   decodeBlackbox: (file, opts) => ipcRenderer.invoke('blackbox:decode', file, opts),
   makeProxy: (p, duration, kind) => ipcRenderer.invoke('video:makeProxy', p, duration, kind),

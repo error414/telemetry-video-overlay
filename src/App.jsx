@@ -260,7 +260,6 @@ export default function App() {
           app: 'telemetry-overlay',
           version: 1,
           video: video ? video.path : null,
-          playback: video ? { stream: !!video.stream, streamWidth: video.streamWidth, streamFps: video.streamFps } : null,
           sources: store.sources.map((s) => ({ path: s.path, timeColumn: s.timeColumn, timeUnit: s.timeUnit })),
           offset,
           widgets,
@@ -299,7 +298,7 @@ export default function App() {
       );
       if (j.video) {
         try {
-          setVideo({ ...(await probeVideo(j.video)), ...(j.playback || {}) });
+          setVideo(await probeVideo(j.video));
         } catch {
           setStatus('Video from project not found: ' + j.video);
         }
@@ -430,7 +429,6 @@ export default function App() {
               <FilesPanel
                 video={video}
                 openVideo={openVideo}
-                setStream={(on, extra) => setVideo((v) => (v ? { ...v, stream: on, ...(extra || {}) } : v))}
                 makeProxy={makeProxy}
                 proxyProgress={proxyProgress}
                 cancelProxy={() => window.api.cancelProxy()}

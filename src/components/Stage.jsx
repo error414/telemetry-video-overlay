@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { renderWidget, widgetBoxStyle } from '../widgetRuntime.js';
-import FfmpegPlayer from '../ffmpegPlayer.js';
 
 function toFileUrl(p) {
   return 'file:///' + p.replace(/\\/g, '/').replace(/^\//, '').split('/').map(encodeURIComponent).join('/');
@@ -92,9 +91,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
             fontFamily: 'Arial, Helvetica, sans-serif',
           }}
         >
-          {video && video.stream ? (
-            <StreamPlayer video={video} videoRef={videoRef} setTime={setTime} setStatus={setStatus} vw={vw} vh={vh} />
-          ) : video ? (
+          {video ? (
             <video
               ref={videoRef}
               src={toFileUrl(video.proxy || video.path)}
@@ -150,35 +147,6 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
       </div>
     </div>
   );
-}
-
-/** Canvas driven by FfmpegPlayer (original file, GPU decode via ffmpeg, WebCodecs draw). */
-function StreamPlayer({ video, videoRef, setTime, setStatus, vw, vh }) {
-  const canvasRef = useRef(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const player = new FfmpegPlayer({
-      file: video.path,
-      width: video.width,
-      height: video.height,
-      fps: video.fps,
-      duration: video.duration,
-      canvas,
-      previewWidth: video.streamWidth || 1920,
-      maxFps: video.streamFps || 60,
-      onTime: setTime,
-      onStatus: setStatus,
-    });
-    videoRef.current = player;
-    player.seek(0);
-    setStatus(`Original playback via ffmpeg: ${player.w}×${player.h} @ ${player.fps.toFixed(0)} fps preview` + (video.hasAudio ? ' (audio not played in this mode)' : ''));
-    return () => {
-      player.destroy();
-      if (videoRef.current === player) videoRef.current = null;
-    };
-  }, [video.path, video.stream, video.streamWidth, video.streamFps]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <canvas ref={canvasRef} style={{ width: vw, height: vh, display: 'block', background: '#000' }} />;
 }
 
 function styleObj(css) {

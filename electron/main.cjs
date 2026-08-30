@@ -380,6 +380,3 @@ ipcMain.handle('export:cancel', async () => {
 });
 
 ipcMain.handle('app:paths', () => ({ ffmpeg: ffmpegPath, ffprobe: ffprobePath }));
-
-// ffmpeg → NV12 frame streamer for the WebCodecs preview player (plays originals the <video> element rejects)
-require('./player.cjs')(ipcMain, ffmpegPath, canCudaDecode);
