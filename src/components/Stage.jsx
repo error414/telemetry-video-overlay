@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { renderWidget, widgetBoxStyle, widgetDomId } from '../widgetRuntime.js';
+import ShadowHtml from './ShadowHtml.jsx';
 
 function toFileUrl(p) {
   return 'file:///' + p.replace(/\\/g, '/').replace(/^\//, '').split('/').map(encodeURIComponent).join('/');
@@ -46,7 +47,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
     return () => window.removeEventListener('widget-assets-loaded', h);
   }, []);
 
-  const rendered = useMemo(() => widgets.map((w) => ({ w, out: renderWidget(w, store, time, offset) })), [widgets, store, time, offset, storeVersion, assetVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rendered = useMemo(() => widgets.map((w) => ({ w, out: renderWidget(w, store, time, offset, 'shadow') })), [widgets, store, time, offset, storeVersion, assetVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- drag / resize ----
   const dragRef = useRef(null);
@@ -134,7 +135,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
                   if (onOpenEditor) onOpenEditor(w.id);
                 }}
               >
-                <div dangerouslySetInnerHTML={{ __html: out.html }} style={{ width: '100%', height: '100%', pointerEvents: 'none' }} />
+                <ShadowHtml html={out.html} style={{ width: '100%', height: '100%', pointerEvents: 'none' }} />
                 {editMode && (
                   <div
                     onPointerDown={(e) => onPointerDown(e, w, 'resize')}

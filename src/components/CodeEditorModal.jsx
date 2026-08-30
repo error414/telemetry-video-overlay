@@ -4,6 +4,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { css as cssLang } from '@codemirror/lang-css';
 import { githubDark } from '@uiw/codemirror-theme-github';
 import { renderWidget, parseColumns, widgetDomId } from '../widgetRuntime.js';
+import ShadowHtml from './ShadowHtml.jsx';
 
 /** Build a readable selector for an element: tag#id.class1.class2 */
 function describe(el) {
@@ -31,7 +32,7 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
     if (follow) setPreviewTime(time);
   }, [time, follow]);
 
-  const out = useMemo(() => renderWidget(widget, store, previewTime, offset), [widget, store, previewTime, offset]);
+  const out = useMemo(() => renderWidget(widget, store, previewTime, offset, 'shadow'), [widget, store, previewTime, offset]);
   const cols = parseColumns(widget.columns);
   const missing = cols.filter((c) => !store.columns[c]);
   const duration = store.duration();
@@ -52,10 +53,13 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
   // ---- hover inspector ----
   const onPreviewMove = (e) => {
     const box = boxRef.current;
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    if (!box || !el || el === box || !box.contains(el)) return setHover(null);
+    const root = box && box.shadowRoot;
+    if (!root) return setHover(null);
+    // widget HTML lives in a shadow root → ask the shadow root for the element under the cursor
+    const el = root.elementFromPoint(e.clientX, e.clientY);
+    if (!el || el === box) return setHover(null);
     const path = [];
-    for (let n = el; n && n !== box; n = n.parentElement) path.unshift(describe(n));
+    for (let n = el; n && n !== root && n !== box; n = n.parentElement) path.unshift(describe(n));
     const r = el.getBoundingClientRect();
     const pr = previewRef.current.getBoundingClientRect();
     setHover({ selector: describe(el), path: path.join(' > '), rect: { left: r.left - pr.left, top: r.top - pr.top, width: r.width, height: r.height } });
@@ -109,7 +113,7 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
             </div>
             {tab === 'css' && (
               <div className="px-3 py-1.5 text-xs hint" style={{ borderTop: '1px solid var(--border)' }}>
-                Rules are scoped to this widget automatically (prefixed with <span className="mono">#{widgetDomId(widget)}</span>); <span className="mono">:root</span> targets the widget box. Hover the preview to find ids/classes; click to copy.
+                Rules are scoped to this widget automatically; <span className="mono">:root</span> targets the widget box. Hover the preview to find ids/classes; click to copy. SVG text/shapes use <span className="mono">fill</span>/<span className="mono">stroke</span>.
               </div>
             )}
             {out.error && (
@@ -138,11 +142,11 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
               onClick={copySelector}
             >
               <div style={{ width: widget.w * scale, height: widget.h * scale, position: 'relative' }}>
-                <div
-                  ref={boxRef}
+                <ShadowHtml
+                  hostRef={boxRef}
                   id={widgetDomId(widget)}
+                  html={out.html}
                   style={{ width: widget.w, height: widget.h, transform: `scale(${scale})`, transformOrigin: '0 0', position: 'absolute', opacity: widget.opacity, color: '#fff', fontFamily: 'Arial, Helvetica, sans-serif', outline: '1px dashed rgba(255,255,255,.25)' }}
-                  dangerouslySetInnerHTML={{ __html: out.html }}
                 />
               </div>
               {hover && (

@@ -3,7 +3,7 @@
 // Library tab and are refreshed automatically when EXAMPLES_VERSION changes.
 
 // Bump when examples change: the library's "Example:" entries are refreshed automatically.
-export const EXAMPLES_VERSION = 9;
+export const EXAMPLES_VERSION = 10;
 
 export const EXAMPLE_WIDGETS = [
   {
@@ -31,12 +31,13 @@ export const EXAMPLE_WIDGETS = [
   var v = values[0];
   var txt = (typeof v === 'number') ? (v * MULTIPLIER).toFixed(DIGITS) : '--';
   var st = SHOW_MAX ? ctx.stats(ctx.columns[0]) : null;
-  return '<div style="width:100%;height:100%;box-sizing:border-box;padding:4px 10px;background:' + BG
+  // CSS hooks: #bignum (box), .label, .value, .unit, .max
+  return '<div id="bignum" class="box" style="width:100%;height:100%;box-sizing:border-box;padding:4px 10px;background:' + BG
     + ';border-radius:' + RADIUS + 'px;font-family:' + FONT + ';color:' + COLOR + ';text-shadow:' + SHADOW + ';text-align:' + ALIGN + '">'
-    + (LABEL ? '<div style="font-size:' + Math.round(SIZE * 0.28) + 'px;color:' + LABEL_COLOR + ';letter-spacing:2px">' + LABEL + '</div>' : '')
-    + '<div style="font-size:' + SIZE + 'px;font-weight:bold;line-height:1">' + txt
-    + ' <span style="font-size:' + Math.round(SIZE * 0.35) + 'px;font-weight:normal">' + UNIT + '</span></div>'
-    + (st ? '<div style="font-size:' + Math.round(SIZE * 0.25) + 'px;color:' + LABEL_COLOR + '">max ' + (st.max * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</div>' : '')
+    + (LABEL ? '<div class="label" style="font-size:' + Math.round(SIZE * 0.28) + 'px;color:' + LABEL_COLOR + ';letter-spacing:2px">' + LABEL + '</div>' : '')
+    + '<div class="value" style="font-size:' + SIZE + 'px;font-weight:bold;line-height:1">' + txt
+    + ' <span class="unit" style="font-size:' + Math.round(SIZE * 0.35) + 'px;font-weight:normal">' + UNIT + '</span></div>'
+    + (st ? '<div class="max" style="font-size:' + Math.round(SIZE * 0.25) + 'px;color:' + LABEL_COLOR + '">max ' + (st.max * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</div>' : '')
     + '</div>';
 }`,
   },
@@ -71,9 +72,10 @@ export const EXAMPLE_WIDGETS = [
   var fill = DIRECTION === 'vertical'
     ? 'position:absolute;left:0;bottom:0;width:100%;height:' + (p * 100).toFixed(1) + '%'
     : 'position:absolute;left:0;top:0;height:100%;width:' + (p * 100).toFixed(1) + '%';
-  return '<div style="position:relative;width:100%;height:100%;box-sizing:border-box;background:' + BG + ';border:' + BORDER + ';border-radius:' + RADIUS + 'px;overflow:hidden">'
-    + '<div style="' + fill + ';background:' + BAR_COLOR + '"></div>'
-    + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:' + TEXT_COLOR + ';font:' + FONT + ';text-shadow:0 0 4px #000">' + text + '</div>'
+  // CSS hooks: #gauge (box), .fill, .text
+  return '<div id="gauge" class="box" style="position:relative;width:100%;height:100%;box-sizing:border-box;background:' + BG + ';border:' + BORDER + ';border-radius:' + RADIUS + 'px;overflow:hidden">'
+    + '<div class="fill" style="' + fill + ';background:' + BAR_COLOR + '"></div>'
+    + '<div class="text" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:' + TEXT_COLOR + ';font:' + FONT + ';text-shadow:0 0 4px #000">' + text + '</div>'
     + '</div>';
 }`,
   },
@@ -122,13 +124,14 @@ export const EXAMPLE_WIDGETS = [
     coords.push(x.toFixed(1) + ',' + y.toFixed(1));
   });
   var grid = '';
-  if (SHOW_GRID) for (var i = 1; i < 4; i++) grid += '<line x1="0" x2="' + W + '" y1="' + (H * i / 4) + '" y2="' + (H * i / 4) + '" stroke="rgba(255,255,255,.15)"/>';
-  var area = (FILL && coords.length) ? '<polygon points="' + coords[0].split(',')[0] + ',' + H + ' ' + coords.join(' ') + ' ' + coords[coords.length - 1].split(',')[0] + ',' + H + '" fill="' + FILL + '"/>' : '';
+  if (SHOW_GRID) for (var i = 1; i < 4; i++) grid += '<line class="grid" x1="0" x2="' + W + '" y1="' + (H * i / 4) + '" y2="' + (H * i / 4) + '" stroke="rgba(255,255,255,.15)"/>';
+  var area = (FILL && coords.length) ? '<polygon class="area" points="' + coords[0].split(',')[0] + ',' + H + ' ' + coords.join(' ') + ' ' + coords[coords.length - 1].split(',')[0] + ',' + H + '" fill="' + FILL + '"/>' : '';
   var v = values[0];
   var txt = (LABEL || ctx.columns[0]) + ': ' + (typeof v === 'number' ? (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT : '--');
-  return '<svg width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + RADIUS + 'px">' + grid + area
-    + '<polyline points="' + coords.join(' ') + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="' + LINE_WIDTH + '"/>'
-    + '<text x="8" y="' + (FONT_SIZE + 4) + '" fill="' + TEXT_COLOR + '" font-family="Arial" font-size="' + FONT_SIZE + '" style="text-shadow:0 0 4px #000">' + txt + '</text></svg>';
+  // CSS hooks: #graph (svg), .grid, .area, .line, .label
+  return '<svg id="graph" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + RADIUS + 'px">' + grid + area
+    + '<polyline class="line" points="' + coords.join(' ') + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="' + LINE_WIDTH + '"/>'
+    + '<text class="label" x="8" y="' + (FONT_SIZE + 4) + '" fill="' + TEXT_COLOR + '" font-family="Arial" font-size="' + FONT_SIZE + '" style="text-shadow:0 0 4px #000">' + txt + '</text></svg>';
 }`,
   },
   {
@@ -185,21 +188,22 @@ export const EXAMPLE_WIDGETS = [
   var svg = '';
   for (var i = 0; i <= GRID_LINES; i++) {
     var y = top + ch - ch * i / GRID_LINES, val = min + (max - min) * i / GRID_LINES;
-    svg += '<line x1="' + left + '" x2="' + (W - right) + '" y1="' + y + '" y2="' + y + '" stroke="' + GRID_COLOR + '" stroke-width="1"/>';
-    if (AXIS_LABELS) svg += '<text x="' + (left - 6) + '" y="' + (y + FONT_SIZE * 0.35) + '" text-anchor="end" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + FONT_SIZE + '" font-weight="bold" style="' + sh + '">' + val.toFixed(DIGITS) + '</text>';
+    svg += '<line class="grid" x1="' + left + '" x2="' + (W - right) + '" y1="' + y + '" y2="' + y + '" stroke="' + GRID_COLOR + '" stroke-width="1"/>';
+    if (AXIS_LABELS) svg += '<text class="axis" x="' + (left - 6) + '" y="' + (y + FONT_SIZE * 0.35) + '" text-anchor="end" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + FONT_SIZE + '" font-weight="bold" style="' + sh + '">' + val.toFixed(DIGITS) + '</text>';
   }
-  svg += '<path d="' + area + '" fill="' + FILL_COLOR + '"/><path d="' + d + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="' + LINE_WIDTH + '"/>';
+  svg += '<path class="area" d="' + area + '" fill="' + FILL_COLOR + '"/><path class="line" d="' + d + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="' + LINE_WIDTH + '"/>';
   var v = values[0], inRange = time >= t0 && time <= t1;
   if (inRange) {
     var mx = X(time), my = typeof v === 'number' ? Y(v) : top + ch;
-    svg += '<line x1="' + mx + '" x2="' + mx + '" y1="' + my + '" y2="' + (top + ch) + '" stroke="' + MARKER_COLOR + '" stroke-width="' + MARKER_WIDTH + '"/>';
-    if (DOT && typeof v === 'number') svg += '<circle cx="' + mx + '" cy="' + my + '" r="' + DOT_SIZE + '" fill="' + DOT_COLOR + '" stroke="' + MARKER_COLOR + '" stroke-width="2"/>';
+    svg += '<line class="marker" x1="' + mx + '" x2="' + mx + '" y1="' + my + '" y2="' + (top + ch) + '" stroke="' + MARKER_COLOR + '" stroke-width="' + MARKER_WIDTH + '"/>';
+    if (DOT && typeof v === 'number') svg += '<circle class="dot" cx="' + mx + '" cy="' + my + '" r="' + DOT_SIZE + '" fill="' + DOT_COLOR + '" stroke="' + MARKER_COLOR + '" stroke-width="2"/>';
     var label = typeof v === 'number' ? (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT : '--';
     var lx = mx + 8, anchor = 'start'; if (mx > W - right - VALUE_SIZE * 4) { lx = mx - 8; anchor = 'end'; }
-    svg += '<text x="' + lx + '" y="' + Math.max(top + VALUE_SIZE, my - 6) + '" text-anchor="' + anchor + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + VALUE_SIZE + '" font-weight="bold" style="' + sh + '">' + label + '</text>';
+    svg += '<text class="value" x="' + lx + '" y="' + Math.max(top + VALUE_SIZE, my - 6) + '" text-anchor="' + anchor + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + VALUE_SIZE + '" font-weight="bold" style="' + sh + '">' + label + '</text>';
   }
-  if (TITLE) svg += '<text x="' + (left + cw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + FONT_SIZE + '" font-weight="bold" style="' + sh + '">' + TITLE + '</text>';
-  return '<svg width="' + W + '" height="' + H + '" style="background:' + BG + '">' + svg + '</svg>';
+  if (TITLE) svg += '<text class="title" x="' + (left + cw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + FONT_SIZE + '" font-weight="bold" style="' + sh + '">' + TITLE + '</text>';
+  // CSS hooks: #flightgraph (svg), .grid, .axis, .area, .line, .marker, .dot, .value, .title
+  return '<svg id="flightgraph" width="' + W + '" height="' + H + '" style="background:' + BG + '">' + svg + '</svg>';
 }`,
   },
   {
@@ -240,16 +244,17 @@ export const EXAMPLE_WIDGETS = [
   var area = d + 'L' + X(t1).toFixed(1) + ',' + (H - pad) + 'L' + X(t0).toFixed(1) + ',' + (H - pad) + 'Z';
   var id = 'g' + Math.abs(W * 31 + H);
   var svg = '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + FILL_TOP + '"/><stop offset="1" stop-color="' + FILL_BOTTOM + '"/></linearGradient></defs>';
-  svg += '<path d="' + area + '" fill="url(#' + id + ')"/><path d="' + d + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="1.5"/>';
+  svg += '<path class="area" d="' + area + '" fill="url(#' + id + ')"/><path class="line" d="' + d + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="1.5"/>';
   var v = values[0], sh = 'text-shadow:0 0 3px #000;';
   if (typeof v === 'number' && time >= t0 && time <= t1) {
     var x = X(time), y = Y(v);
-    svg += '<circle cx="' + x + '" cy="' + y + '" r="' + DOT_SIZE + '" fill="' + DOT_COLOR + '" stroke="#fff" stroke-width="2"/>';
+    svg += '<circle class="dot" cx="' + x + '" cy="' + y + '" r="' + DOT_SIZE + '" fill="' + DOT_COLOR + '" stroke="#fff" stroke-width="2"/>';
     var lx = x + 10, anchor = 'start'; if (x > W - 80) { lx = x - 10; anchor = 'end'; }
-    svg += '<text x="' + lx + '" y="' + (y - 8) + '" text-anchor="' + anchor + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + (FONT_SIZE * 1.3) + '" font-weight="bold" style="' + sh + '">' + (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</text>';
+    svg += '<text class="value" x="' + lx + '" y="' + (y - 8) + '" text-anchor="' + anchor + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + (FONT_SIZE * 1.3) + '" font-weight="bold" style="' + sh + '">' + (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</text>';
   }
-  if (SHOW_MINMAX) svg += '<text x="' + (W - pad) + '" y="' + (FONT_SIZE + 2) + '" text-anchor="end" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + FONT_SIZE + '" style="' + sh + '">min ' + (min * MULTIPLIER).toFixed(DIGITS) + ' / max ' + (max * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</text>';
-  return '<svg width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + RADIUS + 'px">' + svg + '</svg>';
+  if (SHOW_MINMAX) svg += '<text class="minmax" x="' + (W - pad) + '" y="' + (FONT_SIZE + 2) + '" text-anchor="end" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + FONT_SIZE + '" style="' + sh + '">min ' + (min * MULTIPLIER).toFixed(DIGITS) + ' / max ' + (max * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</text>';
+  // CSS hooks: #profile (svg), .area, .line, .dot, .value, .minmax
+  return '<svg id="profile" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + RADIUS + 'px">' + svg + '</svg>';
 }`,
   },
   {
@@ -411,11 +416,11 @@ export const EXAMPLE_WIDGETS = [
       if (ty < 0 || ty >= maxT) continue;
       var wx = ((tx % maxT) + maxT) % maxT;
       var src = ctx.image(url.replace('{z}', zoom).replace('{x}', wx).replace('{y}', ty));
-      if (src) tiles += '<img src="' + src + '" style="position:absolute;left:' + (tx * TS - ox) + 'px;top:' + (ty * TS - oy) + 'px;width:' + TS + 'px;height:' + TS + 'px;' + filt + '"/>';
+      if (src) tiles += '<img class="tile" src="' + src + '" style="position:absolute;left:' + (tx * TS - ox) + 'px;top:' + (ty * TS - oy) + 'px;width:' + TS + 'px;height:' + TS + 'px;' + filt + '"/>';
       else if (src === null) failed++; else loading++;
     }
-    if (failed) tiles += '<div style="position:absolute;left:4px;top:4px;font:10px Arial;color:#f88;text-shadow:0 0 2px #000">' + failed + ' map tiles failed to load (offline?)</div>';
-    else if (loading) tiles += '<div style="position:absolute;left:4px;top:4px;font:10px Arial;color:#ccc;text-shadow:0 0 2px #000">loading map…</div>';
+    if (failed) tiles += '<div class="status status-error" style="position:absolute;left:4px;top:4px;font:10px Arial;color:#f88;text-shadow:0 0 2px #000">' + failed + ' map tiles failed to load (offline?)</div>';
+    else if (loading) tiles += '<div class="status status-loading" style="position:absolute;left:4px;top:4px;font:10px Arial;color:#ccc;text-shadow:0 0 2px #000">loading map…</div>';
   }
   // track (projected coords cached per zoom)
   var key = 'z' + zoom;
@@ -425,21 +430,22 @@ export const EXAMPLE_WIDGETS = [
     var str = (pr[j][0] - ox).toFixed(1) + ',' + (pr[j][1] - oy).toFixed(1);
     full.push(str); if (pr[j][2] <= time) trail.push(str);
   }
-  var svg = '<polyline points="' + full.join(' ') + '" fill="none" stroke="' + TRACK_COLOR + '" stroke-width="' + TRACK_WIDTH + '" stroke-linejoin="round"/>';
-  if (TRAIL_COLOR && trail.length > 1) svg += '<polyline points="' + trail.join(' ') + '" fill="none" stroke="' + TRAIL_COLOR + '" stroke-width="' + TRAIL_WIDTH + '" stroke-linejoin="round"/>';
+  var svg = '<polyline class="track" points="' + full.join(' ') + '" fill="none" stroke="' + TRACK_COLOR + '" stroke-width="' + TRACK_WIDTH + '" stroke-linejoin="round"/>';
+  if (TRAIL_COLOR && trail.length > 1) svg += '<polyline class="trail" points="' + trail.join(' ') + '" fill="none" stroke="' + TRAIL_COLOR + '" stroke-width="' + TRAIL_WIDTH + '" stroke-linejoin="round"/>';
   if (hasPos) {
     var q = px(lat0, lon0, zoom), ax = q[0] - ox, ay = q[1] - oy, r = ARROW_SIZE / 2, shape;
     if (ARROW_STYLE === 'dot') shape = '<circle r="' + (r * 0.6) + '"/>';
     else if (ARROW_STYLE === 'chevron') shape = '<path d="M0,' + (-r) + ' L' + r + ',' + r + ' L0,' + (r * 0.4) + ' L' + (-r) + ',' + r + ' Z"/>';
     else if (ARROW_STYLE === 'plane') shape = '<path d="M0,' + (-r) + ' L' + (r * 0.25) + ',' + (-r * 0.3) + ' L' + r + ',' + (r * 0.25) + ' L' + r + ',' + (r * 0.5) + ' L' + (r * 0.25) + ',' + (r * 0.2) + ' L' + (r * 0.2) + ',' + (r * 0.75) + ' L' + (r * 0.45) + ',' + r + ' L' + (-r * 0.45) + ',' + r + ' L' + (-r * 0.2) + ',' + (r * 0.75) + ' L' + (-r * 0.25) + ',' + (r * 0.2) + ' L' + (-r) + ',' + (r * 0.5) + ' L' + (-r) + ',' + (r * 0.25) + ' L' + (-r * 0.25) + ',' + (-r * 0.3) + ' Z"/>';
     else shape = '<path d="M0,' + (-r) + ' L' + (r * 0.7) + ',' + r + ' L0,' + (r * 0.55) + ' L' + (-r * 0.7) + ',' + r + ' Z"/>';
-    svg += '<g transform="translate(' + ax.toFixed(1) + ',' + ay.toFixed(1) + ') rotate(' + (hd - rot).toFixed(1) + ')" fill="' + ARROW_COLOR + '" stroke="' + ARROW_STROKE + '" stroke-width="1.5" stroke-linejoin="round">' + shape + '</g>';
+    svg += '<g class="arrow" transform="translate(' + ax.toFixed(1) + ',' + ay.toFixed(1) + ') rotate(' + (hd - rot).toFixed(1) + ')" fill="' + ARROW_COLOR + '" stroke="' + ARROW_STROKE + '" stroke-width="1.5" stroke-linejoin="round">' + shape + '</g>';
   }
-  var attr = (SHOW_ATTRIBUTION && MAP_STYLE !== 'none' && TILES[MAP_STYLE]) ? '<div style="position:absolute;right:4px;bottom:2px;font:9px Arial;color:rgba(255,255,255,.7);text-shadow:0 0 2px #000">' + TILES[MAP_STYLE][1] + '</div>' : '';
+  var attr = (SHOW_ATTRIBUTION && MAP_STYLE !== 'none' && TILES[MAP_STYLE]) ? '<div class="attribution" style="position:absolute;right:4px;bottom:2px;font:9px Arial;color:rgba(255,255,255,.7);text-shadow:0 0 2px #000">' + TILES[MAP_STYLE][1] + '</div>' : '';
   var tr = rot ? 'transform:rotate(' + rot + 'deg);transform-origin:' + (W / 2) + 'px ' + (H / 2) + 'px;' : '';
-  return '<div style="position:relative;width:100%;height:100%;overflow:hidden;box-sizing:border-box;background:' + BG + ';border-radius:' + RADIUS + 'px;border:' + BORDER + '">'
-    + '<div style="position:absolute;inset:0;opacity:' + MAP_OPACITY + ';' + tr + '">' + tiles + '</div>'
-    + '<svg width="' + W + '" height="' + H + '" style="position:absolute;left:0;top:0;' + tr + '">' + svg + '</svg>' + attr + '</div>';
+  // CSS hooks: #map (box), .tiles, .tile, .status, svg.overlay, .track, .trail, .arrow, .attribution
+  return '<div id="map" class="box" style="position:relative;width:100%;height:100%;overflow:hidden;box-sizing:border-box;background:' + BG + ';border-radius:' + RADIUS + 'px;border:' + BORDER + '">'
+    + '<div class="tiles" style="position:absolute;inset:0;opacity:' + MAP_OPACITY + ';' + tr + '">' + tiles + '</div>'
+    + '<svg class="overlay" width="' + W + '" height="' + H + '" style="position:absolute;left:0;top:0;' + tr + '">' + svg + '</svg>' + attr + '</div>';
 }`,
   },
   {
@@ -466,26 +472,27 @@ export const EXAMPLE_WIDGETS = [
   var svg = '';
   if (STYLE === 'rose') {
     var cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 4;
-    svg += '<g transform="translate(' + cx + ',' + cy + ') rotate(' + (-hd) + ')">';
+    svg += '<g class="rose" transform="translate(' + cx + ',' + cy + ') rotate(' + (-hd) + ')">';
     for (var a = 0; a < 360; a += 15) {
       var big = a % 90 === 0, len = big ? r * 0.25 : a % 45 === 0 ? r * 0.18 : r * 0.1;
-      svg += '<line x1="0" y1="' + (-r) + '" x2="0" y2="' + (-r + len) + '" stroke="' + COLOR + '" stroke-width="' + (big ? 2 : 1) + '" transform="rotate(' + a + ')"/>';
-      if (names[a] && big) svg += '<text transform="rotate(' + a + ') translate(0,' + (-r + len + FONT_SIZE) + ')" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + FONT_SIZE + '" font-weight="bold">' + names[a] + '</text>';
+      svg += '<line class="tick' + (big ? ' tick-major' : '') + '" x1="0" y1="' + (-r) + '" x2="0" y2="' + (-r + len) + '" stroke="' + COLOR + '" stroke-width="' + (big ? 2 : 1) + '" transform="rotate(' + a + ')"/>';
+      if (names[a] && big) svg += '<text class="tick-label" transform="rotate(' + a + ') translate(0,' + (-r + len + FONT_SIZE) + ')" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + FONT_SIZE + '" font-weight="bold">' + names[a] + '</text>';
     }
-    svg += '</g><path d="M' + cx + ',' + (cy - r - 2) + ' l-6,-8 l12,0 z" fill="' + ACCENT + '"/>';
-    svg += '<text x="' + cx + '" y="' + (cy + FONT_SIZE / 2) + '" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + (FONT_SIZE * 1.3) + '" font-weight="bold">' + hd.toFixed(0) + '°</text>';
+    svg += '</g><path class="needle" d="M' + cx + ',' + (cy - r - 2) + ' l-6,-8 l12,0 z" fill="' + ACCENT + '"/>';
+    svg += '<text class="heading" x="' + cx + '" y="' + (cy + FONT_SIZE / 2) + '" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + (FONT_SIZE * 1.3) + '" font-weight="bold">' + hd.toFixed(0) + '°</text>';
   } else {
     var mid = W / 2, span = W * DEG_PER_PX / 2;
     var from = Math.ceil((hd - span) / 5) * 5, to = Math.floor((hd + span) / 5) * 5;
     for (var d = from; d <= to; d += 5) {
       var x = mid + (d - hd) / DEG_PER_PX, dd = ((d % 360) + 360) % 360, big2 = dd % 30 === 0;
-      svg += '<line x1="' + x + '" x2="' + x + '" y1="' + (H - 4) + '" y2="' + (H - (big2 ? 16 : 9)) + '" stroke="' + COLOR + '" stroke-width="' + (big2 ? 2 : 1) + '"/>';
-      if (big2) svg += '<text x="' + x + '" y="' + (H - 20) + '" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + FONT_SIZE + '" font-weight="' + (names[dd] ? 'bold' : 'normal') + '">' + (names[dd] || dd) + '</text>';
+      svg += '<line class="tick' + (big2 ? ' tick-major' : '') + '" x1="' + x + '" x2="' + x + '" y1="' + (H - 4) + '" y2="' + (H - (big2 ? 16 : 9)) + '" stroke="' + COLOR + '" stroke-width="' + (big2 ? 2 : 1) + '"/>';
+      if (big2) svg += '<text class="tick-label" x="' + x + '" y="' + (H - 20) + '" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + FONT_SIZE + '" font-weight="' + (names[dd] ? 'bold' : 'normal') + '">' + (names[dd] || dd) + '</text>';
     }
-    svg += '<path d="M' + mid + ',' + (H - 2) + ' l-6,-8 l12,0 z" fill="' + ACCENT + '"/>';
-    svg += '<rect x="' + (mid - 22) + '" y="2" width="44" height="' + (FONT_SIZE + 6) + '" rx="3" fill="' + ACCENT + '"/><text x="' + mid + '" y="' + (FONT_SIZE + 3) + '" text-anchor="middle" fill="#fff" font-family="Arial" font-size="' + FONT_SIZE + '" font-weight="bold">' + hd.toFixed(0) + '°</text>';
+    svg += '<path class="needle" d="M' + mid + ',' + (H - 2) + ' l-6,-8 l12,0 z" fill="' + ACCENT + '"/>';
+    svg += '<rect class="heading-bg" x="' + (mid - 22) + '" y="2" width="44" height="' + (FONT_SIZE + 6) + '" rx="3" fill="' + ACCENT + '"/><text class="heading" x="' + mid + '" y="' + (FONT_SIZE + 3) + '" text-anchor="middle" fill="#fff" font-family="Arial" font-size="' + FONT_SIZE + '" font-weight="bold">' + hd.toFixed(0) + '°</text>';
   }
-  return '<svg width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + RADIUS + 'px">' + svg + '</svg>';
+  // CSS hooks: #compass (svg), .rose, .tick, .tick-major, .tick-label, .needle, .heading, .heading-bg
+  return '<svg id="compass" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + RADIUS + 'px">' + svg + '</svg>';
 }`,
   },
 ];

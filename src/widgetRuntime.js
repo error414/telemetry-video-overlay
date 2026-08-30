@@ -98,7 +98,7 @@ export function waitForImages() {
 }
 
 /** Render a widget to an HTML string. Never throws. */
-export function renderWidget(widget, store, videoTime, offsetSec) {
+export function renderWidget(widget, store, videoTime, offsetSec, scopeMode = 'id') {
   const { fn, error } = compileWidget(widget.code || '');
   if (error) return { html: errBox('Compile error: ' + error), error };
   const relSec = videoTime + offsetSec;
@@ -130,7 +130,7 @@ export function renderWidget(widget, store, videoTime, offsetSec) {
     const out = fn(values, timeMs, ctx);
     let html = out == null ? '' : String(out);
     // per-widget stylesheet, scoped to this widget's box (#w-<id>)
-    if (widget.css && widget.css.trim()) html = '<style>' + scopeCss(widget.css, widgetDomId(widget)) + '</style>' + html;
+    if (widget.css && widget.css.trim()) html = '<style>' + scopeCss(widget.css, widgetDomId(widget), scopeMode) + '</style>' + html;
     return { html, error: null };
   } catch (e) {
     const msg = String(e && e.message ? e.message : e);
@@ -147,15 +147,20 @@ export function widgetDomId(widget) {
  * Handles plain rules and nested @media/@supports blocks; @keyframes/@font-face are left as is.
  * `:root` / `:host` refer to the widget box itself.
  */
-export function scopeCss(css, id) {
-  const prefix = '#' + id;
+export function scopeCss(css, id, mode = 'id') {
+  // mode 'id': prefix with #id (export: plain DOM inside foreignObject)
+  // mode 'shadow': widget HTML lives in a shadow root → the box is :host
+  const prefix = mode === 'shadow' ? ':host' : '#' + id;
   const scopeSelectors = (sel) =>
     sel
       .split(',')
       .map((s) => {
         s = s.trim();
         if (!s) return s;
-        if (/^(:root|:host)\b/.test(s)) return prefix + s.replace(/^(:root|:host)/, '');
+        if (/^(:root|:host)\b/.test(s)) {
+          const rest = s.replace(/^(:root|:host)/, '');
+          return mode === 'shadow' && rest && !rest.startsWith(' ') ? ':host(' + rest.replace(/^\s+/, '') + ')' : prefix + rest;
+        }
         return prefix + ' ' + s;
       })
       .join(', ');
