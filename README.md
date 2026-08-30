@@ -83,6 +83,17 @@ images) are not available during export – embed them as `data:` URIs.
 
 Duplicate column names across files can be disambiguated with `file.csv:column`.
 
+## Playback engines (Files tab)
+
+* **Built-in player** (`<video>`): audio, instant seeking — but Chromium rejects some camera
+  HEVC streams (DJI 4K/120 10-bit → `PIPELINE_ERROR_DECODE`).
+* **Original via ffmpeg (GPU decode → WebCodecs)**: ffmpeg in the main process decodes the
+  original file (CUDA + `scale_cuda`), serves raw NV12 frames over a loopback HTTP stream, and
+  the renderer draws them as WebCodecs `VideoFrame`s on a canvas. Plays any file without a proxy;
+  no audio. Preview size (default 1920 px) and fps cap (default 60) are adjustable — at 1920 px
+  the transport sustains ~75 fps, so 60 fps is real-time; native 4K preview runs ~18 fps.
+  Seeking/frame stepping decodes the exact frame (~0.4 s). Selection is saved in the project.
+
 ## Export performance
 
 * **GPU** – with an NVIDIA card the video mode uses `hevc_nvenc` / `h264_nvenc` for encoding and

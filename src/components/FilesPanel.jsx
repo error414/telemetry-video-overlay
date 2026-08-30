@@ -13,7 +13,7 @@ const SEL = (label, key, opts, bbOptions, setBbOptions) => (
   </label>
 );
 
-export default function FilesPanel({ video, openVideo, makeProxy, proxyProgress, cancelProxy, decodeBlackbox, decoding, bbOptions, setBbOptions, store, storeVersion, addCsvFiles, updateSource, removeSource }) {
+export default function FilesPanel({ video, openVideo, setStream, makeProxy, proxyProgress, cancelProxy, decodeBlackbox, decoding, bbOptions, setBbOptions, store, storeVersion, addCsvFiles, updateSource, removeSource }) {
   void storeVersion;
   const heavy = video && (video.codec === 'hevc' || video.width > 1920 || video.fps > 60);
   return (
@@ -24,6 +24,32 @@ export default function FilesPanel({ video, openVideo, makeProxy, proxyProgress,
           <div>{video.path}</div>
           <div className="hint mt-1">
             {video.width}×{video.height} · {video.fps.toFixed(3)} fps · {video.codec} · {video.duration.toFixed(2)} s · {video.bitrate ? (video.bitrate / 1e6).toFixed(1) + ' Mbit/s' : 'bitrate n/a'} · {video.hasAudio ? 'audio' : 'no audio'}
+          </div>
+          <div className="mt-2 pt-2 border-t border-[var(--border)]">
+            <div className="font-medium text-sm">Playback engine</div>
+            <label className="flex items-center gap-2 mt-1 cursor-pointer">
+              <input type="radio" checked={!video.stream} onChange={() => setStream(false)} /> Built-in player (&lt;video&gt;) — audio, instant seeking; may reject camera HEVC
+            </label>
+            <label className="flex items-center gap-2 mt-1 cursor-pointer">
+              <input type="radio" checked={!!video.stream} onChange={() => setStream(true)} /> Original via ffmpeg (GPU decode → WebCodecs) — plays any file, no proxy needed, no audio
+            </label>
+            {video.stream && (
+              <div className="flex gap-2 mt-1 items-center">
+                <span className="hint">preview size</span>
+                <select className="input" style={{ width: 110 }} value={video.streamWidth || 1920} onChange={(e) => setStream(true, { streamWidth: Number(e.target.value) })}>
+                  <option value={1280}>1280 px</option>
+                  <option value={1920}>1920 px</option>
+                  <option value={2560}>2560 px</option>
+                  <option value={3840}>native</option>
+                </select>
+                <span className="hint">fps cap</span>
+                <select className="input" style={{ width: 80 }} value={video.streamFps || 60} onChange={(e) => setStream(true, { streamFps: Number(e.target.value) })}>
+                  <option value={30}>30</option>
+                  <option value={60}>60</option>
+                  <option value={120}>120</option>
+                </select>
+              </div>
+            )}
           </div>
           <div className="mt-2 pt-2 border-t border-[var(--border)]">
             <div className="font-medium text-sm">Preview proxy</div>
