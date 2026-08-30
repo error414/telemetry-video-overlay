@@ -13,7 +13,7 @@ const SEL = (label, key, opts, bbOptions, setBbOptions) => (
   </label>
 );
 
-export default function FilesPanel({ video, openVideo, layout, lt, rebaseLayout, makeProxy, proxyProgress, cancelProxy, decodeBlackbox, decoding, bbOptions, setBbOptions, store, storeVersion, addCsvFiles, updateSource, removeSource }) {
+export default function FilesPanel({ video, openVideo, layout, setLayout, lt, rebaseLayout, makeProxy, proxyProgress, cancelProxy, decodeBlackbox, decoding, bbOptions, setBbOptions, store, storeVersion, addCsvFiles, updateSource, removeSource }) {
   void storeVersion;
   const heavy = video && (video.codec === 'hevc' || video.width > 1920 || video.fps > 60);
   return (
@@ -25,17 +25,37 @@ export default function FilesPanel({ video, openVideo, layout, lt, rebaseLayout,
           <div className="hint mt-1">
             {video.width}×{video.height} · {video.fps.toFixed(3)} fps · {video.codec} · {video.duration.toFixed(2)} s · {video.bitrate ? (video.bitrate / 1e6).toFixed(1) + ' Mbit/s' : 'bitrate n/a'} · {video.hasAudio ? 'audio' : 'no audio'}
           </div>
-          {layout && lt && lt.k !== 1 && (
-            <div className="mt-2 pt-2 border-t border-[var(--border)]">
-              <div className="font-medium text-sm">Widget layout</div>
-              <div className="text-[var(--warn)] mt-1">
-                Widgets were designed for {layout.w}×{layout.h} and are scaled ×{lt.k.toFixed(2)} to fit this video (positions and fonts included).
-              </div>
-              <button className="btn btn-xs mt-2" onClick={rebaseLayout} title="Convert widget coordinates to this video's resolution and make it the new reference">
-                Rebase layout to {video.width}×{video.height}
-              </button>
+          <div className="mt-2 pt-2 border-t border-[var(--border)]">
+            <div className="font-medium text-sm">Widget layout reference</div>
+            <div className="hint mt-1">The resolution the widgets were designed for; on other videos the whole layout (positions, sizes, fonts) scales automatically.</div>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <select
+                className="input"
+                style={{ width: 190 }}
+                value={layout ? layout.w + 'x' + layout.h : ''}
+                onChange={(e) => {
+                  const [w, h] = e.target.value.split('x').map(Number);
+                  setLayout({ w, h });
+                }}
+              >
+                {[[1280, 720], [1920, 1080], [2560, 1440], [3840, 2160]]
+                  .concat(layout && ![720, 1080, 1440, 2160].includes(layout.h) ? [[layout.w, layout.h]] : [])
+                  .map(([w, h]) => (
+                    <option key={w + 'x' + h} value={w + 'x' + h}>
+                      {w}×{h}{video && video.width === w && video.height === h ? ' (this video)' : ''}
+                    </option>
+                  ))}
+              </select>
+              {lt && lt.k !== 1 && (
+                <>
+                  <span className="chip chip-warn">scaled ×{lt.k.toFixed(2)}</span>
+                  <button className="btn btn-xs" onClick={rebaseLayout} title="Convert widget coordinates to this video's resolution and make it the new reference">
+                    Rebase to {video.width}×{video.height}
+                  </button>
+                </>
+              )}
             </div>
-          )}
+          </div>
           <div className="mt-2 pt-2 border-t border-[var(--border)]">
             <div className="font-medium text-sm">Preview proxy</div>
             {video.proxy ? (

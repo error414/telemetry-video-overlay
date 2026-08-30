@@ -3,7 +3,7 @@
 // Library tab and are refreshed automatically when EXAMPLES_VERSION changes.
 
 // Bump when examples change: the library's "Example:" entries are refreshed automatically.
-export const EXAMPLES_VERSION = 10;
+export const EXAMPLES_VERSION = 18;
 
 export const EXAMPLE_WIDGETS = [
   {
@@ -21,23 +21,25 @@ export const EXAMPLE_WIDGETS = [
   var COLOR      = '#ffffff';    // text color
   var LABEL_COLOR= 'rgba(255,255,255,.75)';
   var FONT       = 'Arial, sans-serif';
-  var SIZE       = 64;           // value font size (px)
+  var SIZE       = 64;           // value font size at the default 320x110 size; scales with the widget
   var SHADOW     = '0 0 8px rgba(0,0,0,.9)';  // text shadow ('' = none)
   var BG         = 'transparent';// box background, e.g. 'rgba(0,0,0,.4)'
-  var RADIUS     = 8;            // box corner radius (px)
+  var RADIUS     = 8;            // box corner radius at the default size; scales with the widget
   var ALIGN      = 'left';       // 'left' | 'center' | 'right'
   var SHOW_MAX   = false;        // show whole-flight maximum under the value
   // -------------------------------
+  var scale = Math.min(ctx.width / 320, ctx.height / 110);  // all sizes scale with the widget (settings are for the default 320x110)
+  var fs = SIZE * scale, radius = RADIUS * scale;
   var v = values[0];
   var txt = (typeof v === 'number') ? (v * MULTIPLIER).toFixed(DIGITS) : '--';
   var st = SHOW_MAX ? ctx.stats(ctx.columns[0]) : null;
   // CSS hooks: #bignum (box), .label, .value, .unit, .max
-  return '<div id="bignum" class="box" style="width:100%;height:100%;box-sizing:border-box;padding:4px 10px;background:' + BG
-    + ';border-radius:' + RADIUS + 'px;font-family:' + FONT + ';color:' + COLOR + ';text-shadow:' + SHADOW + ';text-align:' + ALIGN + '">'
-    + (LABEL ? '<div class="label" style="font-size:' + Math.round(SIZE * 0.28) + 'px;color:' + LABEL_COLOR + ';letter-spacing:2px">' + LABEL + '</div>' : '')
-    + '<div class="value" style="font-size:' + SIZE + 'px;font-weight:bold;line-height:1">' + txt
-    + ' <span class="unit" style="font-size:' + Math.round(SIZE * 0.35) + 'px;font-weight:normal">' + UNIT + '</span></div>'
-    + (st ? '<div class="max" style="font-size:' + Math.round(SIZE * 0.25) + 'px;color:' + LABEL_COLOR + '">max ' + (st.max * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</div>' : '')
+  return '<div id="bignum" class="box" style="width:100%;height:100%;box-sizing:border-box;padding:' + (4 * scale).toFixed(1) + 'px ' + (10 * scale).toFixed(1) + 'px;background:' + BG
+    + ';border-radius:' + radius.toFixed(1) + 'px;font-family:' + FONT + ';color:' + COLOR + ';text-shadow:' + SHADOW + ';text-align:' + ALIGN + '">'
+    + (LABEL ? '<div class="label" style="font-size:' + (fs * 0.28).toFixed(1) + 'px;color:' + LABEL_COLOR + ';letter-spacing:' + (2 * scale).toFixed(1) + 'px">' + LABEL + '</div>' : '')
+    + '<div class="value" style="font-size:' + fs.toFixed(1) + 'px;font-weight:bold;line-height:1">' + txt
+    + ' <span class="unit" style="font-size:' + (fs * 0.35).toFixed(1) + 'px;font-weight:normal">' + UNIT + '</span></div>'
+    + (st ? '<div class="max" style="font-size:' + (fs * 0.25).toFixed(1) + 'px;color:' + LABEL_COLOR + '">max ' + (st.max * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</div>' : '')
     + '</div>';
 }`,
   },
@@ -54,28 +56,47 @@ export const EXAMPLE_WIDGETS = [
   var MAX        = 2000;         // value that maps to 100 % (null = whole-flight maximum)
   var SHOW_VALUE = 'percent';    // 'percent' | 'raw' | 'none'
   var DIGITS     = 0;
-  var BAR_COLOR  = 'linear-gradient(90deg,#3f3,#ff3,#f33)'; // css color or gradient
+  var SMOOTH_MS  = 300;          // moving-average window (ms) that filters out quick small spikes (0 = off)
+  var BAR_COLOR  = 'linear-gradient(90deg,#3f3,#ff3,#f33)'; // css color or gradient (for vertical direction use 0deg)
+  var GRADIENT_SPAN = 'gauge';   // 'gauge' = gradient spans the whole gauge and the fill just reveals it; 'fill' = gradient squeezes into the filled part
   var BG         = 'rgba(0,0,0,.5)';
-  var BORDER     = '2px solid #fff';
-  var RADIUS     = 6;
+  var BORDER_COLOR = '#fff';
+  var BORDER_WIDTH = 2;          // at the default 300x40 size; scales with the widget
+  var RADIUS     = 6;            // corner radius at the default size; scales with the widget
   var TEXT_COLOR = '#fff';
-  var FONT       = 'bold 18px Arial';
+  var FONT       = 'Arial';      // font family
+  var FONT_SIZE  = 18;           // text size at the default 300x40 size; scales with the widget
+  var FONT_BOLD  = true;
   var DIRECTION  = 'horizontal'; // 'horizontal' | 'vertical'
   // -------------------------------
+  var scale = Math.min(ctx.width, ctx.height) / 40;  // sizes scale with the bar thickness (settings are for the default 300x40)
   var st = (MIN === null || MAX === null) ? ctx.stats(ctx.columns[0]) : null;
   if (MIN === null) MIN = st ? st.min : 0;
   if (MAX === null) MAX = st ? st.max : 1;
   if (MAX === MIN) MAX = MIN + 1;
   var v = values[0];
+  if (SMOOTH_MS > 0 && typeof v === 'number') {
+    // centered moving average: quick small spikes disappear without visible lag
+    var pts = ctx.range(ctx.columns[0], time - SMOOTH_MS / 2, time + SMOOTH_MS / 2, 50), sum = 0, n = 0, i;
+    for (i = 0; i < pts.length; i++) if (typeof pts[i].v === 'number') { sum += pts[i].v; n++; }
+    if (n > 0) v = sum / n;
+  }
   var p = Math.max(0, Math.min(1, ((typeof v === 'number' ? v : MIN) - MIN) / (MAX - MIN)));
   var text = LABEL + (SHOW_VALUE === 'percent' ? ' ' + (p * 100).toFixed(DIGITS) + '%' : SHOW_VALUE === 'raw' ? ' ' + ctx.fmt(v, DIGITS) : '');
   var fill = DIRECTION === 'vertical'
     ? 'position:absolute;left:0;bottom:0;width:100%;height:' + (p * 100).toFixed(1) + '%'
     : 'position:absolute;left:0;top:0;height:100%;width:' + (p * 100).toFixed(1) + '%';
+  fill += ';background:' + BAR_COLOR;
+  if (GRADIENT_SPAN === 'gauge' && p > 0) {
+    // stretch the background over the whole gauge so the fill only reveals it
+    fill += DIRECTION === 'vertical'
+      ? ';background-size:100% ' + (100 / p).toFixed(2) + '%;background-position:left bottom'
+      : ';background-size:' + (100 / p).toFixed(2) + '% 100%;background-position:left top';
+  }
   // CSS hooks: #gauge (box), .fill, .text
-  return '<div id="gauge" class="box" style="position:relative;width:100%;height:100%;box-sizing:border-box;background:' + BG + ';border:' + BORDER + ';border-radius:' + RADIUS + 'px;overflow:hidden">'
-    + '<div class="fill" style="' + fill + ';background:' + BAR_COLOR + '"></div>'
-    + '<div class="text" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:' + TEXT_COLOR + ';font:' + FONT + ';text-shadow:0 0 4px #000">' + text + '</div>'
+  return '<div id="gauge" class="box" style="position:relative;width:100%;height:100%;box-sizing:border-box;background:' + BG + ';border:' + (BORDER_WIDTH * scale).toFixed(1) + 'px solid ' + BORDER_COLOR + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px;overflow:hidden">'
+    + '<div class="fill" style="' + fill + '"></div>'
+    + '<div class="text" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:' + TEXT_COLOR + ';font:' + (FONT_BOLD ? 'bold ' : '') + (FONT_SIZE * scale).toFixed(1) + 'px ' + FONT + ';text-shadow:0 0 4px #000">' + text + '</div>'
     + '</div>';
 }`,
   },
@@ -88,25 +109,42 @@ export const EXAMPLE_WIDGETS = [
     code: `function (values, time, ctx) {
   // ---------- SETTINGS ----------
   var WINDOW_MS  = 20000;        // how much history to show (ms)
+  var SMOOTH_MS  = 300;          // moving-average window (ms) smoothing the line and the value (0 = off)
   var LABEL      = 'ALT';        // label ('' = column name)
   var MULTIPLIER = 0.01;         // value scaling (cm -> m = 0.01)
   var DIGITS     = 1;
   var UNIT       = 'm';
-  var LINE_COLOR = '#00ff00';
-  var LINE_WIDTH = 2;
-  var FILL       = 'rgba(0,255,0,.15)';  // area under the line ('' = none)
+  var LINE_COLOR = '#00ff00';    // line color below the first threshold
+  var LINE_WIDTH = 2;            // at the default 400x150 size; scales with the widget
+  var THRESHOLDS = [[100, '#4da6ff'], [200, '#ff4040']]; // [value, color] pairs (in display units, after MULTIPLIER), ascending; colors the line and the value; [] = off
+  var FILL_ALPHA = 0.15;         // opacity of the area under the line (the area follows the line color; 0 = no area)
   var BG         = 'rgba(0,0,0,.4)';
-  var RADIUS     = 8;
+  var RADIUS     = 8;            // corner radius at the default size; scales with the widget
   var TEXT_COLOR = '#fff';
-  var FONT_SIZE  = 14;
+  var FONT_SIZE  = 14;           // text size at the default 400x150 size; scales with the widget
   var SCALE      = 'flight';     // 'flight' = fixed axis from whole-flight min/max (no jumping),
                                  // 'window' = autoscale to visible history, 'fixed' = use MIN/MAX
   var MIN        = 0;            // used when SCALE = 'fixed'
   var MAX        = 100;
   var SHOW_GRID  = true;
   // -------------------------------
-  var pts = ctx.range(ctx.columns[0], time - WINDOW_MS, time, 300);
-  var W = ctx.width, H = ctx.height, pad = 6;
+  var scale = Math.min(ctx.width / 400, ctx.height / 150);  // sizes scale with the widget (settings are for the default 400x150)
+  var fsz = FONT_SIZE * scale, lw = LINE_WIDTH * scale;
+  var pts;
+  if (SMOOTH_MS > 0) {
+    // centered moving average over a slightly wider raw window (sliding-window sum, O(n))
+    var raw = ctx.range(ctx.columns[0], time - WINDOW_MS - SMOOTH_MS / 2, time + SMOOTH_MS / 2, 340);
+    pts = [];
+    var lo = 0, hi = 0, sum = 0, cnt = 0, j;
+    for (j = 0; j < raw.length; j++) {
+      var tj = raw[j].t;
+      while (hi < raw.length && raw[hi].t <= tj + SMOOTH_MS / 2) { if (typeof raw[hi].v === 'number') { sum += raw[hi].v; cnt++; } hi++; }
+      while (lo < raw.length && raw[lo].t < tj - SMOOTH_MS / 2) { if (typeof raw[lo].v === 'number') { sum -= raw[lo].v; cnt--; } lo++; }
+      if (tj >= time - WINDOW_MS && tj <= time) pts.push({ t: tj, v: cnt > 0 ? sum / cnt : raw[j].v });
+    }
+  } else pts = ctx.range(ctx.columns[0], time - WINDOW_MS, time, 300);
+  var W = ctx.width, H = ctx.height, pad = 6 * scale;
+  function colFor(dv) { var c = LINE_COLOR, i; for (i = 0; i < THRESHOLDS.length; i++) if (dv >= THRESHOLDS[i][0]) c = THRESHOLDS[i][1]; return c; }
   var min, max;
   if (SCALE === 'fixed') { min = MIN; max = MAX; }
   else if (SCALE === 'flight') { var st = ctx.stats(ctx.columns[0]); min = st ? st.min : 0; max = st ? st.max : 1; }
@@ -116,22 +154,32 @@ export const EXAMPLE_WIDGETS = [
   }
   if (!isFinite(min) || !isFinite(max)) { min = 0; max = 1; }
   if (max === min) max = min + 1;
-  var coords = [];
+  var coords = [], segs = [], cur = null, curColor = null;
   pts.forEach(function (p) {
     if (typeof p.v !== 'number') return;
     var x = (p.t - (time - WINDOW_MS)) / WINDOW_MS * W;
     var y = H - pad - (p.v - min) / (max - min) * (H - 2 * pad);
-    coords.push(x.toFixed(1) + ',' + y.toFixed(1));
+    var pt = x.toFixed(1) + ',' + y.toFixed(1);
+    coords.push(pt);
+    var c = colFor(p.v * MULTIPLIER);
+    if (c !== curColor) { var prev = cur ? cur[cur.length - 1] : null; cur = prev ? [prev] : []; curColor = c; segs.push({ c: c, p: cur }); }
+    cur.push(pt);
   });
   var grid = '';
-  if (SHOW_GRID) for (var i = 1; i < 4; i++) grid += '<line class="grid" x1="0" x2="' + W + '" y1="' + (H * i / 4) + '" y2="' + (H * i / 4) + '" stroke="rgba(255,255,255,.15)"/>';
-  var area = (FILL && coords.length) ? '<polygon class="area" points="' + coords[0].split(',')[0] + ',' + H + ' ' + coords.join(' ') + ' ' + coords[coords.length - 1].split(',')[0] + ',' + H + '" fill="' + FILL + '"/>' : '';
+  if (SHOW_GRID) for (var i = 1; i < 4; i++) grid += '<line class="grid" x1="0" x2="' + W + '" y1="' + (H * i / 4) + '" y2="' + (H * i / 4) + '" stroke="rgba(255,255,255,.15)" stroke-width="' + Math.max(0.5, scale).toFixed(2) + '"/>';
+  var area = '';
+  if (FILL_ALPHA > 0) segs.forEach(function (s) {
+    if (s.p.length < 2) return;
+    area += '<polygon class="area" points="' + s.p[0].split(',')[0] + ',' + H + ' ' + s.p.join(' ') + ' ' + s.p[s.p.length - 1].split(',')[0] + ',' + H + '" fill="' + s.c + '" fill-opacity="' + FILL_ALPHA + '"/>';
+  });
+  var line = segs.map(function (s) { return '<polyline class="line" points="' + s.p.join(' ') + '" fill="none" stroke="' + s.c + '" stroke-width="' + lw.toFixed(2) + '" stroke-linejoin="round"/>'; }).join('');
   var v = values[0];
-  var txt = (LABEL || ctx.columns[0]) + ': ' + (typeof v === 'number' ? (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT : '--');
-  // CSS hooks: #graph (svg), .grid, .area, .line, .label
-  return '<svg id="graph" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + RADIUS + 'px">' + grid + area
-    + '<polyline class="line" points="' + coords.join(' ') + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="' + LINE_WIDTH + '"/>'
-    + '<text class="label" x="8" y="' + (FONT_SIZE + 4) + '" fill="' + TEXT_COLOR + '" font-family="Arial" font-size="' + FONT_SIZE + '" style="text-shadow:0 0 4px #000">' + txt + '</text></svg>';
+  if (SMOOTH_MS > 0 && typeof v === 'number' && pts.length) v = pts[pts.length - 1].v;  // show the smoothed value too
+  var vcol = (typeof v === 'number') ? colFor(v * MULTIPLIER) : TEXT_COLOR;
+  var txt = (LABEL || ctx.columns[0]) + ': <tspan class="value" fill="' + vcol + '">' + (typeof v === 'number' ? (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT : '--') + '</tspan>';
+  // CSS hooks: #graph (svg), .grid, .area, .line, .label, .value
+  return '<svg id="graph" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px">' + grid + area + line
+    + '<text class="label" x="' + (8 * scale).toFixed(1) + '" y="' + (fsz + 4 * scale).toFixed(1) + '" fill="' + TEXT_COLOR + '" font-family="Arial" font-size="' + fsz.toFixed(1) + '" style="text-shadow:0 0 4px #000">' + txt + '</text></svg>';
 }`,
   },
   {
@@ -279,22 +327,27 @@ export const EXAMPLE_WIDGETS = [
   var BORDER      = 'rgba(255,255,255,.6)';
   var GRID        = 'rgba(255,255,255,.2)';
   var STICK_COLOR = '#f2a93b';
-  var STICK_SIZE  = 9;
+  var STICK_SIZE  = 9;               // at the default 260x130 size; scales with the widget
   var TRAIL       = true;            // short trail of the stick movement
   var TRAIL_MS    = 600;
   var TRAIL_COLOR = 'rgba(242,169,59,.5)';
   var LABELS      = true;            // T/Y/P/R labels
   var LABEL_COLOR = 'rgba(255,255,255,.7)';
-  var LABEL_SIZE  = 10;              // label font size (px)
+  var LABEL_SIZE  = 10;              // label font size at the default 260x130 size; scales with the widget
   var LABEL_FONT  = 'Arial';         // label font family
   var LABEL_BOLD  = false;
-  var RADIUS      = 8;
-  var GAP         = 10;              // px between the two boxes
+  var RADIUS      = 8;               // corner radius at the default size; scales with the widget
+  var GAP         = 10;              // gap between the two boxes at the default size; scales with the widget
   // -------------------------------
   // Elements carry ids/classes so the widget's CSS tab can restyle them:
   //   #box-left / #box-right (rect.box), .grid, .trail, .stick, .label
-  var W = ctx.width, H = ctx.height, size = Math.min(H, (W - GAP) / 2), pad = STICK_SIZE + 2;
-  var x0 = (W - (2 * size + GAP)) / 2, y0 = (H - size) / 2;
+  var W = ctx.width, H = ctx.height;
+  var scale = Math.min(H, W / 2) / 125;  // all sizes scale with the widget (settings are for the default 260x130)
+  var gap = GAP * scale, stickR = STICK_SIZE * scale, labelSize = LABEL_SIZE * scale, radius = RADIUS * scale;
+  var lineW = Math.max(1, 1.5 * scale);  // box border + stick outline width
+  var gridW = Math.max(0.5, scale);      // divider (grid) line width
+  var size = Math.min(H, (W - gap) / 2), pad = stickR + 2 * scale;
+  var x0 = (W - (2 * size + gap)) / 2, y0 = (H - size) / 2;
   function norm(v, lo, hi) { v = typeof v === 'number' ? v : (lo + hi) / 2; return Math.max(0, Math.min(1, (v - lo) / (hi - lo))); }
   var roll = norm(values[0], MIN, MAX), pitch = norm(values[1], MIN, MAX), yaw = norm(values[2], MIN, MAX), thr = norm(values[3], THR_MIN, THR_MAX);
   if (INVERT_ROLL) roll = 1 - roll; if (INVERT_PITCH) pitch = 1 - pitch; if (INVERT_YAW) yaw = 1 - yaw;
@@ -315,16 +368,16 @@ export const EXAMPLE_WIDGETS = [
   }
   function box(id, bx, pos, tr, lab) {
     var cx = bx + pad + pos[0] * (size - 2 * pad), cy = y0 + size - pad - pos[1] * (size - 2 * pad);
-    var g = '<g id="' + id + '" class="stickbox"><rect class="box" x="' + bx + '" y="' + y0 + '" width="' + size + '" height="' + size + '" rx="' + RADIUS + '" fill="' + BG + '" stroke="' + BORDER + '" stroke-width="1.5"/>';
-    g += '<line class="grid" x1="' + (bx + size / 2) + '" x2="' + (bx + size / 2) + '" y1="' + y0 + '" y2="' + (y0 + size) + '" stroke="' + GRID + '"/>';
-    g += '<line class="grid" x1="' + bx + '" x2="' + (bx + size) + '" y1="' + (y0 + size / 2) + '" y2="' + (y0 + size / 2) + '" stroke="' + GRID + '"/>';
-    if (tr.length > 1) g += '<polyline class="trail" points="' + tr.map(function (p) { return (bx + pad + p[0] * (size - 2 * pad)).toFixed(1) + ',' + (y0 + size - pad - p[1] * (size - 2 * pad)).toFixed(1); }).join(' ') + ' ' + cx.toFixed(1) + ',' + cy.toFixed(1) + '" fill="none" stroke="' + TRAIL_COLOR + '" stroke-width="2" stroke-linecap="round"/>';
-    g += '<circle class="stick" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + STICK_SIZE + '" fill="' + STICK_COLOR + '" stroke="#000" stroke-width="1.5"/>';
+    var g = '<g id="' + id + '" class="stickbox"><rect class="box" x="' + bx + '" y="' + y0 + '" width="' + size + '" height="' + size + '" rx="' + radius.toFixed(1) + '" fill="' + BG + '" stroke="' + BORDER + '" stroke-width="' + lineW.toFixed(2) + '"/>';
+    g += '<line class="grid" x1="' + (bx + size / 2) + '" x2="' + (bx + size / 2) + '" y1="' + y0 + '" y2="' + (y0 + size) + '" stroke="' + GRID + '" stroke-width="' + gridW.toFixed(2) + '"/>';
+    g += '<line class="grid" x1="' + bx + '" x2="' + (bx + size) + '" y1="' + (y0 + size / 2) + '" y2="' + (y0 + size / 2) + '" stroke="' + GRID + '" stroke-width="' + gridW.toFixed(2) + '"/>';
+    if (tr.length > 1) g += '<polyline class="trail" points="' + tr.map(function (p) { return (bx + pad + p[0] * (size - 2 * pad)).toFixed(1) + ',' + (y0 + size - pad - p[1] * (size - 2 * pad)).toFixed(1); }).join(' ') + ' ' + cx.toFixed(1) + ',' + cy.toFixed(1) + '" fill="none" stroke="' + TRAIL_COLOR + '" stroke-width="' + (2 * scale).toFixed(2) + '" stroke-linecap="round"/>';
+    g += '<circle class="stick" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + stickR.toFixed(1) + '" fill="' + STICK_COLOR + '" stroke="#000" stroke-width="' + lineW.toFixed(2) + '"/>';
     var fw = LABEL_BOLD ? ' font-weight="bold"' : '';
-    if (LABELS) g += '<text class="label label-top" x="' + (bx + 5) + '" y="' + (y0 + LABEL_SIZE + 2) + '" fill="' + LABEL_COLOR + '" font-family="' + LABEL_FONT + '" font-size="' + LABEL_SIZE + '"' + fw + '>' + lab[0] + '</text><text class="label label-bottom" x="' + (bx + size - 5) + '" y="' + (y0 + size - 5) + '" text-anchor="end" fill="' + LABEL_COLOR + '" font-family="' + LABEL_FONT + '" font-size="' + LABEL_SIZE + '"' + fw + '>' + lab[1] + '</text>';
+    if (LABELS) g += '<text class="label label-top" x="' + (bx + 5 * scale).toFixed(1) + '" y="' + (y0 + labelSize + 2 * scale).toFixed(1) + '" fill="' + LABEL_COLOR + '" font-family="' + LABEL_FONT + '" font-size="' + labelSize.toFixed(1) + '"' + fw + '>' + lab[0] + '</text><text class="label label-bottom" x="' + (bx + size - 5 * scale).toFixed(1) + '" y="' + (y0 + size - 5 * scale).toFixed(1) + '" text-anchor="end" fill="' + LABEL_COLOR + '" font-family="' + LABEL_FONT + '" font-size="' + labelSize.toFixed(1) + '"' + fw + '>' + lab[1] + '</text>';
     return g + '</g>';
   }
-  var svg = box('box-left', x0, left, trail.l, MODE === 1 ? ['PITCH', 'YAW'] : ['THR', 'YAW']) + box('box-right', x0 + size + GAP, right, trail.r, MODE === 1 ? ['THR', 'ROLL'] : ['PITCH', 'ROLL']);
+  var svg = box('box-left', x0, left, trail.l, MODE === 1 ? ['PITCH', 'YAW'] : ['THR', 'YAW']) + box('box-right', x0 + size + gap, right, trail.r, MODE === 1 ? ['THR', 'ROLL'] : ['PITCH', 'ROLL']);
   return '<svg id="sticks" width="' + W + '" height="' + H + '">' + svg + '</svg>';
 }`,
   },
@@ -340,19 +393,20 @@ export const EXAMPLE_WIDGETS = [
   var MAP_STYLE   = 'osm';          // 'osm' | 'carto-dark' | 'carto-light' | 'none'  (CARTO may show "API key required" tiles for some networks)
   var MAP_OPACITY = 0.55;           // map tile opacity (0..1) – keep low to be unobtrusive
   var MAP_GRAY    = true;           // desaturate the map
-  var MODE        = 'fit';          // 'fit' = whole flight fits the box, 'follow' = follow aircraft at ZOOM
-  var ZOOM        = 16;             // zoom for 'follow' mode (max 19)
+  var MODE        = 'follow';       // 'fit' = whole flight fits the box, 'follow' = follow aircraft at ZOOM
+  var ZOOM        = 17;             // zoom for 'follow' mode (max 19)
   var ROTATE_MAP  = false;          // 'follow' mode: rotate the map so heading points up
+  var SMOOTH_MS   = 500;            // smoothing window in ms for position & heading (0 = off)
   var BG          = 'rgba(0,0,0,.45)';
   var RADIUS      = 10;
   var BORDER      = '1px solid rgba(255,255,255,.4)';
-  var PADDING     = 20;             // px kept free around the track in 'fit' mode
+  var PADDING     = 10;             // px kept free around the track in 'fit' mode
   var TRACK_COLOR = 'rgba(255,255,255,.9)';
   var TRACK_WIDTH = 2;
   var TRAIL_COLOR = '#00ffff';      // already-flown part of the track ('' = same as TRACK_COLOR)
   var TRAIL_WIDTH = 3;
-  var ARROW_STYLE = 'arrow';        // 'arrow' | 'plane' | 'chevron' | 'dot'
-  var ARROW_SIZE  = 18;
+  var ARROW_STYLE = 'dot';          // 'arrow' | 'plane' | 'chevron' | 'dot'
+  var ARROW_SIZE  = 25;
   var ARROW_COLOR = '#ff3030';
   var ARROW_STROKE= '#ffffff';
   var HEADING_UNIT= 'deg';          // 'deg' | 'decideg' (value/10) | 'rad'
@@ -391,6 +445,19 @@ export const EXAMPLE_WIDGETS = [
   }
   if (!s.path.length) return '<div style="width:100%;height:100%;background:' + BG + ';border-radius:' + RADIUS + 'px;color:#fff;font:12px Arial;display:flex;align-items:center;justify-content:center">no GPS data</div>';
   var lat0 = values[0], lon0 = values[1], hasPos = typeof lat0 === 'number' && typeof lon0 === 'number' && !(Math.abs(lat0) < 0.001 && Math.abs(lon0) < 0.001);
+  function idxAt(t) { var a = 0, b = s.path.length - 1, m; while (a < b) { m = (a + b) >> 1; if (s.path[m].t < t) a = m + 1; else b = m; } return a; }
+  function smoothPos(t, la0, lo0) { // triangular-weighted average of track samples around t (deterministic, so seeking/export stay consistent)
+    var half = SMOOTH_MS, p = s.path, sum = 0, la = 0, lo = 0, i, w;
+    if (!half) return null;
+    for (i = idxAt(t - half); i < p.length && p[i].t <= t + half; i++) {
+      w = 1 - Math.abs(p[i].t - t) / half; if (w <= 0) continue;
+      sum += w; la += p[i].lat * w; lo += p[i].lon * w;
+    }
+    if (typeof la0 === 'number' && typeof lo0 === 'number') { sum += 1; la += la0; lo += lo0; }
+    return sum ? { lat: la / sum, lon: lo / sum } : null;
+  }
+  var sm = hasPos ? smoothPos(time, lat0, lon0) : null;
+  if (sm) { lat0 = sm.lat; lon0 = sm.lon; }
   var zoom = MODE === 'follow' ? Math.min(19, ZOOM) : s.fitZoom;
   var c;
   if (MODE === 'follow' && hasPos) c = px(lat0, lon0, zoom);
@@ -398,10 +465,29 @@ export const EXAMPLE_WIDGETS = [
   var ox = c[0] - W / 2, oy = c[1] - H / 2;
   // heading
   var hd = values[2];
-  if (typeof hd === 'number') { if (HEADING_UNIT === 'decideg') hd /= 10; else if (HEADING_UNIT === 'rad') hd = hd * 180 / Math.PI; hd += HEADING_OFFSET; }
-  else { // fall back to direction of travel
-    var idx = -1; for (var k = 0; k < s.path.length; k++) if (s.path[k].t <= time) idx = k; else break;
-    if (idx > 0) { var p1 = px(s.path[idx - 1].lat, s.path[idx - 1].lon, zoom), p2 = px(s.path[idx].lat, s.path[idx].lon, zoom); hd = Math.atan2(p2[0] - p1[0], -(p2[1] - p1[1])) * 180 / Math.PI; } else hd = 0;
+  function toDeg(v) { return HEADING_UNIT === 'decideg' ? v / 10 : HEADING_UNIT === 'rad' ? v * 180 / Math.PI : v; }
+  if (typeof hd === 'number') {
+    hd = toDeg(hd);
+    if (SMOOTH_MS) { // circular (vector) average so the 359->0 wrap doesn't spin the arrow
+      var hsam = ctx.range(ctx.columns[2], time - SMOOTH_MS, time + SMOOTH_MS, 200) || [], sx = 0, sy = 0, wsum = 0;
+      for (var h2 = 0; h2 < hsam.length; h2++) {
+        if (typeof hsam[h2].v !== 'number') continue;
+        var hw = 1 - Math.abs(hsam[h2].t - time) / SMOOTH_MS; if (hw <= 0) continue;
+        var hr = toDeg(hsam[h2].v) * Math.PI / 180;
+        sx += Math.cos(hr) * hw; sy += Math.sin(hr) * hw; wsum += hw;
+      }
+      if (wsum) hd = Math.atan2(sy, sx) * 180 / Math.PI;
+    }
+    hd += HEADING_OFFSET;
+  } else { // fall back to direction of travel (over the smoothed track when smoothing is on)
+    var dtH = Math.max(SMOOTH_MS, 250), q1 = smoothPos(time - dtH), q2 = smoothPos(time + dtH);
+    if (q1 && q2 && (q1.lat !== q2.lat || q1.lon !== q2.lon)) {
+      var pp1 = px(q1.lat, q1.lon, zoom), pp2 = px(q2.lat, q2.lon, zoom);
+      hd = Math.atan2(pp2[0] - pp1[0], -(pp2[1] - pp1[1])) * 180 / Math.PI;
+    } else {
+      var idx = -1; for (var k = 0; k < s.path.length; k++) if (s.path[k].t <= time) idx = k; else break;
+      if (idx > 0) { var p1 = px(s.path[idx - 1].lat, s.path[idx - 1].lon, zoom), p2 = px(s.path[idx].lat, s.path[idx].lon, zoom); hd = Math.atan2(p2[0] - p1[0], -(p2[1] - p1[1])) * 180 / Math.PI; } else hd = 0;
+    }
   }
   var rot = (MODE === 'follow' && ROTATE_MAP) ? -hd : 0;
   // tiles
@@ -430,6 +516,7 @@ export const EXAMPLE_WIDGETS = [
     var str = (pr[j][0] - ox).toFixed(1) + ',' + (pr[j][1] - oy).toFixed(1);
     full.push(str); if (pr[j][2] <= time) trail.push(str);
   }
+  if (hasPos && trail.length) { var tip = px(lat0, lon0, zoom); trail.push((tip[0] - ox).toFixed(1) + ',' + (tip[1] - oy).toFixed(1)); }
   var svg = '<polyline class="track" points="' + full.join(' ') + '" fill="none" stroke="' + TRACK_COLOR + '" stroke-width="' + TRACK_WIDTH + '" stroke-linejoin="round"/>';
   if (TRAIL_COLOR && trail.length > 1) svg += '<polyline class="trail" points="' + trail.join(' ') + '" fill="none" stroke="' + TRAIL_COLOR + '" stroke-width="' + TRAIL_WIDTH + '" stroke-linejoin="round"/>';
   if (hasPos) {

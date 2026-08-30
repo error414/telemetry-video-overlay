@@ -137,9 +137,21 @@ export class TelemetryStore {
     if (!ser) return [];
     const a = Math.max(0, lastIndexLE(ser.t, fromSec + this.origin));
     const b = Math.max(a, lastIndexLE(ser.t, toSec + this.origin));
-    const step = Math.max(1, Math.floor((b - a + 1) / maxPoints));
+    // Decimation picks absolute sample indices (multiples of a power-of-two step),
+    // not indices relative to the window start: a window sliding over the data then
+    // keeps selecting the same samples, so scrolling graphs don't ripple every frame.
+    let step = 1;
+    while ((b - a + 1) / step > maxPoints) step *= 2;
     const out = [];
-    for (let i = a; i <= b; i += step) out.push({ t: ser.t[i] - this.origin, v: ser.v[i] });
+    let last = -1;
+    const push = (i) => {
+      if (i === last) return;
+      out.push({ t: ser.t[i] - this.origin, v: ser.v[i] });
+      last = i;
+    };
+    push(a);
+    for (let i = (Math.floor(a / step) + 1) * step; i < b; i += step) push(i);
+    push(b);
     return out;
   }
 

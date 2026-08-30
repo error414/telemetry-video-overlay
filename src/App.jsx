@@ -67,6 +67,15 @@ export default function App() {
   const [library, setLibrary] = useState(loadLibrary);
   const [tab, setTab] = useState('files');
   const [status, setStatus] = useState('');
+  // playback problems get a modal on top of the status line — the corner status is easy to miss
+  const [playError, setPlayError] = useState(null);
+  // once the decoder is known to be broken, lock all video transport (play/step/seek) until a proxy exists
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  const showPlayError = useCallback((msg, { block = true } = {}) => {
+    setStatus(msg);
+    setPlayError(msg);
+    if (block) setPlaybackBlocked(true);
+  }, []);
   const [editMode, setEditMode] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
   // layout grid (video pixels): snap on/off, size, visibility — remembered between sessions
@@ -169,6 +178,25 @@ export default function App() {
     return info;
   }, []);
 
+  // Ask the browser up front whether it can decode this file (codec/resolution/fps from ffprobe).
+  // Chromium reports supported/smooth without touching the file, so we can warn before the user hits play.
+  const warnIfUndecodable = useCallback(async (info) => {
+    if (info.proxy || !navigator.mediaCapabilities) return;
+    const mime = { h264: 'video/mp4; codecs="avc1.640033"', hevc: 'video/mp4; codecs="hvc1.1.6.L186.B0"', vp9: 'video/webm; codecs="vp09.00.51.08"', av1: 'video/mp4; codecs="av01.0.13M.08"' }[info.codec];
+    if (!mime) return;
+    try {
+      const cap = await navigator.mediaCapabilities.decodingInfo({
+        type: 'file',
+        video: { contentType: mime, width: info.width, height: info.height, framerate: info.fps, bitrate: Math.round(info.width * info.height * info.fps * 0.08) || 8_000_000 },
+      });
+      const what = `${info.codec} ${info.width}×${info.height} @ ${Math.round(info.fps)} fps`;
+      if (!cap.supported) showPlayError(`The player cannot decode this video (${what}) — create a preview proxy in the Files tab.`);
+      else if (!cap.smooth) showPlayError(`This video (${what}) is likely too heavy for smooth playback on this machine — create a preview proxy in the Files tab.`, { block: false });
+    } catch {
+      // capability probe failed → fall back to the runtime stall detection in SyncBar
+    }
+  }, [showPlayError]);
+
   const [proxyProgress, setProxyProgress] = useState(null);
   useEffect(() => window.api.onProxyProgress(setProxyProgress), []);
   const makeProxy = useCallback(async (kind = 'full') => {
@@ -195,13 +223,20 @@ export default function App() {
     try {
       const info = await probeVideo(p);
       setVideo(info);
-      // no widgets yet (or no reference set) → this video becomes the layout reference
-      setLayout((l) => (!l || widgets.length === 0 ? { w: info.width, h: info.height } : l));
+      setPlaybackBlocked(false);
+      setLayout((l) => {
+        if (widgets.length === 0) return { w: info.width, h: info.height }; // empty project → this video is the reference
+        if (l && l.w) return l; // keep the existing reference
+        // widgets exist but their reference is unknown (older project) → assume 1080p, fixable in Files
+        setStatus('Widget layout reference unknown — assuming 1920×1080. Adjust it in the Files tab if widgets look wrong.');
+        return { w: 1920, h: 1080 };
+      });
       setStatus(`Video: ${info.width}x${info.height} @ ${info.fps.toFixed(3)} fps, ${info.codec}, ${info.duration.toFixed(1)} s`);
+      warnIfUndecodable(info);
     } catch (e) {
       setStatus('Probe error: ' + e.message);
     }
-  }, [probeVideo, widgets.length]);
+  }, [probeVideo, warnIfUndecodable, widgets.length]);
 
   // ---- Widgets ----
   const updateWidget = useCallback((id, patch) => setWidgets((ws) => ws.map((w) => (w.id === id ? { ...w, ...patch } : w))), []);
@@ -307,13 +342,16 @@ export default function App() {
         try {
           const info = await probeVideo(j.video);
           setVideo(info);
-          if (!j.layout || !j.layout.w) setLayout({ w: info.width, h: info.height });
+          setPlaybackBlocked(false);
+          // no reference stored (older project): widgets present → assume 1080p, else this video
+          if (!j.layout || !j.layout.w) setLayout((j.widgets || []).length ? { w: 1920, h: 1080 } : { w: info.width, h: info.height });
+          warnIfUndecodable(info);
         } catch {
           setStatus('Video from project not found: ' + j.video);
         }
       }
     },
-    [store, addCsvFiles, updateSource, probeVideo]
+    [store, addCsvFiles, updateSource, probeVideo, warnIfUndecodable]
   );
 
   const loadProject = useCallback(async () => {
@@ -429,13 +467,13 @@ export default function App() {
             editMode={editMode}
             grid={grid}
             lt={lt}
-            setStatus={setStatus}
+            setStatus={showPlayError}
             onOpenEditor={(id) => {
               setSelectedId(id);
               setEditorOpen(true);
             }}
           />
-          <SyncBar video={video} videoRef={videoRef} time={time} setTime={setTime} offset={offset} setOffset={setOffset} store={store} storeVersion={storeVersion} columnNames={columnNames} setStatus={setStatus} />
+          <SyncBar video={video} videoRef={videoRef} time={time} setTime={setTime} offset={offset} setOffset={setOffset} store={store} storeVersion={storeVersion} columnNames={columnNames} setStatus={showPlayError} disabled={playbackBlocked && !(video && video.proxy)} />
         </main>
 
         <aside className="w-[430px] flex flex-col min-h-0" style={{ background: 'var(--panel)', borderLeft: '1px solid var(--border)' }}>
@@ -456,6 +494,7 @@ export default function App() {
                 video={video}
                 openVideo={openVideo}
                 layout={layout}
+                setLayout={setLayout}
                 lt={lt}
                 rebaseLayout={rebaseLayout}
                 makeProxy={makeProxy}
@@ -500,6 +539,46 @@ export default function App() {
 
       {editorOpen && selected && (
         <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} offset={offset} columnNames={columnNames} ColumnsInput={ColumnsInput} />
+      )}
+
+      {playError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(5,8,11,.72)' }} onMouseDown={(e) => e.target === e.currentTarget && setPlayError(null)}>
+          <div className="rounded-lg p-5 flex flex-col gap-4" style={{ width: 'min(92vw, 560px)', background: 'var(--panel)', border: '1px solid var(--border-strong)', boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}>
+            <div className="font-semibold text-base">Video playback problem</div>
+            <div className="text-sm" style={{ color: 'var(--muted)' }}>{playError}</div>
+            <div className="flex flex-wrap gap-2 justify-end">
+              {video && !video.proxy && proxyProgress == null && (
+                <>
+                  <button
+                    className="btn btn-primary"
+                    title="Same resolution, frame rate and bit depth, re-encoded on the GPU (NVENC)"
+                    onClick={() => {
+                      setPlayError(null);
+                      setTab('files');
+                      makeProxy('full');
+                    }}
+                  >
+                    Create full-quality proxy (GPU)
+                  </button>
+                  <button
+                    className="btn"
+                    title="1080p / 30 fps H.264 — small and fast, for weaker machines"
+                    onClick={() => {
+                      setPlayError(null);
+                      setTab('files');
+                      makeProxy('light');
+                    }}
+                  >
+                    Light proxy (1080p/30)
+                  </button>
+                </>
+              )}
+              <button className="btn" onClick={() => setPlayError(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

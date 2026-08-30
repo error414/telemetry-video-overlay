@@ -7,7 +7,7 @@ function fmtTime(s) {
   return m + ':' + sec.toFixed(3).padStart(6, '0');
 }
 
-export default function SyncBar({ video, videoRef, time, setTime, offset, setOffset, store, storeVersion, columnNames, setStatus }) {
+export default function SyncBar({ video, videoRef, time, setTime, offset, setOffset, store, storeVersion, columnNames, setStatus, disabled }) {
   const dur = video ? video.duration : 0;
   const [playing, setPlaying] = useState(false);
   const [graphCol, setGraphCol] = useState('');
@@ -21,27 +21,49 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
   }, [columnNames, graphCol]);
 
   const seek = (t) => {
+    if (disabled) return;
     const v = videoRef.current;
     t = Math.max(0, Math.min(dur, t));
     if (v) v.currentTime = t;
     setTime(t);
   };
+  // Heavy files (e.g. HEVC 4K/120fps) can fail silently: play() resolves, no error/stalled event fires,
+  // but the decoder never outputs a frame. Detect it by checking decoded-frame count shortly after play.
+  const stallCheckRef = useRef(0);
+  useEffect(() => () => clearTimeout(stallCheckRef.current), []);
+  const armStallCheck = (v) => {
+    const frames = () => (v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality().totalVideoFrames : -1);
+    const f0 = frames();
+    const t0 = v.currentTime;
+    clearTimeout(stallCheckRef.current);
+    stallCheckRef.current = setTimeout(() => {
+      if (v !== videoRef.current || v.paused || v.ended) return;
+      const dead = f0 >= 0 ? frames() === f0 : v.currentTime - t0 < 0.05;
+      if (dead) {
+        v.pause();
+        setPlaying(false);
+        setStatus('The decoder cannot play this video (codec / resolution / frame rate not supported in hardware) — create a preview proxy in the Files tab.');
+      }
+    }, 1500);
+  };
   const toggle = () => {
     const v = videoRef.current;
-    if (!v) return;
+    if (!v || disabled) return;
     if (v.paused) {
-      v.play().catch((e) => {
+      v.play().then(() => armStallCheck(v)).catch((e) => {
         if (e && e.name === 'AbortError') return; // seek/pause interrupted play – harmless
         setPlaying(false);
         setStatus('Cannot play video: ' + (e && e.message ? e.message : e) + ' — create a preview proxy in the Files tab.');
       });
       setPlaying(true);
     } else {
+      clearTimeout(stallCheckRef.current);
       v.pause();
       setPlaying(false);
     }
   };
   const stepFrame = (n) => {
+    if (disabled) return;
     const v = videoRef.current;
     if (v) v.pause();
     setPlaying(false);
@@ -122,17 +144,18 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
   return (
     <div className="p-2 flex flex-col gap-1 bg-[var(--panel)] border-t border-[var(--border)]">
       <div className="flex items-center gap-2 text-sm">
-        <button className="btn btn-xs" onClick={() => stepFrame(-1)} title="Previous frame (←)">
+        <button className="btn btn-xs" onClick={() => stepFrame(-1)} disabled={disabled} title={disabled ? 'Playback disabled until a preview proxy is created (Files tab)' : 'Previous frame (←)'}>
           ◀|
         </button>
-        <button className="btn btn-xs w-16" onClick={toggle} title="Play/pause (space)">
+        <button className="btn btn-xs w-16" onClick={toggle} disabled={disabled} title={disabled ? 'Playback disabled until a preview proxy is created (Files tab)' : 'Play/pause (space)'}>
           {playing ? 'Pause' : 'Play'}
         </button>
-        <button className="btn btn-xs" onClick={() => stepFrame(1)} title="Next frame (→)">
+        <button className="btn btn-xs" onClick={() => stepFrame(1)} disabled={disabled} title={disabled ? 'Playback disabled until a preview proxy is created (Files tab)' : 'Next frame (→)'}>
           |▶
         </button>
         <span className="mono w-28">{fmtTime(time)}</span>
-        <input type="range" min={0} max={dur || 0} step={0.001} value={time} onChange={(e) => seek(Number(e.target.value))} className="flex-1" disabled={!video} />
+        <input type="range" min={0} max={dur || 0} step={0.001} value={time} onChange={(e) => seek(Number(e.target.value))} className="flex-1" disabled={!video || disabled} />
+        {disabled && <span className="text-xs" style={{ color: 'var(--accent)' }}>playback locked — create a proxy in Files</span>}
         <span className="mono hint">{fmtTime(dur)}</span>
       </div>
 
