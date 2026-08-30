@@ -148,10 +148,16 @@ ipcMain.handle('video:makeProxy', async (_e, file, duration, kind = 'light') => 
     args.push('-movflags', '+faststart', out);
   } else {
     if (cuda) args.push('-hwaccel', 'cuda');
-    args.push('-i', file, '-map', '0:v:0', '-an', '-vf', 'scale=-2:1080', '-r', '30');
-    if (nvenc) args.push('-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '23', '-b:v', '0');
-    else args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23');
-    args.push('-pix_fmt', 'yuv420p', '-movflags', '+faststart', out);
+    if (cuda && nvenc) {
+      // everything on the GPU: decode → fps → scale_cuda → nvenc
+      args.push('-hwaccel_output_format', 'cuda', '-i', file, '-map', '0:v:0', '-an', '-vf', 'fps=30,scale_cuda=-2:1080:format=nv12', '-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '23', '-b:v', '0');
+    } else {
+      args.push('-i', file, '-map', '0:v:0', '-an', '-vf', 'fps=30,scale=-2:1080');
+      if (nvenc) args.push('-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '23', '-b:v', '0');
+      else args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23');
+      args.push('-pix_fmt', 'yuv420p');
+    }
+    args.push('-movflags', '+faststart', out);
   }
   proxyProc = spawn(ffmpegPath, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
   let err = '';
@@ -161,13 +167,29 @@ ipcMain.handle('video:makeProxy', async (_e, file, duration, kind = 'light') => 
     const m = /time=(\d+):(\d+):([\d.]+)/.exec(s);
     if (m && win && duration) win.webContents.send('proxy:progress', Math.min(1, (+m[1] * 3600 + +m[2] * 60 + +m[3]) / duration));
   });
-  const code = await new Promise((resolve) => proxyProc.on('close', resolve));
+  const proc = proxyProc;
+  const code = await new Promise((resolve) => proc.on('close', resolve));
+  const cancelled = proc.cancelled;
   proxyProc = null;
-  if (code !== 0) throw new Error('ffmpeg failed: ' + err);
+  if (cancelled) {
+    try {
+      await fs.promises.unlink(out);
+    } catch {
+      /* ignore */
+    }
+    return null; // user cancelled — not an error
+  }
+  if (code !== 0) {
+    const last = err.trim().split('\n').filter((l) => !/^frame=/.test(l)).pop() || 'exit code ' + code;
+    throw new Error('ffmpeg failed: ' + last);
+  }
   return out;
 });
 ipcMain.handle('video:cancelProxy', () => {
-  if (proxyProc) proxyProc.kill();
+  if (proxyProc) {
+    proxyProc.cancelled = true;
+    proxyProc.kill();
+  }
 });
 ipcMain.handle('fs:exists', (_e, p) => fs.existsSync(p));
 

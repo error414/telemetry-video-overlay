@@ -174,7 +174,11 @@ export default function App() {
     setProxyProgress(0);
     try {
       const proxy = await window.api.makeProxy(video.path, video.duration, kind);
-      setVideo((v) => ({ ...v, proxy }));
+      if (!proxy) {
+        setStatus('Proxy creation cancelled');
+        return;
+      }
+      setVideo((v) => ({ ...v, proxy, stream: false }));
       setStatus('Preview proxy created: ' + proxy);
     } catch (e) {
       setStatus('Proxy error: ' + e.message);
