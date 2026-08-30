@@ -51,7 +51,9 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
   // keyboard: space play, arrows frame step, shift+arrows = 1s, [ ] adjust offset
   useEffect(() => {
     const h = (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      // ignore shortcuts while typing anywhere editable (inputs, textareas, CodeMirror's contenteditable)
+      const t = e.target;
+      if (t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select, [contenteditable], .cm-editor')))) return;
       if (e.code === 'Space') {
         e.preventDefault();
         toggle();
