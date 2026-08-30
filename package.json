@@ -1,0 +1,30 @@
+{
+  "name": "telemetry-overlay",
+  "version": "0.1.0",
+  "description": "Overlay HTML/JS widgets driven by INAV blackbox CSV telemetry onto video",
+  "main": "electron/main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "concurrently -k -s first \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev": "npm start"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.1.0",
+    "electron": "^33.0.0",
+    "tailwindcss": "^4.1.0",
+    "vite": "^6.0.0",
+    "wait-on": "^8.0.0"
+  },
+  "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@uiw/codemirror-theme-github": "^4.25.11",
+    "@uiw/react-codemirror": "^4.25.11",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
+    "papaparse": "^5.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
