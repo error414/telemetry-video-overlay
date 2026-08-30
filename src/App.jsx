@@ -178,7 +178,7 @@ export default function App() {
         setStatus('Proxy creation cancelled');
         return;
       }
-      setVideo((v) => ({ ...v, proxy, stream: false }));
+      setVideo((v) => ({ ...v, proxy }));
       setStatus('Preview proxy created: ' + proxy);
     } catch (e) {
       setStatus('Proxy error: ' + e.message);
