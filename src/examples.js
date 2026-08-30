@@ -3,7 +3,7 @@
 // Library tab and are refreshed automatically when EXAMPLES_VERSION changes.
 
 // Bump when examples change: the library's "Example:" entries are refreshed automatically.
-export const EXAMPLES_VERSION = 8;
+export const EXAMPLES_VERSION = 9;
 
 export const EXAMPLE_WIDGETS = [
   {
@@ -280,9 +280,14 @@ export const EXAMPLE_WIDGETS = [
   var TRAIL_COLOR = 'rgba(242,169,59,.5)';
   var LABELS      = true;            // T/Y/P/R labels
   var LABEL_COLOR = 'rgba(255,255,255,.7)';
+  var LABEL_SIZE  = 10;              // label font size (px)
+  var LABEL_FONT  = 'Arial';         // label font family
+  var LABEL_BOLD  = false;
   var RADIUS      = 8;
   var GAP         = 10;              // px between the two boxes
   // -------------------------------
+  // Elements carry ids/classes so the widget's CSS tab can restyle them:
+  //   #box-left / #box-right (rect.box), .grid, .trail, .stick, .label
   var W = ctx.width, H = ctx.height, size = Math.min(H, (W - GAP) / 2), pad = STICK_SIZE + 2;
   var x0 = (W - (2 * size + GAP)) / 2, y0 = (H - size) / 2;
   function norm(v, lo, hi) { v = typeof v === 'number' ? v : (lo + hi) / 2; return Math.max(0, Math.min(1, (v - lo) / (hi - lo))); }
@@ -303,18 +308,19 @@ export const EXAMPLE_WIDGETS = [
       trail.l.push(MODE === 1 ? [yy, pp] : [yy, th]); trail.r.push(MODE === 1 ? [rr, th] : [rr, pp]);
     }
   }
-  function box(bx, pos, tr, lab) {
+  function box(id, bx, pos, tr, lab) {
     var cx = bx + pad + pos[0] * (size - 2 * pad), cy = y0 + size - pad - pos[1] * (size - 2 * pad);
-    var g = '<rect x="' + bx + '" y="' + y0 + '" width="' + size + '" height="' + size + '" rx="' + RADIUS + '" fill="' + BG + '" stroke="' + BORDER + '" stroke-width="1.5"/>';
-    g += '<line x1="' + (bx + size / 2) + '" x2="' + (bx + size / 2) + '" y1="' + y0 + '" y2="' + (y0 + size) + '" stroke="' + GRID + '"/>';
-    g += '<line x1="' + bx + '" x2="' + (bx + size) + '" y1="' + (y0 + size / 2) + '" y2="' + (y0 + size / 2) + '" stroke="' + GRID + '"/>';
-    if (tr.length > 1) g += '<polyline points="' + tr.map(function (p) { return (bx + pad + p[0] * (size - 2 * pad)).toFixed(1) + ',' + (y0 + size - pad - p[1] * (size - 2 * pad)).toFixed(1); }).join(' ') + ' ' + cx.toFixed(1) + ',' + cy.toFixed(1) + '" fill="none" stroke="' + TRAIL_COLOR + '" stroke-width="2" stroke-linecap="round"/>';
-    g += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + STICK_SIZE + '" fill="' + STICK_COLOR + '" stroke="#000" stroke-width="1.5"/>';
-    if (LABELS) g += '<text x="' + (bx + 5) + '" y="' + (y0 + 12) + '" fill="' + LABEL_COLOR + '" font-family="Arial" font-size="10">' + lab[0] + '</text><text x="' + (bx + size - 5) + '" y="' + (y0 + size - 5) + '" text-anchor="end" fill="' + LABEL_COLOR + '" font-family="Arial" font-size="10">' + lab[1] + '</text>';
-    return g;
+    var g = '<g id="' + id + '" class="stickbox"><rect class="box" x="' + bx + '" y="' + y0 + '" width="' + size + '" height="' + size + '" rx="' + RADIUS + '" fill="' + BG + '" stroke="' + BORDER + '" stroke-width="1.5"/>';
+    g += '<line class="grid" x1="' + (bx + size / 2) + '" x2="' + (bx + size / 2) + '" y1="' + y0 + '" y2="' + (y0 + size) + '" stroke="' + GRID + '"/>';
+    g += '<line class="grid" x1="' + bx + '" x2="' + (bx + size) + '" y1="' + (y0 + size / 2) + '" y2="' + (y0 + size / 2) + '" stroke="' + GRID + '"/>';
+    if (tr.length > 1) g += '<polyline class="trail" points="' + tr.map(function (p) { return (bx + pad + p[0] * (size - 2 * pad)).toFixed(1) + ',' + (y0 + size - pad - p[1] * (size - 2 * pad)).toFixed(1); }).join(' ') + ' ' + cx.toFixed(1) + ',' + cy.toFixed(1) + '" fill="none" stroke="' + TRAIL_COLOR + '" stroke-width="2" stroke-linecap="round"/>';
+    g += '<circle class="stick" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + STICK_SIZE + '" fill="' + STICK_COLOR + '" stroke="#000" stroke-width="1.5"/>';
+    var fw = LABEL_BOLD ? ' font-weight="bold"' : '';
+    if (LABELS) g += '<text class="label label-top" x="' + (bx + 5) + '" y="' + (y0 + LABEL_SIZE + 2) + '" fill="' + LABEL_COLOR + '" font-family="' + LABEL_FONT + '" font-size="' + LABEL_SIZE + '"' + fw + '>' + lab[0] + '</text><text class="label label-bottom" x="' + (bx + size - 5) + '" y="' + (y0 + size - 5) + '" text-anchor="end" fill="' + LABEL_COLOR + '" font-family="' + LABEL_FONT + '" font-size="' + LABEL_SIZE + '"' + fw + '>' + lab[1] + '</text>';
+    return g + '</g>';
   }
-  var svg = box(x0, left, trail.l, MODE === 1 ? ['PITCH', 'YAW'] : ['THR', 'YAW']) + box(x0 + size + GAP, right, trail.r, MODE === 1 ? ['THR', 'ROLL'] : ['PITCH', 'ROLL']);
-  return '<svg width="' + W + '" height="' + H + '">' + svg + '</svg>';
+  var svg = box('box-left', x0, left, trail.l, MODE === 1 ? ['PITCH', 'YAW'] : ['THR', 'YAW']) + box('box-right', x0 + size + GAP, right, trail.r, MODE === 1 ? ['THR', 'ROLL'] : ['PITCH', 'ROLL']);
+  return '<svg id="sticks" width="' + W + '" height="' + H + '">' + svg + '</svg>';
 }`,
   },
   {

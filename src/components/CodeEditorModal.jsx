@@ -1,16 +1,32 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
+import { css as cssLang } from '@codemirror/lang-css';
 import { githubDark } from '@uiw/codemirror-theme-github';
-import { renderWidget, parseColumns } from '../widgetRuntime.js';
+import { renderWidget, parseColumns, widgetDomId } from '../widgetRuntime.js';
+
+/** Build a readable selector for an element: tag#id.class1.class2 */
+function describe(el) {
+  let s = el.tagName.toLowerCase();
+  if (el.id) s += '#' + el.id;
+  const cls = typeof el.className === 'string' ? el.className : el.className && el.className.baseVal;
+  if (cls) s += '.' + cls.trim().split(/\s+/).join('.');
+  return s;
+}
 
 /**
- * Full-screen widget editor: CodeMirror on the left, live preview + settings on the right.
- * Edits are applied to the widget immediately (the main preview updates too); "Close" just closes.
+ * Full-screen widget editor: CodeMirror (Code / CSS tabs) on the left, live preview + settings on
+ * the right. Hovering the preview shows the element under the cursor (selector for the CSS tab);
+ * clicking copies it. Edits apply immediately; "Close" just closes.
  */
 export default function CodeEditorModal({ widget, updateWidget, onClose, store, time, offset, columnNames, ColumnsInput }) {
   const [previewTime, setPreviewTime] = useState(time);
   const [follow, setFollow] = useState(true);
+  const [tab, setTab] = useState('code');
+  const [hover, setHover] = useState(null); // {selector, path, rect}
+  const [copied, setCopied] = useState('');
+  const previewRef = useRef(null);
+  const boxRef = useRef(null);
   useEffect(() => {
     if (follow) setPreviewTime(time);
   }, [time, follow]);
@@ -22,7 +38,7 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
 
   // fit the widget into the preview area
   const previewW = 640;
-  const previewH = 420;
+  const previewH = 400;
   const scale = Math.min(1, (previewW - 40) / Math.max(1, widget.w), (previewH - 40) / Math.max(1, widget.h));
 
   useEffect(() => {
@@ -32,6 +48,24 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
+
+  // ---- hover inspector ----
+  const onPreviewMove = (e) => {
+    const box = boxRef.current;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (!box || !el || el === box || !box.contains(el)) return setHover(null);
+    const path = [];
+    for (let n = el; n && n !== box; n = n.parentElement) path.unshift(describe(n));
+    const r = el.getBoundingClientRect();
+    const pr = previewRef.current.getBoundingClientRect();
+    setHover({ selector: describe(el), path: path.join(' > '), rect: { left: r.left - pr.left, top: r.top - pr.top, width: r.width, height: r.height } });
+  };
+  const copySelector = () => {
+    if (!hover) return;
+    navigator.clipboard.writeText(hover.selector);
+    setCopied(hover.selector);
+    setTimeout(() => setCopied(''), 1200);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(5,8,11,.72)' }} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -46,15 +80,38 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
         </header>
 
         <div className="flex-1 flex min-h-0">
-          {/* code */}
+          {/* code / css */}
           <div className="flex-1 min-w-0 flex flex-col" style={{ borderRight: '1px solid var(--border)' }}>
-            <div className="flex items-center gap-2 px-3 py-1.5 text-xs" style={{ borderBottom: '1px solid var(--border)' }}>
-              <span className="mono" style={{ color: 'var(--muted)' }}>function (values, time, ctx) → HTML</span>
+            <div className="flex items-center gap-1 px-2 text-xs" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className={'tab ' + (tab === 'code' ? 'tab-active' : '')} onClick={() => setTab('code')}>
+                Code <span className="mono hint">function (values, time, ctx)</span>
+              </div>
+              <div className={'tab ' + (tab === 'css' ? 'tab-active' : '')} onClick={() => setTab('css')}>
+                CSS {widget.css && widget.css.trim() ? <span className="chip chip-accent ml-1">on</span> : null}
+              </div>
               {out.error ? <span className="chip chip-bad ml-auto">error</span> : <span className="chip chip-good ml-auto">ok</span>}
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
-              <CodeMirror value={widget.code} height="100%" theme={githubDark} extensions={[javascript()]} onChange={(v) => updateWidget(widget.id, { code: v })} basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }} style={{ height: '100%' }} />
+              {tab === 'code' ? (
+                <CodeMirror value={widget.code} height="100%" theme={githubDark} extensions={[javascript()]} onChange={(v) => updateWidget(widget.id, { code: v })} basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }} style={{ height: '100%' }} />
+              ) : (
+                <CodeMirror
+                  value={widget.css || ''}
+                  height="100%"
+                  theme={githubDark}
+                  extensions={[cssLang()]}
+                  placeholder={CSS_PLACEHOLDER}
+                  onChange={(v) => updateWidget(widget.id, { css: v })}
+                  basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }}
+                  style={{ height: '100%' }}
+                />
+              )}
             </div>
+            {tab === 'css' && (
+              <div className="px-3 py-1.5 text-xs hint" style={{ borderTop: '1px solid var(--border)' }}>
+                Rules are scoped to this widget automatically (prefixed with <span className="mono">#{widgetDomId(widget)}</span>); <span className="mono">:root</span> targets the widget box. Hover the preview to find ids/classes; click to copy.
+              </div>
+            )}
             {out.error && (
               <pre className="px-3 py-2 text-xs whitespace-pre-wrap" style={{ color: 'var(--bad)', background: 'rgba(229,100,92,.08)', borderTop: '1px solid var(--border)', maxHeight: 120, overflow: 'auto' }}>
                 {out.error}
@@ -72,10 +129,32 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
                 {widget.w}×{widget.h} · {Math.round(scale * 100)}%
               </span>
             </div>
-            <div className="flex items-center justify-center" style={{ height: previewH, background: 'repeating-conic-gradient(#20262d 0 25%, #191f25 0 50%) 0 0 / 20px 20px', position: 'relative', overflow: 'hidden' }}>
+            <div
+              ref={previewRef}
+              className="flex items-center justify-center"
+              style={{ height: previewH, background: 'repeating-conic-gradient(#20262d 0 25%, #191f25 0 50%) 0 0 / 20px 20px', position: 'relative', overflow: 'hidden', cursor: hover ? 'copy' : 'default' }}
+              onMouseMove={onPreviewMove}
+              onMouseLeave={() => setHover(null)}
+              onClick={copySelector}
+            >
               <div style={{ width: widget.w * scale, height: widget.h * scale, position: 'relative' }}>
-                <div style={{ width: widget.w, height: widget.h, transform: `scale(${scale})`, transformOrigin: '0 0', position: 'absolute', opacity: widget.opacity, color: '#fff', fontFamily: 'Arial, Helvetica, sans-serif', outline: '1px dashed rgba(255,255,255,.25)' }} dangerouslySetInnerHTML={{ __html: out.html }} />
+                <div
+                  ref={boxRef}
+                  id={widgetDomId(widget)}
+                  style={{ width: widget.w, height: widget.h, transform: `scale(${scale})`, transformOrigin: '0 0', position: 'absolute', opacity: widget.opacity, color: '#fff', fontFamily: 'Arial, Helvetica, sans-serif', outline: '1px dashed rgba(255,255,255,.25)' }}
+                  dangerouslySetInnerHTML={{ __html: out.html }}
+                />
               </div>
+              {hover && (
+                <>
+                  <div style={{ position: 'absolute', pointerEvents: 'none', left: hover.rect.left, top: hover.rect.top, width: hover.rect.width, height: hover.rect.height, outline: '1.5px solid var(--accent)', background: 'rgba(242,169,59,.12)' }} />
+                  <div className="mono" style={{ position: 'absolute', pointerEvents: 'none', left: 8, bottom: 8, right: 8, padding: '4px 8px', borderRadius: 4, background: 'rgba(15,19,23,.92)', border: '1px solid var(--border-strong)', fontSize: 11, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ color: 'var(--accent)' }}>{hover.selector}</span>
+                    <span className="hint"> — {hover.path}</span>
+                    {copied === hover.selector && <span style={{ color: 'var(--good)' }}> · copied</span>}
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-2 px-3 py-2 text-xs" style={{ borderBottom: '1px solid var(--border)', borderTop: '1px solid var(--border)' }}>
               <label className="flex items-center gap-1 cursor-pointer">
@@ -118,6 +197,12 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
     </div>
   );
 }
+
+const CSS_PLACEHOLDER = `/* Styles for this widget only. Examples: */
+:root { filter: drop-shadow(0 0 6px #000); }   /* the widget box */
+.label { font-weight: bold; fill: #ffd166; }    /* SVG text uses fill, not color */
+#box-left .stick { fill: #4fc3c7; }
+`;
 
 function fmt(v) {
   if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(3);

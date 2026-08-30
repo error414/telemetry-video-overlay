@@ -192,6 +192,9 @@ export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidg
             </pre>
           )}
 
+          <label className="label">CSS (scoped to this widget; hover the editor preview for ids/classes)</label>
+          <textarea className="input mono text-xs h-24 whitespace-pre" spellCheck={false} value={selected.css || ''} placeholder={'.label { fill: #ffd166; }\n:root { filter: drop-shadow(0 0 6px #000); }'} onChange={(e) => updateWidget(selected.id, { css: e.target.value })} />
+
           <details className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
             <summary className="cursor-pointer">Widget API reference</summary>
             <pre className="mono whitespace-pre-wrap mt-1 p-2 rounded" style={{ background: 'var(--bg)' }}>
@@ -237,4 +240,8 @@ ctx.image(url)       loads an image (map tile, icon) and returns a data: URL
 
 The returned HTML is placed in an absolutely positioned box; style it with
 inline CSS or a <style> tag. Inline <svg> works. External URLs (web fonts,
-images) are not available in export – embed as data: URIs instead.`;
+images) are not available in export – embed as data: URIs instead.
+
+CSS field: a stylesheet applied only to this widget (selectors are prefixed
+with the widget's box id automatically; ":root" = the box). Give elements
+ids/classes in the returned HTML and style them here – works in export too.`;

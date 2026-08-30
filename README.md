@@ -77,6 +77,11 @@ sizes, arrow style, map style…). *Example: GPS map* shows a dimmed OSM/CARTO b
 the track with a heading arrow (columns: lat, lon, heading). *Restore examples* in the
 Library brings back the current versions.
 
+**CSS per widget:** every widget also has a CSS field (Widgets tab, or the *CSS* tab in the
+editor popup). Selectors are scoped to that widget automatically (`:root` = the widget box), so
+`.label { fill: #ffd166 }` restyles only this widget — in preview and export. Hover the editor
+preview to see the element under the cursor as `tag#id.class` (click copies it).
+
 The returned HTML goes into an absolutely positioned box with the widget's opacity.
 Inline CSS, `<style>` and inline `<svg>` all work. External resources (web fonts, remote
 images) are not available during export – embed them as `data:` URIs.

@@ -128,11 +128,64 @@ export function renderWidget(widget, store, videoTime, offsetSec) {
   };
   try {
     const out = fn(values, timeMs, ctx);
-    return { html: out == null ? '' : String(out), error: null };
+    let html = out == null ? '' : String(out);
+    // per-widget stylesheet, scoped to this widget's box (#w-<id>)
+    if (widget.css && widget.css.trim()) html = '<style>' + scopeCss(widget.css, widgetDomId(widget)) + '</style>' + html;
+    return { html, error: null };
   } catch (e) {
     const msg = String(e && e.message ? e.message : e);
     return { html: errBox('Runtime error: ' + msg), error: msg };
   }
+}
+
+export function widgetDomId(widget) {
+  return 'w-' + String(widget.id || 'x').replace(/[^\w-]/g, '');
+}
+
+/**
+ * Prefix every selector of a stylesheet with `#id ` so rules only apply inside the widget box.
+ * Handles plain rules and nested @media/@supports blocks; @keyframes/@font-face are left as is.
+ * `:root` / `:host` refer to the widget box itself.
+ */
+export function scopeCss(css, id) {
+  const prefix = '#' + id;
+  const scopeSelectors = (sel) =>
+    sel
+      .split(',')
+      .map((s) => {
+        s = s.trim();
+        if (!s) return s;
+        if (/^(:root|:host)\b/.test(s)) return prefix + s.replace(/^(:root|:host)/, '');
+        return prefix + ' ' + s;
+      })
+      .join(', ');
+  const walk = (src) => {
+    let out = '';
+    let i = 0;
+    while (i < src.length) {
+      const open = src.indexOf('{', i);
+      if (open < 0) break;
+      const head = src.slice(i, open).trim();
+      // find the matching closing brace
+      let depth = 1;
+      let j = open + 1;
+      while (j < src.length && depth) {
+        if (src[j] === '{') depth++;
+        else if (src[j] === '}') depth--;
+        j++;
+      }
+      const body = src.slice(open + 1, j - 1);
+      if (head.startsWith('@')) {
+        if (/^@(media|supports|container|layer)/.test(head)) out += head + '{' + walk(body) + '}';
+        else out += head + '{' + body + '}';
+      } else {
+        out += scopeSelectors(head.replace(/\/\*[\s\S]*?\*\//g, '')) + '{' + body + '}';
+      }
+      i = j;
+    }
+    return out;
+  };
+  return walk(css.replace(/\/\*[\s\S]*?\*\//g, ''));
 }
 
 function errBox(msg) {
@@ -165,7 +218,7 @@ export function composeFrameSvg(widgets, store, videoTime, offsetSec, width, hei
   for (const w of widgets) {
     if (w.visible === false) continue;
     const { html } = renderWidget(w, store, videoTime, offsetSec);
-    inner += '<div style="' + widgetBoxStyle(ox || oy ? { ...w, x: w.x - ox, y: w.y - oy } : w) + '">' + html + '</div>';
+    inner += '<div id="' + widgetDomId(w) + '" style="' + widgetBoxStyle(ox || oy ? { ...w, x: w.x - ox, y: w.y - oy } : w) + '">' + html + '</div>';
   }
   const body = toXhtml('<div style="position:relative;width:' + width + 'px;height:' + height + 'px;margin:0;color:#fff;font-family:Arial,Helvetica,sans-serif">' + inner + '</div>');
   return (
@@ -204,6 +257,7 @@ export function newWidget(partial = {}) {
     h: 80,
     opacity: 1,
     visible: true,
+    css: '',
     code: DEFAULT_CODE,
     ...partial,
     id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),

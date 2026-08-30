@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { renderWidget, widgetBoxStyle } from '../widgetRuntime.js';
+import { renderWidget, widgetBoxStyle, widgetDomId } from '../widgetRuntime.js';
 
 function toFileUrl(p) {
   return 'file:///' + p.replace(/\\/g, '/').replace(/^\//, '').split('/').map(encodeURIComponent).join('/');
@@ -122,6 +122,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
             w.visible === false ? null : (
               <div
                 key={w.id}
+                id={widgetDomId(w)}
                 style={{
                   ...styleObj(widgetBoxStyle(w)),
                   outline: editMode ? (selectedId === w.id ? '2px solid #f2a93b' : '1px dashed rgba(255,255,255,.35)') : 'none',

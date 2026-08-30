@@ -26,6 +26,11 @@ Widget record (what the library / project JSON stores):
 | `x, y, w, h` | box in video pixels (export uses the source resolution, e.g. 3840×2160) |
 | `opacity` | 0–1, applied to the whole box |
 | `code` | the function source |
+| `css` | optional stylesheet for this widget only — every selector is auto-prefixed with the box id (`#w-<id>`), `:root` = the box; applied in preview and export |
+
+Give elements in the returned HTML stable `id`s / `class`es (e.g. `class="label"`, `id="box-left"`)
+so users can restyle them from the CSS tab without touching the code. The editor's preview shows
+`tag#id.class` on hover. Remember SVG text/shapes use `fill`/`stroke`, not `color`/`background`.
 
 ## Runtime API (`src/widgetRuntime.js` is the source of truth)
 
