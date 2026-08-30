@@ -80,6 +80,8 @@ export default function App() {
   useEffect(() => localStorage.setItem('telemetry-overlay.grid', JSON.stringify(grid)), [grid]);
   const videoRef = useRef(null);
   const [time, setTime] = useState(0);
+  // reference resolution the widget layout was designed for; widgets scale to other videos
+  const [layout, setLayout] = useState(null);
 
   useEffect(() => localStorage.setItem(LIB_KEY, JSON.stringify(library)), [library]);
 
@@ -193,11 +195,13 @@ export default function App() {
     try {
       const info = await probeVideo(p);
       setVideo(info);
+      // no widgets yet (or no reference set) → this video becomes the layout reference
+      setLayout((l) => (!l || widgets.length === 0 ? { w: info.width, h: info.height } : l));
       setStatus(`Video: ${info.width}x${info.height} @ ${info.fps.toFixed(3)} fps, ${info.codec}, ${info.duration.toFixed(1)} s`);
     } catch (e) {
       setStatus('Probe error: ' + e.message);
     }
-  }, [probeVideo]);
+  }, [probeVideo, widgets.length]);
 
   // ---- Widgets ----
   const updateWidget = useCallback((id, patch) => setWidgets((ws) => ws.map((w) => (w.id === id ? { ...w, ...patch } : w))), []);
@@ -239,6 +243,7 @@ export default function App() {
         quality: job.quality,
         encoder: job.encoder,
         overlayFps: job.overlayFps,
+        lt,
         onStart: (setup) => setJob((j) => ({ ...j, setup })),
         onProgress: (p) => setJob((j) => ({ ...j, progress: p })),
         isCancelled: () => cancelRef.current,
@@ -260,6 +265,7 @@ export default function App() {
           app: 'telemetry-overlay',
           version: 1,
           video: video ? video.path : null,
+          layout,
           sources: store.sources.map((s) => ({ path: s.path, timeColumn: s.timeColumn, timeUnit: s.timeUnit })),
           offset,
           widgets,
@@ -288,6 +294,7 @@ export default function App() {
         }
       }
       setOffset(j.offset || 0);
+      if (j.layout && j.layout.w) setLayout(j.layout);
       const seen = new Set();
       setWidgets(
         (j.widgets || []).map((w) => {
@@ -298,7 +305,9 @@ export default function App() {
       );
       if (j.video) {
         try {
-          setVideo(await probeVideo(j.video));
+          const info = await probeVideo(j.video);
+          setVideo(info);
+          if (!j.layout || !j.layout.w) setLayout({ w: info.width, h: info.height });
         } catch {
           setStatus('Video from project not found: ' + j.video);
         }
@@ -335,6 +344,22 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // layout transform: reference resolution → current video resolution
+  const lt = useMemo(() => {
+    if (!video || !layout || !layout.w || (layout.w === video.width && layout.h === video.height)) return { sx: 1, sy: 1, k: 1 };
+    const sx = video.width / layout.w;
+    const sy = video.height / layout.h;
+    return { sx, sy, k: Math.min(sx, sy) };
+  }, [video, layout]);
+
+  // bake current scaling into widget coordinates and make this video the new reference
+  const rebaseLayout = useCallback(() => {
+    if (!video) return;
+    setWidgets((ws) => ws.map((w) => ({ ...w, x: Math.round(w.x * lt.sx), y: Math.round(w.y * lt.sy), w: Math.round(w.w * lt.k), h: Math.round(w.h * lt.k) })));
+    setLayout({ w: video.width, h: video.height });
+    setStatus(`Widget layout rebased to ${video.width}×${video.height}`);
+  }, [video, lt]);
 
   const selected = useMemo(() => widgets.find((w) => w.id === selectedId) || null, [widgets, selectedId]);
   const columnNames = useMemo(() => store.columnNames(), [store, storeVersion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -403,6 +428,7 @@ export default function App() {
             updateWidget={updateWidget}
             editMode={editMode}
             grid={grid}
+            lt={lt}
             setStatus={setStatus}
             onOpenEditor={(id) => {
               setSelectedId(id);
@@ -429,6 +455,9 @@ export default function App() {
               <FilesPanel
                 video={video}
                 openVideo={openVideo}
+                layout={layout}
+                lt={lt}
+                rebaseLayout={rebaseLayout}
                 makeProxy={makeProxy}
                 proxyProgress={proxyProgress}
                 cancelProxy={() => window.api.cancelProxy()}

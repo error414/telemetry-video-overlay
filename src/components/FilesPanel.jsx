@@ -13,7 +13,7 @@ const SEL = (label, key, opts, bbOptions, setBbOptions) => (
   </label>
 );
 
-export default function FilesPanel({ video, openVideo, makeProxy, proxyProgress, cancelProxy, decodeBlackbox, decoding, bbOptions, setBbOptions, store, storeVersion, addCsvFiles, updateSource, removeSource }) {
+export default function FilesPanel({ video, openVideo, layout, lt, rebaseLayout, makeProxy, proxyProgress, cancelProxy, decodeBlackbox, decoding, bbOptions, setBbOptions, store, storeVersion, addCsvFiles, updateSource, removeSource }) {
   void storeVersion;
   const heavy = video && (video.codec === 'hevc' || video.width > 1920 || video.fps > 60);
   return (
@@ -25,6 +25,17 @@ export default function FilesPanel({ video, openVideo, makeProxy, proxyProgress,
           <div className="hint mt-1">
             {video.width}×{video.height} · {video.fps.toFixed(3)} fps · {video.codec} · {video.duration.toFixed(2)} s · {video.bitrate ? (video.bitrate / 1e6).toFixed(1) + ' Mbit/s' : 'bitrate n/a'} · {video.hasAudio ? 'audio' : 'no audio'}
           </div>
+          {layout && lt && lt.k !== 1 && (
+            <div className="mt-2 pt-2 border-t border-[var(--border)]">
+              <div className="font-medium text-sm">Widget layout</div>
+              <div className="text-[var(--warn)] mt-1">
+                Widgets were designed for {layout.w}×{layout.h} and are scaled ×{lt.k.toFixed(2)} to fit this video (positions and fonts included).
+              </div>
+              <button className="btn btn-xs mt-2" onClick={rebaseLayout} title="Convert widget coordinates to this video's resolution and make it the new reference">
+                Rebase layout to {video.width}×{video.height}
+              </button>
+            </div>
+          )}
           <div className="mt-2 pt-2 border-t border-[var(--border)]">
             <div className="font-medium text-sm">Preview proxy</div>
             {video.proxy ? (

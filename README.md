@@ -77,6 +77,11 @@ sizes, arrow style, map style…). *Example: GPS map* shows a dimmed OSM/CARTO b
 the track with a heading arrow (columns: lat, lon, heading). *Restore examples* in the
 Library brings back the current versions.
 
+**Layout reference:** widget positions/sizes are stored for the resolution of the video they were
+designed on. Loading a video with a different resolution scales the whole layout automatically
+(positions, sizes and fonts) so widgets look the same; the *Files* tab shows the scale factor and
+a *Rebase* button that converts coordinates to the current video. Saved in the project.
+
 **CSS per widget:** every widget also has a CSS field (Widgets tab, or the *CSS* tab in the
 editor popup). Selectors are scoped to that widget automatically (`:root` = the widget box), so
 `.label { fill: #ffd166 }` restyles only this widget — in preview and export. Hover the editor

@@ -6,7 +6,7 @@ function toFileUrl(p) {
   return 'file:///' + p.replace(/\\/g, '/').replace(/^\//, '').split('/').map(encodeURIComponent).join('/');
 }
 
-export default function Stage({ video, videoRef, widgets, store, storeVersion, offset, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, setStatus, onOpenEditor }) {
+export default function Stage({ video, videoRef, widgets, store, storeVersion, offset, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, lt, setStatus, onOpenEditor }) {
   const gridSize = grid && grid.size > 1 ? grid.size : 1;
   // snap to grid unless disabled; holding Alt while dragging temporarily disables snapping
   const snap = (v, alt) => (grid && grid.snap && !alt ? Math.round(v / gridSize) * gridSize : Math.round(v));
@@ -60,10 +60,11 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
     const move = (ev) => {
       const d = dragRef.current;
       if (!d) return;
+      // screen px → video px (stage scale) → layout units (lt)
       const dx = (ev.clientX - d.sx) / scale;
       const dy = (ev.clientY - d.sy) / scale;
-      if (d.mode === 'move') updateWidget(d.id, { x: snap(d.x + dx, ev.altKey), y: snap(d.y + dy, ev.altKey) });
-      else updateWidget(d.id, { w: Math.max(gridSize, snap(d.w + dx, ev.altKey)), h: Math.max(gridSize, snap(d.h + dy, ev.altKey)) });
+      if (d.mode === 'move') updateWidget(d.id, { x: snap(d.x + dx / lt.sx, ev.altKey), y: snap(d.y + dy / lt.sy, ev.altKey) });
+      else updateWidget(d.id, { w: Math.max(gridSize, snap(d.w + dx / lt.k, ev.altKey)), h: Math.max(gridSize, snap(d.h + dy / lt.k, ev.altKey)) });
     };
     const up = () => {
       dragRef.current = null;
@@ -115,7 +116,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
                 inset: 0,
                 pointerEvents: 'none',
                 backgroundImage: 'linear-gradient(to right, rgba(242,169,59,.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(242,169,59,.22) 1px, transparent 1px)',
-                backgroundSize: `${gridSize}px ${gridSize}px`,
+                backgroundSize: `${gridSize * lt.sx}px ${gridSize * lt.sy}px`,
               }}
             />
           )}
@@ -125,7 +126,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
                 key={w.id}
                 id={widgetDomId(w)}
                 style={{
-                  ...styleObj(widgetBoxStyle(w)),
+                  ...styleObj(widgetBoxStyle(w, '', lt)),
                   outline: editMode ? (selectedId === w.id ? '2px solid #f2a93b' : '1px dashed rgba(255,255,255,.35)') : 'none',
                   cursor: editMode ? 'move' : 'default',
                 }}

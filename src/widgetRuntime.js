@@ -209,21 +209,31 @@ export function toXhtml(html) {
   return new XMLSerializer().serializeToString(el);
 }
 
-export function widgetBoxStyle(w, extra = '') {
+/**
+ * lt = layout transform {sx, sy, k}: widgets are designed for a reference resolution; on a video
+ * with a different size positions scale by sx/sy and the whole box (content, fonts included)
+ * by k. Identity when the video matches the reference.
+ */
+export const IDENTITY_LT = { sx: 1, sy: 1, k: 1 };
+
+export function widgetBoxStyle(w, extra = '', lt = IDENTITY_LT) {
+  const scale = lt.k !== 1 ? 'transform:scale(' + lt.k + ');transform-origin:0 0;' : '';
   return (
-    'position:absolute;left:' + w.x + 'px;top:' + w.y + 'px;width:' + w.w + 'px;height:' + w.h + 'px;opacity:' + (w.opacity ?? 1) + ';overflow:visible;box-sizing:border-box;' + extra
+    'position:absolute;left:' + w.x * lt.sx + 'px;top:' + w.y * lt.sy + 'px;width:' + w.w + 'px;height:' + w.h + 'px;opacity:' + (w.opacity ?? 1) + ';overflow:visible;box-sizing:border-box;' + scale + extra
   );
 }
 
 /** Compose one SVG string with all widgets for a given time (used for export & snapshots). */
-export function composeFrameSvg(widgets, store, videoTime, offsetSec, width, height, region) {
+export function composeFrameSvg(widgets, store, videoTime, offsetSec, width, height, region, lt = IDENTITY_LT) {
   let inner = '';
   const ox = region ? region.x : 0;
   const oy = region ? region.y : 0;
   for (const w of widgets) {
     if (w.visible === false) continue;
     const { html } = renderWidget(w, store, videoTime, offsetSec);
-    inner += '<div id="' + widgetDomId(w) + '" style="' + widgetBoxStyle(ox || oy ? { ...w, x: w.x - ox, y: w.y - oy } : w) + '">' + html + '</div>';
+    // shift by the region origin in layout units so that (x - ox/sx) * sx = x*sx - ox
+    const shifted = ox || oy ? { ...w, x: w.x - ox / lt.sx, y: w.y - oy / lt.sy } : w;
+    inner += '<div id="' + widgetDomId(w) + '" style="' + widgetBoxStyle(shifted, '', lt) + '">' + html + '</div>';
   }
   const body = toXhtml('<div style="position:relative;width:' + width + 'px;height:' + height + 'px;margin:0;color:#fff;font-family:Arial,Helvetica,sans-serif">' + inner + '</div>');
   return (
@@ -233,13 +243,13 @@ export function composeFrameSvg(widgets, store, videoTime, offsetSec, width, hei
 }
 
 /** Draw a frame into a canvas (2d ctx) at full video resolution. Returns RGBA ArrayBuffer. */
-export async function renderFrameToCanvas(canvas, widgets, store, videoTime, offsetSec, region) {
+export async function renderFrameToCanvas(canvas, widgets, store, videoTime, offsetSec, region, lt = IDENTITY_LT) {
   const { width, height } = canvas;
-  let svg = composeFrameSvg(widgets, store, videoTime, offsetSec, width, height, region);
+  let svg = composeFrameSvg(widgets, store, videoTime, offsetSec, width, height, region, lt);
   // widgets may have requested images (map tiles) – wait for them and re-render so the export frame is complete
   for (let i = 0; i < 5 && hasPendingImages(); i++) {
     await waitForImages();
-    svg = composeFrameSvg(widgets, store, videoTime, offsetSec, width, height, region);
+    svg = composeFrameSvg(widgets, store, videoTime, offsetSec, width, height, region, lt);
   }
   const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   const img = new Image();
