@@ -113,7 +113,7 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
             </div>
             {tab === 'css' && (
               <div className="px-3 py-1.5 text-xs hint" style={{ borderTop: '1px solid var(--border)' }}>
-                Rules are scoped to this widget automatically; <span className="mono">:root</span> targets the widget box. Hover the preview to find ids/classes; click to copy. SVG text/shapes use <span className="mono">fill</span>/<span className="mono">stroke</span>.
+                Rules are scoped to this widget automatically; <span className="mono">:root</span> targets the widget box. Hover the preview to find ids/classes; click to copy. SVG text/shapes use <span className="mono">fill</span>/<span className="mono">stroke</span> and are moved with <span className="mono">transform: translate(10px, -4px)</span> (margin/left/top have no effect inside &lt;svg&gt;).
               </div>
             )}
             {out.error && (
@@ -206,6 +206,7 @@ const CSS_PLACEHOLDER = `/* Styles for this widget only. Examples: */
 :root { filter: drop-shadow(0 0 6px #000); }   /* the widget box */
 .label { font-weight: bold; fill: #ffd166; }    /* SVG text uses fill, not color */
 #box-left .stick { fill: #4fc3c7; }
+text.value { transform: translate(10px, -4px); } /* move SVG elements with transform (px units) */
 `;
 
 function fmt(v) {

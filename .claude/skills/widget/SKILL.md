@@ -30,7 +30,10 @@ Widget record (what the library / project JSON stores):
 
 Give elements in the returned HTML stable `id`s / `class`es (e.g. `class="label"`, `id="box-left"`)
 so users can restyle them from the CSS tab without touching the code. The editor's preview shows
-`tag#id.class` on hover. Remember SVG text/shapes use `fill`/`stroke`, not `color`/`background`.
+`tag#id.class` on hover. Remember SVG text/shapes use `fill`/`stroke`, not `color`/`background`,
+and are positioned with `transform: translate(10px, -4px)` (px units required) — `margin`,
+`left`/`top` do nothing inside `<svg>`. Avoid putting a `transform` attribute on elements users are
+likely to nudge (CSS `transform` replaces the attribute); wrap them in a `<g>` instead.
 
 ## Runtime API (`src/widgetRuntime.js` is the source of truth)
 
