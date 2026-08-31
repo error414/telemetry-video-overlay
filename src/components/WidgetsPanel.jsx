@@ -16,7 +16,7 @@ export function ColumnsInput({ value, onChange, columnNames }) {
   const endRel = after.indexOf(',');
   const end = endRel < 0 ? value.length : caret + endRel;
   const token = value.slice(start, end).trim().toLowerCase();
-  const matches = token ? columnNames.filter((c) => c.toLowerCase().includes(token) && c.toLowerCase() !== token).slice(0, 40) : columnNames.slice(0, 40);
+  const matches = token ? columnNames.filter((c) => c.toLowerCase().includes(token) && c.toLowerCase() !== token) : columnNames;
 
   useEffect(() => setHi(0), [token]);
   // the dropdown is position:fixed so scrolling containers cannot clip it
