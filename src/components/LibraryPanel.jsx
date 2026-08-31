@@ -1,6 +1,31 @@
 import React from 'react';
 import { EXAMPLE_WIDGETS } from '../examples.js';
 
+// Top-level component, not defined inside LibraryPanel: an inline component gets a new
+// identity every render, so React remounts each row whenever the app re-renders — during
+// video playback (re-render per frame) the buttons are replaced mid-click and never fire.
+function Item({ w, addWidget, exportLib, removeFromLibrary }) {
+  return (
+    <div className="card flex items-center gap-2" style={{ padding: '8px 10px' }}>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium truncate">{w.name.replace(/^Example:\s*/, '')}</div>
+        <div className="mono text-[11px] truncate" style={{ color: 'var(--muted)' }}>
+          {w.columns || '(no columns)'} · {w.w}×{w.h}
+        </div>
+      </div>
+      <button className="btn btn-xs btn-primary" onClick={() => addWidget({ ...w, id: undefined })}>
+        Add
+      </button>
+      <button className="btn btn-xs btn-icon" onClick={() => exportLib([w], w.name.replace(/[^\w.-]+/g, '_') + '.json')} title="Export this widget">
+        ⇩
+      </button>
+      <button className="btn btn-xs btn-icon btn-danger" onClick={() => removeFromLibrary(w.id)} title="Delete from library">
+        ✕
+      </button>
+    </div>
+  );
+}
+
 export default function LibraryPanel({ library, setLibrary, addWidget, setStatus }) {
   const restoreExamples = () => {
     setLibrary((l) => [...l.filter((w) => !w.name.startsWith('Example:')), ...EXAMPLE_WIDGETS.map((w) => ({ ...w, id: Math.random().toString(36).slice(2, 10) }))]);
@@ -28,26 +53,7 @@ export default function LibraryPanel({ library, setLibrary, addWidget, setStatus
 
   const examples = library.filter((w) => w.name.startsWith('Example:'));
   const own = library.filter((w) => !w.name.startsWith('Example:'));
-
-  const Item = ({ w }) => (
-    <div className="card flex items-center gap-2" style={{ padding: '8px 10px' }}>
-      <div className="flex-1 min-w-0">
-        <div className="font-medium truncate">{w.name.replace(/^Example:\s*/, '')}</div>
-        <div className="mono text-[11px] truncate" style={{ color: 'var(--muted)' }}>
-          {w.columns || '(no columns)'} · {w.w}×{w.h}
-        </div>
-      </div>
-      <button className="btn btn-xs btn-primary" onClick={() => addWidget({ ...w, id: undefined })}>
-        Add
-      </button>
-      <button className="btn btn-xs btn-icon" onClick={() => exportLib([w], w.name.replace(/[^\w.-]+/g, '_') + '.json')} title="Export this widget">
-        ⇩
-      </button>
-      <button className="btn btn-xs btn-icon btn-danger" onClick={() => setLibrary((l) => l.filter((x) => x.id !== w.id))} title="Delete from library">
-        ✕
-      </button>
-    </div>
-  );
+  const removeFromLibrary = (id) => setLibrary((l) => l.filter((x) => x.id !== id));
 
   return (
     <div>
@@ -65,7 +71,7 @@ export default function LibraryPanel({ library, setLibrary, addWidget, setStatus
       <p className="hint mb-2">Widgets saved here stay in the application and can be added to any project. Use Import/Export to share them as JSON.</p>
       <div className="flex flex-col gap-1.5">
         {own.map((w) => (
-          <Item key={w.id} w={w} />
+          <Item key={w.id} w={w} addWidget={addWidget} exportLib={exportLib} removeFromLibrary={removeFromLibrary} />
         ))}
       </div>
       {!own.length && <div className="hint">No own widgets yet — select a widget on the video and click "Save to library".</div>}
@@ -79,7 +85,7 @@ export default function LibraryPanel({ library, setLibrary, addWidget, setStatus
       <p className="hint mb-2">Each example starts with a SETTINGS block — colors, units, sizes. Add one, then "Edit code".</p>
       <div className="flex flex-col gap-1.5">
         {examples.map((w) => (
-          <Item key={w.id} w={w} />
+          <Item key={w.id} w={w} addWidget={addWidget} exportLib={exportLib} removeFromLibrary={removeFromLibrary} />
         ))}
       </div>
     </div>
