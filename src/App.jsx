@@ -170,6 +170,13 @@ export default function App() {
     [store]
   );
 
+  const removeAllSources = useCallback(() => {
+    store.sources = [];
+    store.rebuild();
+    bump();
+    setStatus('All telemetry files removed');
+  }, [store]);
+
   // ---- Video ----
   const probeVideo = useCallback(async (p) => {
     const info = await window.api.probe(p);
@@ -241,6 +248,16 @@ export default function App() {
       setStatus('Probe error: ' + e.message);
     }
   }, [probeVideo, warnIfUndecodable, widgets.length]);
+
+  // removes the video from the project only — the file (and any proxy) stays on disk
+  const removeVideo = useCallback(() => {
+    if (proxyProgress != null) window.api.cancelProxy();
+    setVideo(null);
+    setPlaybackBlocked(false);
+    setPlayError(null);
+    setTime(0);
+    setStatus('Video removed from the project');
+  }, [proxyProgress]);
 
   // ---- Widgets ----
   const updateWidget = useCallback((id, patch) => setWidgets((ws) => ws.map((w) => (w.id === id ? { ...w, ...patch } : w))), []);
@@ -511,6 +528,7 @@ export default function App() {
               <FilesPanel
                 video={video}
                 openVideo={openVideo}
+                removeVideo={removeVideo}
                 layout={layout}
                 setLayout={setLayout}
                 lt={lt}
@@ -527,6 +545,7 @@ export default function App() {
                 addCsvFiles={addCsvFiles}
                 updateSource={updateSource}
                 removeSource={removeSource}
+                removeAllSources={removeAllSources}
               />
             )}
             {tab === 'widgets' && (

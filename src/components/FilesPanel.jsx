@@ -13,7 +13,7 @@ const SEL = (label, key, opts, bbOptions, setBbOptions) => (
   </label>
 );
 
-export default function FilesPanel({ video, openVideo, layout, setLayout, lt, rebaseLayout, makeProxy, proxyProgress, cancelProxy, decodeBlackbox, decoding, bbOptions, setBbOptions, store, storeVersion, addCsvFiles, updateSource, removeSource }) {
+export default function FilesPanel({ video, openVideo, removeVideo, layout, setLayout, lt, rebaseLayout, makeProxy, proxyProgress, cancelProxy, decodeBlackbox, decoding, bbOptions, setBbOptions, store, storeVersion, addCsvFiles, updateSource, removeSource, removeAllSources }) {
   void storeVersion;
   const heavy = video && (video.codec === 'hevc' || video.width > 1920 || video.fps > 60);
   return (
@@ -21,7 +21,12 @@ export default function FilesPanel({ video, openVideo, layout, setLayout, lt, re
       <div className="section-title">Video</div>
       {video ? (
         <div className="card text-xs break-all">
-          <div>{video.path}</div>
+          <div className="flex items-start gap-2">
+            <div className="flex-1">{video.path}</div>
+            <button className="btn btn-xs btn-danger" onClick={removeVideo} title="Remove the video from the project (the file stays on disk)">
+              ✕
+            </button>
+          </div>
           <div className="hint mt-1">
             {video.width}×{video.height} · {video.fps.toFixed(3)} fps · {video.codec} · {video.duration.toFixed(2)} s · {video.bitrate ? (video.bitrate / 1e6).toFixed(1) + ' Mbit/s' : 'bitrate n/a'} · {video.hasAudio ? 'audio' : 'no audio'}
           </div>
@@ -180,9 +185,16 @@ export default function FilesPanel({ video, openVideo, layout, setLayout, lt, re
           </details>
         </div>
       ))}
-      <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())}>
-        Add CSV…
-      </button>
+      <div className="flex gap-2">
+        <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())}>
+          Add CSV…
+        </button>
+        {store.sources.length > 0 && (
+          <button className="btn btn-danger" onClick={removeAllSources} title="Remove all telemetry files from the project (the files stay on disk)">
+            Remove all
+          </button>
+        )}
+      </div>
     </div>
   );
 }
