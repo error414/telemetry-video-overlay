@@ -3,7 +3,7 @@
 // Library tab and are refreshed automatically when EXAMPLES_VERSION changes.
 
 // Bump when examples change: the library's "Example:" entries are refreshed automatically.
-export const EXAMPLES_VERSION = 24;
+export const EXAMPLES_VERSION = 25;
 
 export const EXAMPLE_WIDGETS = [
   {
@@ -664,6 +664,109 @@ export const EXAMPLE_WIDGETS = [
   }
   // CSS hooks: #compass (svg), .rose, .tick, .tick-major, .tick-label, .needle, .heading, .heading-bg
   return '<svg id="compass" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px">' + svg + '</svg>';
+}`,
+  },
+  {
+    name: 'Example: Attitude horizon',
+    columns: 'attitude[0], attitude[1]',
+    w: 240,
+    h: 240,
+    opacity: 0.95,
+    code: `function (values, time, ctx) {
+  // Artificial horizon: columns = roll, pitch (INAV attitude[0], attitude[1] in decidegrees).
+  // ---------- SETTINGS ----------
+  var ANGLE_UNIT    = 'decideg';   // 'deg' | 'decideg' (value/10) | 'rad'
+  var INVERT_ROLL   = false;       // flip roll if the horizon tilts the wrong way
+  var INVERT_PITCH  = false;       // flip pitch direction
+  var SMOOTH_MS     = 200;         // smoothing window for roll & pitch (ms, 0 = off)
+  var DEG_PER_PX    = 0.45;        // pitch ladder density (deg per pixel at the default 240x240 size)
+  var LADDER_STEP   = 10;          // degrees between numbered ladder lines
+  var SKY_TOP       = '#2f6fb2';   // sky gradient top
+  var SKY_HORIZON   = '#7db4e0';   // sky at the horizon
+  var GROUND_HORIZON= '#9a6b3f';   // ground at the horizon
+  var GROUND_BOTTOM = '#5d3f22';   // ground gradient bottom
+  var LINE_COLOR    = '#ffffff';   // horizon + ladder lines
+  var POINTER_COLOR = '#ff3030';   // roll pointer triangle
+  var WINGS_COLOR   = '#f2a93b';   // fixed aircraft symbol
+  var RING_COLOR    = 'rgba(255,255,255,.55)'; // outer ring
+  var RING_WIDTH    = 2;           // at the default 240x240 size; scales with the widget
+  var BG            = 'rgba(0,0,0,.35)';       // disc behind the instrument
+  var FONT_SIZE     = 11;          // ladder / readout text at the default size; scales
+  var SHOW_VALUES   = true;        // numeric roll/pitch readout at the bottom
+  // -------------------------------
+  var W = ctx.width, H = ctx.height, size = Math.min(W, H), scale = size / 240;
+  var cx = W / 2, cy = H / 2, rw = RING_WIDTH * scale, r = size / 2 - 2 * rw;
+  var s = ctx.state;
+  var uid = s.uid || (s.uid = 'ah' + Math.random().toString(36).slice(2, 8));
+  function toDeg(v) { return ANGLE_UNIT === 'decideg' ? v / 10 : ANGLE_UNIT === 'rad' ? v * 180 / Math.PI : v; }
+  function angleAt(col) { // triangular-weighted circular mean around \`time\` (wrap-safe)
+    var v = ctx.get(col);
+    if (typeof v !== 'number') return 0;
+    if (!(SMOOTH_MS > 0)) return toDeg(v);
+    var sam = ctx.range(col, time - SMOOTH_MS, time + SMOOTH_MS, 120) || [], sx = 0, sy = 0, ws = 0, k2, w2, rr;
+    for (k2 = 0; k2 < sam.length; k2++) {
+      if (typeof sam[k2].v !== 'number') continue;
+      w2 = 1 - Math.abs(sam[k2].t - time) / SMOOTH_MS; if (w2 <= 0) continue;
+      rr = toDeg(sam[k2].v) * Math.PI / 180;
+      sx += Math.cos(rr) * w2; sy += Math.sin(rr) * w2; ws += w2;
+    }
+    return ws ? Math.atan2(sy, sx) * 180 / Math.PI : toDeg(v);
+  }
+  var hasData = typeof values[0] === 'number' || typeof values[1] === 'number';
+  var roll = angleAt(ctx.columns[0]), pitch = angleAt(ctx.columns[1]);
+  if (INVERT_ROLL) roll = -roll;
+  if (INVERT_PITCH) pitch = -pitch;
+  var k = scale / DEG_PER_PX;                 // px per degree (visual density constant at any size)
+  var fsz = FONT_SIZE * scale, lw = Math.max(1, 1.5 * scale);
+  var dy = pitch * k;                         // pitch up -> horizon moves down
+  var svg = '<defs>'
+    + '<linearGradient id="' + uid + 's" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + SKY_TOP + '"/><stop offset="1" stop-color="' + SKY_HORIZON + '"/></linearGradient>'
+    + '<linearGradient id="' + uid + 'g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + GROUND_HORIZON + '"/><stop offset="1" stop-color="' + GROUND_BOTTOM + '"/></linearGradient>'
+    + '<clipPath id="' + uid + 'c"><circle cx="' + cx + '" cy="' + cy + '" r="' + r.toFixed(1) + '"/></clipPath>'
+    + '</defs>';
+  svg += '<circle class="bg" cx="' + cx + '" cy="' + cy + '" r="' + (r + rw).toFixed(1) + '" fill="' + BG + '"/>';
+  // rotating horizon ball (clipped to the instrument circle)
+  svg += '<g clip-path="url(#' + uid + 'c)"><g class="ball" transform="rotate(' + (-roll).toFixed(2) + ' ' + cx + ' ' + cy + ')">';
+  var big = 4 * r;
+  svg += '<rect class="sky" x="' + (cx - big / 2).toFixed(1) + '" y="' + (cy + dy - big).toFixed(1) + '" width="' + big + '" height="' + big.toFixed(1) + '" fill="url(#' + uid + 's)"/>';
+  svg += '<rect class="ground" x="' + (cx - big / 2).toFixed(1) + '" y="' + (cy + dy).toFixed(1) + '" width="' + big + '" height="' + big.toFixed(1) + '" fill="url(#' + uid + 'g)"/>';
+  svg += '<line class="horizon-line" x1="' + (cx - big / 2).toFixed(1) + '" x2="' + (cx + big / 2).toFixed(1) + '" y1="' + (cy + dy).toFixed(1) + '" y2="' + (cy + dy).toFixed(1) + '" stroke="' + LINE_COLOR + '" stroke-width="' + lw.toFixed(2) + '"/>';
+  // pitch ladder: minor line every 5 deg, numbered line every LADDER_STEP
+  var span = (r * 0.72) / k, p, ly, half, major; // keep the ladder clear of the roll scale
+  for (p = -90; p <= 90; p += 5) {
+    if (p === 0 || Math.abs(pitch - p) > span) continue;
+    major = p % LADDER_STEP === 0;
+    half = (major ? 26 : 13) * scale;
+    ly = cy + (pitch - p) * k;
+    svg += '<line class="ladder" x1="' + (cx - half).toFixed(1) + '" x2="' + (cx + half).toFixed(1) + '" y1="' + ly.toFixed(1) + '" y2="' + ly.toFixed(1) + '" stroke="' + LINE_COLOR + '" stroke-width="' + (major ? lw : lw * 0.6).toFixed(2) + '"' + (p < 0 ? ' stroke-dasharray="' + (4 * scale).toFixed(1) + ' ' + (3 * scale).toFixed(1) + '"' : '') + '/>';
+    if (major) {
+      svg += '<text class="ladder-label" x="' + (cx - half - 5 * scale).toFixed(1) + '" y="' + (ly + fsz * 0.35).toFixed(1) + '" text-anchor="end" fill="' + LINE_COLOR + '" font-family="Arial" font-size="' + fsz.toFixed(1) + '">' + Math.abs(p) + '</text>'
+        + '<text class="ladder-label" x="' + (cx + half + 5 * scale).toFixed(1) + '" y="' + (ly + fsz * 0.35).toFixed(1) + '" fill="' + LINE_COLOR + '" font-family="Arial" font-size="' + fsz.toFixed(1) + '">' + Math.abs(p) + '</text>';
+    }
+  }
+  svg += '</g></g>';
+  // fixed roll scale on top of the ball + pointer moving with the roll
+  var a, ticks = [-60, -45, -30, -15, 0, 15, 30, 45, 60];
+  for (var i = 0; i < ticks.length; i++) {
+    a = ticks[i];
+    var len = (a % 30 === 0 ? 10 : 6) * scale;
+    svg += '<g class="roll-tick" transform="rotate(' + a + ' ' + cx + ' ' + cy + ')"><line x1="' + cx + '" x2="' + cx + '" y1="' + (cy - r).toFixed(1) + '" y2="' + (cy - r + len).toFixed(1) + '" stroke="' + LINE_COLOR + '" stroke-width="' + (a === 0 ? lw * 1.4 : lw * 0.8).toFixed(2) + '"/></g>';
+  }
+  svg += '<g class="roll-pointer" transform="rotate(' + (-roll).toFixed(2) + ' ' + cx + ' ' + cy + ')">'
+    + '<path d="M' + cx + ',' + (cy - r + 12 * scale).toFixed(1) + ' l' + (-6 * scale).toFixed(1) + ',' + (10 * scale).toFixed(1) + ' l' + (12 * scale).toFixed(1) + ',0 z" fill="' + POINTER_COLOR + '" stroke="#fff" stroke-width="' + (scale).toFixed(2) + '"/></g>';
+  // fixed aircraft symbol (black underlay keeps it readable on any ball color)
+  var wing = 'M' + (cx - 52 * scale).toFixed(1) + ',' + cy + ' h' + (34 * scale).toFixed(1) + ' l' + (8 * scale).toFixed(1) + ',' + (8 * scale).toFixed(1)
+    + ' M' + (cx + 52 * scale).toFixed(1) + ',' + cy + ' h' + (-34 * scale).toFixed(1) + ' l' + (-8 * scale).toFixed(1) + ',' + (8 * scale).toFixed(1);
+  svg += '<path class="wings-outline" d="' + wing + '" fill="none" stroke="#000" stroke-width="' + (5 * scale).toFixed(2) + '" stroke-linecap="round"/>'
+    + '<path class="wings" d="' + wing + '" fill="none" stroke="' + WINGS_COLOR + '" stroke-width="' + (3 * scale).toFixed(2) + '" stroke-linecap="round"/>'
+    + '<circle class="wings-dot" cx="' + cx + '" cy="' + cy + '" r="' + (3 * scale).toFixed(1) + '" fill="' + WINGS_COLOR + '" stroke="#000" stroke-width="' + scale.toFixed(2) + '"/>';
+  svg += '<circle class="ring" cx="' + cx + '" cy="' + cy + '" r="' + r.toFixed(1) + '" fill="none" stroke="' + RING_COLOR + '" stroke-width="' + rw.toFixed(2) + '"/>';
+  if (SHOW_VALUES) {
+    var txt = hasData ? 'R ' + roll.toFixed(0) + '\\u00B0 P ' + pitch.toFixed(0) + '\\u00B0' : '--';
+    svg += '<text class="readout" x="' + cx + '" y="' + (cy + r * 0.82 + fsz * 0.35).toFixed(1) + '" text-anchor="middle" fill="#fff" font-family="Arial" font-size="' + fsz.toFixed(1) + '" font-weight="bold" style="text-shadow:0 0 3px #000,0 0 3px #000">' + txt + '</text>';
+  }
+  // CSS hooks: #horizon (svg), .bg, .ball, .sky, .ground, .horizon-line, .ladder, .ladder-label, .roll-tick, .roll-pointer, .wings, .wings-outline, .wings-dot, .ring, .readout
+  return '<svg id="horizon" width="' + W + '" height="' + H + '">' + svg + '</svg>';
 }`,
   },
 ];
