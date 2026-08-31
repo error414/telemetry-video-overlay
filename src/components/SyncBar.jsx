@@ -22,6 +22,23 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     }
   }, [columnNames, graphCol]);
 
+  // keep the play/pause button in sync with what the element actually does — a source swap
+  // (proxy finished, live proxy started) implicitly stops playback without a 'pause' event
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const on = () => setPlaying(true);
+    const off = () => setPlaying(false);
+    v.addEventListener('play', on);
+    v.addEventListener('pause', off);
+    v.addEventListener('emptied', off); // fires when the src attribute is swapped
+    return () => {
+      v.removeEventListener('play', on);
+      v.removeEventListener('pause', off);
+      v.removeEventListener('emptied', off);
+    };
+  }, [videoRef, video]);
+
   const seek = (t) => {
     if (disabled) return;
     const v = videoRef.current;

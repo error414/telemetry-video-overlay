@@ -45,16 +45,34 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
     const v = videoRef.current;
     if (!v || !live) return;
     const h = startLiveProxy(v, video.liveProxy, liveProxyMime(video), video.duration, timeKeepRef.current);
+    if (resumeRef.current) {
+      resumeRef.current = false;
+      v.play().catch(() => {});
+    }
     return () => h.stop();
   }, [live, video && video.liveProxy]); // eslint-disable-line react-hooks/exhaustive-deps
   // restore the playhead when the source swaps for the same video (original → live proxy → finished proxy)
   const srcUrl = video && !live ? toFileUrl(video.proxy || video.path) : null;
   const lastSrcRef = useRef({ path: video && video.path, src: srcUrl });
+  const resumeRef = useRef(false);
+  {
+    // render phase = before the src attribute changes in the DOM: remember whether the video
+    // was playing, so the swap (which implicitly pauses the element) can resume it
+    const v = videoRef.current;
+    const prev = lastSrcRef.current;
+    if (v && video && prev.path === video.path && prev.src !== srcUrl) resumeRef.current = !v.paused && !v.ended;
+  }
   useEffect(() => {
     const v = videoRef.current;
     const prev = lastSrcRef.current;
     const path = video && video.path;
-    if (v && srcUrl && path && prev.path === path && prev.src !== srcUrl) v.currentTime = timeKeepRef.current;
+    if (v && srcUrl && path && prev.path === path && prev.src !== srcUrl) {
+      v.currentTime = timeKeepRef.current;
+      if (resumeRef.current) {
+        resumeRef.current = false;
+        v.play().catch(() => {});
+      }
+    }
     lastSrcRef.current = { path, src: srcUrl };
   }, [srcUrl, video && video.path]); // eslint-disable-line react-hooks/exhaustive-deps
 
