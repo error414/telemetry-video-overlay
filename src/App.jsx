@@ -54,6 +54,43 @@ const TABS = [
   ['export', 'Export'],
 ];
 
+const TAB_ICONS = {
+  files: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1" />
+      <path d="M4.75 2.75v10.5M11.25 2.75v10.5" />
+    </svg>
+  ),
+  widgets: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <rect x="1.75" y="1.75" width="5" height="5" />
+      <rect x="9.25" y="1.75" width="5" height="5" />
+      <rect x="1.75" y="9.25" width="5" height="5" />
+      <rect x="9.25" y="9.25" width="5" height="5" />
+    </svg>
+  ),
+  library: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path d="M3.75 1.75h8.5v12.5L8 11l-4.25 3.25z" />
+    </svg>
+  ),
+  export: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path d="M8 10.5V2M4.5 5.5 8 2l3.5 3.5" />
+      <path d="M2 10.5v3.5h12v-3.5" />
+    </svg>
+  ),
+};
+
+function Toggle({ checked, onChange, title, children }) {
+  return (
+    <label className={'toggle' + (checked ? ' on' : '')} title={title}>
+      <input type="checkbox" checked={checked} onChange={onChange} />
+      {children}
+    </label>
+  );
+}
+
 export default function App() {
   const storeRef = useRef(new TelemetryStore());
   const store = storeRef.current;
@@ -428,10 +465,9 @@ export default function App() {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="flex items-center gap-2 px-3" style={{ height: 44, background: 'var(--panel)', borderBottom: '1px solid var(--border)' }}>
-        <span className="font-semibold tracking-wide mr-3" style={{ letterSpacing: '0.04em' }}>
-          <span style={{ color: 'var(--accent)' }}>▮</span> Telemetry Overlay
-        </span>
+      <header className="flex items-center gap-3 px-3" style={{ height: 46, background: 'var(--panel)', borderBottom: '1px solid var(--border)' }}>
+        <span className="wordmark">Telemetry Overlay</span>
+        <span style={{ width: 1, height: 20, background: 'var(--border-strong)' }} />
         <div className="flex items-center gap-1.5">
           <button className="btn" onClick={openVideo} disabled={locked}>
             Open video
@@ -443,38 +479,45 @@ export default function App() {
             Add CSV
           </button>
         </div>
-        <span className="mx-2" style={{ width: 1, height: 20, background: 'var(--border-strong)' }} />
-        <div className="flex items-center gap-1.5">
-          <button className="btn" onClick={loadProject} disabled={locked}>
+        <div className="flex items-center gap-1 ml-auto">
+          <button className="btn btn-ghost" onClick={loadProject} disabled={locked}>
             Open project
           </button>
-          <button className="btn" onClick={saveProject}>
+          <button className="btn btn-ghost" onClick={saveProject}>
             Save project
           </button>
         </div>
-        <span className="mx-2" style={{ width: 1, height: 20, background: 'var(--border-strong)' }} />
-        <label className="flex items-center gap-1.5 cursor-pointer text-xs" style={{ color: 'var(--muted)' }}>
-          <input type="checkbox" checked={editMode} onChange={(e) => setEditMode(e.target.checked)} /> Edit layout
-        </label>
-        <label className="flex items-center gap-1.5 cursor-pointer text-xs ml-3" style={{ color: 'var(--muted)' }} title="Snap widget position and size to the grid while dragging">
-          <input type="checkbox" checked={grid.snap} onChange={(e) => setGrid((g) => ({ ...g, snap: e.target.checked }))} /> Snap
-        </label>
-        <label className="flex items-center gap-1 text-xs" style={{ color: 'var(--muted)' }} title="Grid size in video pixels">
-          grid
-          <input className="input mono" type="number" min={2} max={500} step={1} value={grid.size} style={{ width: 62, padding: '2px 6px' }} onChange={(e) => setGrid((g) => ({ ...g, size: Math.max(2, Number(e.target.value) || 2) }))} />
-          px
-        </label>
-        <label className="flex items-center gap-1.5 cursor-pointer text-xs" style={{ color: 'var(--muted)' }}>
-          <input type="checkbox" checked={grid.show} onChange={(e) => setGrid((g) => ({ ...g, show: e.target.checked }))} /> Show grid
-        </label>
-        <span className="ml-auto text-xs truncate max-w-[40%]" style={{ color: locked ? 'var(--accent)' : 'var(--muted)' }}>
-          {locked && job.progress ? `Exporting ${Math.round((100 * job.progress.frame) / job.progress.total)}% · ` : ''}
-          {status}
-        </span>
       </header>
 
       <div className="flex-1 flex min-h-0">
         <main className="flex-1 flex flex-col min-w-0">
+          <div className="stage-toolbar">
+            <span className="bar-label">Layout</span>
+            <Toggle checked={editMode} onChange={(e) => setEditMode(e.target.checked)} title="Move and resize widgets on the video">
+              Edit
+            </Toggle>
+            <Toggle checked={grid.snap} onChange={(e) => setGrid((g) => ({ ...g, snap: e.target.checked }))} title="Snap widget position and size to the grid while dragging (hold Alt to bypass)">
+              Snap
+            </Toggle>
+            <Toggle checked={grid.show} onChange={(e) => setGrid((g) => ({ ...g, show: e.target.checked }))} title="Show the layout grid over the video">
+              Grid
+            </Toggle>
+            <label className="flex items-center gap-1 text-xs" style={{ color: 'var(--muted)' }} title="Grid size in video pixels">
+              <input className="input mono" type="number" min={2} max={500} step={1} value={grid.size} style={{ width: 56, padding: '2px 6px' }} onChange={(e) => setGrid((g) => ({ ...g, size: Math.max(2, Number(e.target.value) || 2) }))} />
+              px
+            </label>
+            <span className="ml-auto" />
+            {video && lt.k !== 1 && (
+              <span className="chip chip-warn" title="Widgets were designed for a different resolution — see Widget layout reference in Files">
+                layout ×{lt.k.toFixed(2)}
+              </span>
+            )}
+            {video && (video.proxy || video.liveProxy) && (
+              <span className="chip chip-tele" title="The preview plays a re-encoded proxy; export always uses the original file">
+                proxy preview
+              </span>
+            )}
+          </div>
           <Stage
             video={video}
             videoRef={videoRef}
@@ -495,6 +538,31 @@ export default function App() {
               setSelectedId(id);
               setEditorOpen(true);
             }}
+            empty={
+              widgets.length ? null : (
+                <div className="empty-state">
+                  <span className="es-corner" />
+                  <span className="es-corner" />
+                  <span className="es-corner" />
+                  <span className="es-corner" />
+                  <div className="es-title">No signal</div>
+                  <div className="hint" style={{ textAlign: 'center', maxWidth: 340 }}>
+                    Open flight footage, then add a blackbox log or CSV telemetry. Your last project is restored automatically.
+                  </div>
+                  <div className="flex gap-2 mt-2 flex-wrap justify-center">
+                    <button className="btn btn-primary" onClick={openVideo}>
+                      Open video…
+                    </button>
+                    <button className="btn" onClick={decodeBlackbox} disabled={decoding}>
+                      {decoding ? 'Decoding…' : 'Decode blackbox…'}
+                    </button>
+                    <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())}>
+                      Add CSV…
+                    </button>
+                  </div>
+                </div>
+              )
+            }
           />
           <SyncBar
             video={video}
@@ -519,8 +587,9 @@ export default function App() {
               const disabled = locked && k !== 'export';
               return (
                 <div key={k} className={'tab ' + (tab === k ? 'tab-active' : '') + (disabled ? ' tab-disabled' : '')} title={disabled ? 'Locked while exporting' : ''} onClick={() => !disabled && setTab(k)}>
+                  {TAB_ICONS[k]}
                   {l}
-                  {k === 'export' && locked && <span className="chip chip-accent ml-2">running</span>}
+                  {k === 'export' && locked && <span className="chip chip-accent ml-1">●</span>}
                 </div>
               );
             })}
@@ -575,6 +644,27 @@ export default function App() {
           </div>
         </aside>
       </div>
+
+      <footer className="statusbar">
+        {locked && job.progress && <span className="chip chip-accent">export {Math.round((100 * job.progress.frame) / job.progress.total)}%</span>}
+        <span className="truncate" style={{ flex: 1, minWidth: 0, color: locked ? 'var(--accent)' : undefined }}>{status}</span>
+        {video && (
+          <span className="readout">
+            {video.width}×{video.height} · {video.fps.toFixed(2)} fps · {video.codec}
+          </span>
+        )}
+        {store.sources.length > 0 && (
+          <span className="readout" style={{ color: 'var(--tele)' }} title="Loaded telemetry sources">
+            {store.sources.length} src
+          </span>
+        )}
+        <span className="readout" title="Telemetry time = video time + offset">
+          t <b>{(time + offset).toFixed(3)}</b> s
+        </span>
+        <span className="readout" title="Telemetry offset — adjust in the sync bar or with [ and ] keys">
+          offset <b>{offset.toFixed(3)}</b> s
+        </span>
+      </footer>
 
       {editorOpen && selected && (
         <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} offset={offset} columnNames={columnNames} ColumnsInput={ColumnsInput} />

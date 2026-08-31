@@ -16,7 +16,7 @@ function liveProxyMime(video) {
   return 'video/mp4; codecs="avc1.640033"';
 }
 
-export default function Stage({ video, videoRef, widgets, store, storeVersion, offset, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, lt, setStatus, onOpenEditor }) {
+export default function Stage({ video, videoRef, widgets, store, storeVersion, offset, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, lt, setStatus, onOpenEditor, empty }) {
   const gridSize = grid && grid.size > 1 ? grid.size : 1;
   // snap to grid unless disabled; holding Alt while dragging temporarily disables snapping
   const snap = (v, alt) => (grid && grid.snap && !alt ? Math.round(v / gridSize) * gridSize : Math.round(v));
@@ -125,8 +125,16 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
   };
 
   return (
-    <div ref={wrapRef} className="flex-1 min-h-0 flex items-center justify-center bg-[var(--bg)] overflow-hidden relative" onPointerDown={() => setSelectedId(null)}>
+    <div ref={wrapRef} className="flex-1 min-h-0 flex items-center justify-center bg-[var(--bg-deep)] overflow-hidden relative" onPointerDown={() => setSelectedId(null)}>
       <div style={{ width: vw * scale, height: vh * scale, position: 'relative' }}>
+        {video && editMode && (
+          <>
+            <span className="vf-corner tl" />
+            <span className="vf-corner tr" />
+            <span className="vf-corner bl" />
+            <span className="vf-corner br" />
+          </>
+        )}
         <div
           style={{
             width: vw,
@@ -155,16 +163,14 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
               }}
               onStalled={() => setStatus('Video decoding is stalling (too heavy for the GPU decoder) — create a preview proxy in the Files tab.')}
             />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-2xl text-[var(--faint)]">Open a video to start</div>
-          )}
+          ) : null}
           {editMode && grid && grid.show && (
             <div
               style={{
                 position: 'absolute',
                 inset: 0,
                 pointerEvents: 'none',
-                backgroundImage: 'linear-gradient(to right, rgba(242,169,59,.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(242,169,59,.22) 1px, transparent 1px)',
+                backgroundImage: 'linear-gradient(to right, rgba(242,169,59,.15) 1px, transparent 1px), linear-gradient(to bottom, rgba(242,169,59,.15) 1px, transparent 1px)',
                 backgroundSize: `${gridSize * lt.sx}px ${gridSize * lt.sy}px`,
               }}
             />
@@ -197,6 +203,11 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
           )}
         </div>
       </div>
+      {!video && empty && (
+        <div className="absolute inset-0 flex items-center justify-center" onPointerDown={(e) => e.stopPropagation()}>
+          {empty}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,25 +1,34 @@
 @import 'tailwindcss';
 
-/* ---- design tokens: dark-first instrument panel ---- */
+/* ---- design tokens: "ground station" — avionics bench, dark-only ----
+   Two-hue semantics carried through the whole app:
+     amber  = machine state (controls, playhead, selection, warnings of the rig)
+     teal   = telemetry signal (data traces, data chips, column readouts)      */
 :root {
-  --bg: #0f1317;
-  --panel: #161b21;
-  --panel-2: #1c2229;
-  --border: #252d36;
-  --border-strong: #34404b;
-  --text: #e4e9ee;
-  --muted: #8593a1;
-  --faint: #5b6774;
+  --bg-deep: #07090c; /* stage well — darkest layer, the video sits in it */
+  --bg: #0d1116; /* app ground, inputs */
+  --panel: #141a21; /* sidebar, bars */
+  --panel-2: #1a212a; /* raised elements on a panel */
+  --raise: #222b35; /* hover on raised elements */
+  --border: #222a33;
+  --border-strong: #33404c;
+  --text: #e7ecf1;
+  --muted: #8b98a6;
+  --faint: #59646f;
   --accent: #f2a93b;
+  --accent-bright: #ffbe55;
   --accent-ink: #1a1206;
   --accent-soft: rgba(242, 169, 59, 0.14);
   --tele: #4fc3c7;
+  --tele-soft: rgba(79, 195, 199, 0.12);
   --good: #58c98a;
   --warn: #e8b33c;
   --bad: #e5645c;
   --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-cond: 'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, 'Courier New', monospace;
-  --radius: 6px;
+  --radius: 4px;
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
 }
 
 html,
@@ -57,15 +66,15 @@ input[type='number'] {
   font: 500 12.5px var(--font-ui);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .btn:hover {
-  background: #242c35;
+  background: var(--raise);
   border-color: #46535f;
 }
 .btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 .btn:disabled {
   opacity: 0.4;
@@ -78,8 +87,8 @@ input[type='number'] {
   font-weight: 600;
 }
 .btn-primary:hover {
-  background: #f7b754;
-  border-color: #f7b754;
+  background: var(--accent-bright);
+  border-color: var(--accent-bright);
 }
 .btn-danger {
   color: var(--bad);
@@ -90,6 +99,16 @@ input[type='number'] {
   background: rgba(229, 100, 92, 0.18);
   border-color: var(--bad);
 }
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.btn-ghost:hover {
+  background: var(--panel-2);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
 .btn-xs {
   padding: 2px 7px;
   font-size: 11.5px;
@@ -98,6 +117,46 @@ input[type='number'] {
   padding: 2px 6px;
   min-width: 24px;
   justify-content: center;
+}
+
+/* transport: square icon buttons of the playback deck */
+.btn-transport {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.btn-transport:hover {
+  background: var(--raise);
+  border-color: #46535f;
+}
+.btn-transport:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.btn-transport:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.btn-transport.primary {
+  width: 40px;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.btn-transport.primary:hover {
+  background: var(--accent-bright);
+}
+.btn-transport svg {
+  display: block;
 }
 
 /* ---- inputs ---- */
@@ -130,12 +189,56 @@ input[type='radio'] {
   accent-color: var(--accent);
 }
 
+/* toggle chip: labelled on/off switch used in the stage toolbar */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: 600 10.5px var(--font-cond);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.toggle:hover {
+  color: var(--text);
+  background: var(--raise);
+}
+.toggle input {
+  display: none;
+}
+.toggle::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--faint);
+  transition: background 0.12s, box-shadow 0.12s;
+}
+.toggle.on {
+  color: var(--accent);
+  border-color: rgba(242, 169, 59, 0.45);
+  background: var(--accent-soft);
+}
+.toggle.on::before {
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(242, 169, 59, 0.7);
+}
+.toggle:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
 .label {
   display: block;
   margin: 10px 0 3px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font: 600 10.5px var(--font-cond);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -148,11 +251,17 @@ input[type='radio'] {
   align-items: center;
   gap: 8px;
   margin: 0 0 8px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font: 600 11.5px var(--font-cond);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
+}
+.section-title::before {
+  content: '';
+  width: 3px;
+  height: 11px;
+  background: var(--accent);
+  border-radius: 1px;
 }
 .section-title::after {
   content: '';
@@ -161,9 +270,9 @@ input[type='radio'] {
   background: var(--border);
 }
 .card {
-  background: var(--panel);
+  background: var(--panel-2);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 10px 12px;
 }
 .chip {
@@ -171,7 +280,7 @@ input[type='radio'] {
   align-items: center;
   gap: 4px;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: 3px;
   font-size: 11px;
   font-weight: 500;
   background: var(--panel-2);
@@ -182,6 +291,11 @@ input[type='radio'] {
   background: var(--accent-soft);
   border-color: rgba(242, 169, 59, 0.4);
   color: var(--accent);
+}
+.chip-tele {
+  background: var(--tele-soft);
+  border-color: rgba(79, 195, 199, 0.4);
+  color: var(--tele);
 }
 .chip-good {
   color: var(--good);
@@ -199,26 +313,63 @@ input[type='radio'] {
   background: rgba(229, 100, 92, 0.1);
 }
 
-/* ---- tabs ---- */
+/* ---- wordmark ---- */
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 13px var(--font-cond);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+  white-space: nowrap;
+}
+.wordmark::before {
+  content: '';
+  width: 8px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+.wordmark small {
+  font: 500 10px var(--font-mono);
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  text-transform: none;
+}
+
+/* ---- tabs (panel selector) ---- */
 .tab {
-  padding: 9px 14px;
-  font-size: 12.5px;
-  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  padding: 9px 6px 7px;
+  font: 600 11px var(--font-cond);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--muted);
-  border-bottom: 2px solid transparent;
+  border-top: 2px solid transparent;
   cursor: pointer;
   user-select: none;
+  transition: color 0.12s, background 0.12s;
 }
 .tab:hover {
   color: var(--text);
+  background: var(--panel-2);
 }
 .tab-active {
-  color: var(--text);
-  border-color: var(--accent);
+  color: var(--accent);
+  border-top-color: var(--accent);
+  background: var(--panel-2);
 }
 .tab-disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+.tab svg {
+  opacity: 0.8;
 }
 
 /* ---- list rows ---- */
@@ -250,6 +401,167 @@ input[type='radio'] {
   background: var(--accent);
   transition: width 0.2s;
 }
+
+/* ---- stage toolbar + status bar ---- */
+.stage-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 26px;
+  padding: 0 10px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+  flex: none;
+}
+.statusbar .readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.statusbar .readout b {
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* ---- OSD timecode (signature) ---- */
+.timecode {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1;
+}
+.timecode .tc-main {
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--accent);
+  text-shadow: 0 0 14px rgba(242, 169, 59, 0.35);
+}
+.timecode .tc-sub {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+/* timeline canvas is the scrubber */
+.timeline {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* grouped stepper (sync offset) */
+.seg {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.seg > button {
+  padding: 2px 8px;
+  font: 500 11px var(--font-mono);
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+.seg > button:hover {
+  background: var(--raise);
+  color: var(--text);
+}
+.seg > button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.seg > input {
+  width: 84px;
+  padding: 2px 6px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--accent);
+  font: 600 12px var(--font-mono);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.seg > input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent-soft);
+}
+.seg > :last-child {
+  border-right: none;
+}
+
+/* condensed caps micro-label used inside bars */
+.bar-label {
+  font: 600 10px var(--font-cond);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* ---- empty state (no video) ---- */
+.empty-state {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 44px 56px;
+  color: var(--muted);
+}
+.empty-state .es-title {
+  font: 600 15px var(--font-cond);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.empty-state .es-corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-strong);
+}
+.empty-state .es-corner:nth-child(1) { top: 0; left: 0; border-right: none; border-bottom: none; }
+.empty-state .es-corner:nth-child(2) { top: 0; right: 0; border-left: none; border-bottom: none; }
+.empty-state .es-corner:nth-child(3) { bottom: 0; left: 0; border-right: none; border-top: none; }
+.empty-state .es-corner:nth-child(4) { bottom: 0; right: 0; border-left: none; border-top: none; }
+
+/* viewfinder corner brackets around the video while editing (signature) */
+.vf-corner {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(242, 169, 59, 0.55);
+  pointer-events: none;
+  z-index: 5;
+}
+.vf-corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; }
+.vf-corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
+.vf-corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
+.vf-corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
 
 /* ---- scrollbars ---- */
 ::-webkit-scrollbar {

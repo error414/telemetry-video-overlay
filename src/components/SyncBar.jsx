@@ -161,60 +161,89 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     g.stroke();
   }, [graphCol, offset, time, dur, limit, store, storeVersion]);
 
-  const onCanvasClick = (e) => {
+  // the timeline canvas is the scrubber: click or drag anywhere to seek
+  const scrubRef = useRef(false);
+  const seekFromEvent = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     seek(((e.clientX - r.left) / r.width) * (dur || store.duration()));
   };
+  const onTimelineDown = (e) => {
+    if (disabled) return;
+    scrubRef.current = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    seekFromEvent(e);
+  };
+  const onTimelineMove = (e) => {
+    if (scrubRef.current) seekFromEvent(e);
+  };
+  const onTimelineUp = () => (scrubRef.current = false);
+
+  const lockTitle = disabled ? 'Playback disabled until a preview proxy is created (Files tab)' : undefined;
+  const stepOffset = (d) => setOffset((o) => +(o + d).toFixed(3));
 
   return (
-    <div className="p-2 flex flex-col gap-1 bg-[var(--panel)] border-t border-[var(--border)]">
-      <div className="flex items-center gap-2 text-sm">
-        <button className="btn btn-xs" onClick={() => stepFrame(-1)} disabled={disabled} title={disabled ? 'Playback disabled until a preview proxy is created (Files tab)' : 'Previous frame (←)'}>
-          ◀|
-        </button>
-        <button className="btn btn-xs w-16" onClick={toggle} disabled={disabled} title={disabled ? 'Playback disabled until a preview proxy is created (Files tab)' : 'Play/pause (space)'}>
-          {playing ? 'Pause' : 'Play'}
-        </button>
-        <button className="btn btn-xs" onClick={() => stepFrame(1)} disabled={disabled} title={disabled ? 'Playback disabled until a preview proxy is created (Files tab)' : 'Next frame (→)'}>
-          |▶
-        </button>
-        <span className="mono w-28">{fmtTime(time)}</span>
-        <input type="range" min={0} max={dur || 0} step={0.001} value={time} onChange={(e) => seek(Number(e.target.value))} className="flex-1" disabled={!video || disabled} />
-        {limit < dur - 0.5 && !disabled && <span className="text-xs hint">encoded to {fmtTime(limit)}</span>}
-        {disabled && <span className="text-xs" style={{ color: 'var(--accent)' }}>playback locked — create a proxy in Files</span>}
-        <span className="mono hint">{fmtTime(dur)}</span>
+    <div className="p-2 flex flex-col gap-2 bg-[var(--panel)] border-t border-[var(--border)]">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <button className="btn-transport" onClick={() => stepFrame(-1)} disabled={disabled} title={lockTitle || 'Previous frame (←, shift: −1 s)'}>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <rect x="2" y="2.5" width="2" height="11" />
+              <path d="M13.5 2.5v11L5 8z" />
+            </svg>
+          </button>
+          <button className="btn-transport primary" onClick={toggle} disabled={disabled} title={lockTitle || 'Play / pause (space)'}>
+            {playing ? (
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <rect x="3" y="2.5" width="3.5" height="11" />
+                <rect x="9.5" y="2.5" width="3.5" height="11" />
+              </svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path d="M4 2.5v11l9.5-5.5z" />
+              </svg>
+            )}
+          </button>
+          <button className="btn-transport" onClick={() => stepFrame(1)} disabled={disabled} title={lockTitle || 'Next frame (→, shift: +1 s)'}>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M2.5 2.5v11L11 8z" />
+              <rect x="12" y="2.5" width="2" height="11" />
+            </svg>
+          </button>
+        </div>
+        <div className="timecode">
+          <span className="tc-main">{fmtTime(time)}</span>
+          <span className="tc-sub">/ {fmtTime(dur)}</span>
+        </div>
+        <div className="flex-1 min-w-0" style={{ height: 64 }} title="Teal trace = telemetry column over the video timeline (moves with offset). Click or drag to seek; align a visible event (throttle-up, launch) with the same moment in the video.">
+          <canvas ref={canvasRef} className="timeline" onPointerDown={onTimelineDown} onPointerMove={onTimelineMove} onPointerUp={onTimelineUp} onPointerCancel={onTimelineUp} />
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 text-sm">
-        <span className="hint w-36">Telemetry offset (s)</span>
-        {[-1, -0.1, -0.01].map((d) => (
-          <button key={d} className="btn btn-xs mono" onClick={() => setOffset((o) => +(o + d).toFixed(3))}>
-            {d}
-          </button>
-        ))}
-        <input type="number" step={0.01} value={offset} onChange={(e) => setOffset(Number(e.target.value) || 0)} className="input mono w-28" style={{ width: 110 }} />
-        {[0.01, 0.1, 1].map((d) => (
-          <button key={d} className="btn btn-xs mono" onClick={() => setOffset((o) => +(o + d).toFixed(3))}>
-            +{d}
-          </button>
-        ))}
-        <button
-          className="btn btn-xs"
-          title="Set offset so that telemetry starts at the current video frame"
-          onClick={() => setOffset(+(-time).toFixed(3))}
-        >
-          Telemetry start = here
+      <div className="flex items-center gap-3 text-xs">
+        <span className="bar-label">Sync offset</span>
+        <div className="seg">
+          {[-1, -0.1, -0.01].map((d) => (
+            <button key={d} onClick={() => stepOffset(d)} title={`Shift telemetry ${d} s`}>
+              {d}
+            </button>
+          ))}
+          <input type="number" step={0.01} value={offset} onChange={(e) => setOffset(Number(e.target.value) || 0)} title="Telemetry offset in seconds (added to video time)" />
+          {[0.01, 0.1, 1].map((d) => (
+            <button key={d} onClick={() => stepOffset(d)} title={`Shift telemetry +${d} s`}>
+              +{d}
+            </button>
+          ))}
+        </div>
+        <button className="btn btn-xs" title="Set offset so that telemetry starts at the current video frame" onClick={() => setOffset(+(-time).toFixed(3))}>
+          Start = here
         </button>
-        <span className="hint ml-auto">telemetry t = {(time + offset).toFixed(3)} s · keys: space, ←/→ frame, [ ] offset ±0.01 (shift: ±1)</span>
-      </div>
-
-      <div className="flex items-center gap-2 text-xs">
-        <span className="hint w-36">Sync graph column</span>
-        <input list="cols" className="input" style={{ width: 220 }} value={graphCol} onChange={(e) => setGraphCol(e.target.value)} placeholder="column name" />
+        <span className="bar-label ml-2">Trace</span>
+        <input list="cols" className="input mono" style={{ width: 200, padding: '2px 8px', color: 'var(--tele)' }} value={graphCol} onChange={(e) => setGraphCol(e.target.value)} placeholder="column name" title="Telemetry column drawn on the timeline" />
         <datalist id="cols">{columnNames.map((c) => <option key={c} value={c} />)}</datalist>
-        <span className="hint">Blue = telemetry column over the video timeline (moves with offset). Align a visible event (throttle-up, launch) with the same moment in the video.</span>
+        {limit < dur - 0.5 && !disabled && <span className="hint">encoded to {fmtTime(limit)}</span>}
+        {disabled && <span className="chip chip-warn">playback locked — create a proxy in Files</span>}
+        <span className="hint ml-auto" style={{ color: 'var(--faint)' }}>space · ←/→ frame · [ ] offset ±0.01 (shift ±1)</span>
       </div>
-      <canvas ref={canvasRef} className="w-full h-14 rounded cursor-crosshair bg-[var(--bg)] border border-[var(--border)]" onClick={onCanvasClick} />
     </div>
   );
 }
