@@ -329,7 +329,9 @@ export default function App() {
         null,
         2
       ),
-    [video, store, offset, widgets]
+    // storeVersion: store is a stable instance — source add/remove/edit only bumps the version,
+    // and without it here the autosave effect below never sees those changes
+    [video, store, storeVersion, layout, offset, widgets]
   );
 
   const saveProject = useCallback(async () => {
