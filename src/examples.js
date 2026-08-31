@@ -3,7 +3,7 @@
 // Library tab and are refreshed automatically when EXAMPLES_VERSION changes.
 
 // Bump when examples change: the library's "Example:" entries are refreshed automatically.
-export const EXAMPLES_VERSION = 19;
+export const EXAMPLES_VERSION = 24;
 
 export const EXAMPLE_WIDGETS = [
   {
@@ -102,7 +102,7 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: Line graph (history)',
-    columns: 'BaroAlt (cm)',
+    columns: 'BaroAlt (m)',
     w: 400,
     h: 150,
     opacity: 0.9,
@@ -111,7 +111,7 @@ export const EXAMPLE_WIDGETS = [
   var WINDOW_MS  = 20000;        // how much history to show (ms)
   var SMOOTH_MS  = 300;          // moving-average window (ms) smoothing the line and the value (0 = off)
   var LABEL      = 'ALT';        // label ('' = column name)
-  var MULTIPLIER = 0.01;         // value scaling (cm -> m = 0.01)
+  var MULTIPLIER = 1;            // value scaling (cm -> m = 0.01)
   var DIGITS     = 1;
   var UNIT       = 'm';
   var LINE_COLOR = '#00ff00';    // line color below the first threshold
@@ -209,7 +209,7 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: Flight graph (whole flight)',
-    columns: 'GPS_speed (m/s)',
+    columns: 'GPS_speed (km/h)',
     w: 520,
     h: 160,
     opacity: 0.95,
@@ -219,11 +219,11 @@ export const EXAMPLE_WIDGETS = [
   // ---------- SETTINGS ----------
   var TITLE       = 'Speed vs Time';  // caption under the chart ('' = none)
   var UNIT        = 'km/h';
-  var MULTIPLIER  = 3.6;             // m/s -> km/h; use 0.01 for cm -> m
+  var MULTIPLIER  = 1;               // value scaling (3.6 = m/s -> km/h, 0.01 = cm -> m)
   var DIGITS      = 1;
   var FILL_COLOR  = 'rgba(80,160,255,.85)';
   var LINE_COLOR  = 'rgba(255,255,255,.9)';
-  var LINE_WIDTH  = 1;
+  var LINE_WIDTH  = 1;               // at the default 520x160 size; scales with the widget (like all sizes below)
   var MARKER_COLOR= '#e03030';       // vertical bar at current time
   var MARKER_WIDTH= 4;
   var DOT         = true;            // dot on the curve at current time
@@ -231,7 +231,7 @@ export const EXAMPLE_WIDGETS = [
   var DOT_SIZE    = 5;
   var TEXT_COLOR  = '#ffffff';
   var FONT        = 'Arial';
-  var FONT_SIZE   = 13;
+  var FONT_SIZE   = 13;              // axis / title text size
   var VALUE_SIZE  = 22;              // current value label size
   var GRID_LINES  = 4;               // horizontal grid lines (0 = none)
   var GRID_COLOR  = 'rgba(255,255,255,.6)';
@@ -242,11 +242,31 @@ export const EXAMPLE_WIDGETS = [
   var BG          = 'transparent';   // e.g. 'rgba(0,0,0,.35)'
   var SHADOW      = true;            // text shadow for readability over video
   var MAX_POINTS  = 600;             // curve resolution
+  var SMOOTH_MS   = 1000;            // moving-average window (ms) smoothing the curve and the value (0 = off)
   // -------------------------------
   var col = ctx.columns[0], W = ctx.width, H = ctx.height, s = ctx.state;
-  var left = AXIS_LABELS ? FONT_SIZE * 3.2 : 6, bottom = TITLE ? FONT_SIZE + 10 : 6, top = 6, right = 8;
+  var scale = Math.min(W / 520, H / 160);  // sizes scale with the widget (settings are for the default 520x160)
+  var fsz = FONT_SIZE * scale, vsz = VALUE_SIZE * scale, lw = LINE_WIDTH * scale;
+  // top leaves room for the ascenders of the topmost axis number so it is not clipped
+  var left = AXIS_LABELS ? fsz * 3.2 : 6 * scale, bottom = TITLE ? fsz + 10 * scale : 6 * scale, top = Math.max(6 * scale, fsz * 0.6), right = 8 * scale;
   var cw = W - left - right, ch = H - top - bottom;
-  if (!s.pts || s.col !== col) { s.pts = ctx.all(col, MAX_POINTS); s.col = col; s.st = ctx.stats(col); }
+  // cache key includes every setting the cached curve depends on, so editing them takes effect
+  var key = col + '|' + MAX_POINTS + '|' + SMOOTH_MS;
+  if (s.key !== key) {
+    var raw = ctx.all(col, MAX_POINTS);
+    if (SMOOTH_MS > 0) {
+      // centered moving average (sliding-window sum, O(n))
+      var sm = [], lo = 0, hi = 0, sum = 0, cnt = 0, j;
+      for (j = 0; j < raw.length; j++) {
+        var tj = raw[j].t;
+        while (hi < raw.length && raw[hi].t <= tj + SMOOTH_MS / 2) { if (typeof raw[hi].v === 'number') { sum += raw[hi].v; cnt++; } hi++; }
+        while (lo < raw.length && raw[lo].t < tj - SMOOTH_MS / 2) { if (typeof raw[lo].v === 'number') { sum -= raw[lo].v; cnt--; } lo++; }
+        sm.push({ t: tj, v: cnt > 0 ? sum / cnt : raw[j].v });
+      }
+      raw = sm;
+    }
+    s.pts = raw; s.key = key; s.st = ctx.stats(col);
+  }
   var pts = s.pts, st = s.st;
   if (!pts.length || !st) return '<div style="color:#fff;font:12px Arial">no data for ' + col + '</div>';
   var t0 = pts[0].t, t1 = pts[pts.length - 1].t; if (t1 === t0) t1 = t0 + 1;
@@ -261,39 +281,48 @@ export const EXAMPLE_WIDGETS = [
   var svg = '';
   for (var i = 0; i <= GRID_LINES; i++) {
     var y = top + ch - ch * i / GRID_LINES, val = min + (max - min) * i / GRID_LINES;
-    svg += '<line class="grid" x1="' + left + '" x2="' + (W - right) + '" y1="' + y + '" y2="' + y + '" stroke="' + GRID_COLOR + '" stroke-width="1"/>';
-    if (AXIS_LABELS) svg += '<text class="axis" x="' + (left - 6) + '" y="' + (y + FONT_SIZE * 0.35) + '" text-anchor="end" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + FONT_SIZE + '" font-weight="bold" style="' + sh + '">' + val.toFixed(DIGITS) + '</text>';
+    svg += '<line class="grid" x1="' + left + '" x2="' + (W - right) + '" y1="' + y + '" y2="' + y + '" stroke="' + GRID_COLOR + '" stroke-width="' + Math.max(0.5, scale).toFixed(2) + '"/>';
+    if (AXIS_LABELS) svg += '<text class="axis" x="' + (left - 6 * scale).toFixed(1) + '" y="' + (y + fsz * 0.35).toFixed(1) + '" text-anchor="end" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + fsz.toFixed(1) + '" font-weight="bold" style="' + sh + '">' + val.toFixed(DIGITS) + '</text>';
   }
-  svg += '<path class="area" d="' + area + '" fill="' + FILL_COLOR + '"/><path class="line" d="' + d + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="' + LINE_WIDTH + '"/>';
+  svg += '<path class="area" d="' + area + '" fill="' + FILL_COLOR + '"/><path class="line" d="' + d + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="' + lw.toFixed(2) + '"/>';
   var v = values[0], inRange = time >= t0 && time <= t1;
+  if (SMOOTH_MS > 0 && inRange && pts.length > 1) {
+    // dot and value label follow the smoothed curve
+    var a = 0, b = pts.length - 1, m;
+    while (b - a > 1) { m = (a + b) >> 1; if (pts[m].t <= time) a = m; else b = m; }
+    var pa = pts[a], pb = pts[b];
+    if (typeof pa.v === 'number' && typeof pb.v === 'number') v = pb.t > pa.t ? pa.v + (pb.v - pa.v) * (time - pa.t) / (pb.t - pa.t) : pa.v;
+  }
   if (inRange) {
     var mx = X(time), my = typeof v === 'number' ? Y(v) : top + ch;
-    svg += '<line class="marker" x1="' + mx + '" x2="' + mx + '" y1="' + my + '" y2="' + (top + ch) + '" stroke="' + MARKER_COLOR + '" stroke-width="' + MARKER_WIDTH + '"/>';
-    if (DOT && typeof v === 'number') svg += '<circle class="dot" cx="' + mx + '" cy="' + my + '" r="' + DOT_SIZE + '" fill="' + DOT_COLOR + '" stroke="' + MARKER_COLOR + '" stroke-width="2"/>';
+    svg += '<line class="marker" x1="' + mx + '" x2="' + mx + '" y1="' + my + '" y2="' + (top + ch) + '" stroke="' + MARKER_COLOR + '" stroke-width="' + (MARKER_WIDTH * scale).toFixed(2) + '"/>';
+    if (DOT && typeof v === 'number') svg += '<circle class="dot" cx="' + mx + '" cy="' + my + '" r="' + (DOT_SIZE * scale).toFixed(2) + '" fill="' + DOT_COLOR + '" stroke="' + MARKER_COLOR + '" stroke-width="' + (2 * scale).toFixed(2) + '"/>';
     var label = typeof v === 'number' ? (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT : '--';
-    var lx = mx + 8, anchor = 'start'; if (mx > W - right - VALUE_SIZE * 4) { lx = mx - 8; anchor = 'end'; }
-    svg += '<text class="value" x="' + lx + '" y="' + Math.max(top + VALUE_SIZE, my - 6) + '" text-anchor="' + anchor + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + VALUE_SIZE + '" font-weight="bold" style="' + sh + '">' + label + '</text>';
+    var lx = mx + 8 * scale, anchor = 'start'; if (mx > W - right - vsz * 4) { lx = mx - 8 * scale; anchor = 'end'; }
+    svg += '<text class="value" x="' + lx.toFixed(1) + '" y="' + Math.max(top + vsz, my - 6 * scale).toFixed(1) + '" text-anchor="' + anchor + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + vsz.toFixed(1) + '" font-weight="bold" style="' + sh + '">' + label + '</text>';
   }
-  if (TITLE) svg += '<text class="title" x="' + (left + cw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + FONT_SIZE + '" font-weight="bold" style="' + sh + '">' + TITLE + '</text>';
+  if (TITLE) svg += '<text class="title" x="' + (left + cw / 2).toFixed(1) + '" y="' + (H - 4 * scale).toFixed(1) + '" text-anchor="middle" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + fsz.toFixed(1) + '" font-weight="bold" style="' + sh + '">' + TITLE + '</text>';
   // CSS hooks: #flightgraph (svg), .grid, .axis, .area, .line, .marker, .dot, .value, .title
   return '<svg id="flightgraph" width="' + W + '" height="' + H + '" style="background:' + BG + '">' + svg + '</svg>';
 }`,
   },
   {
     name: 'Example: Altitude profile',
-    columns: 'BaroAlt (cm)',
+    columns: 'BaroAlt (m)',
     w: 520,
     h: 140,
     opacity: 0.95,
     code: `function (values, time, ctx) {
   // Altitude over the whole flight with a dot moving along the profile.
   // ---------- SETTINGS ----------
-  var MULTIPLIER  = 0.01;            // cm -> m
+  var MULTIPLIER  = 1;               // value scaling (0.01 = cm -> m)
   var UNIT        = 'm';
   var DIGITS      = 0;
+  var LABEL       = 'ALT';           // caption in the top-left corner ('' = none)
   var FILL_TOP    = 'rgba(120,200,120,.9)';   // gradient top color
   var FILL_BOTTOM = 'rgba(40,90,40,.6)';      // gradient bottom color
   var LINE_COLOR  = '#ffffff';
+  var LINE_WIDTH  = 1.5;             // at the default 520x140 size; scales with the widget (like all sizes below)
   var DOT_COLOR   = '#ff3030';
   var DOT_SIZE    = 6;
   var TEXT_COLOR  = '#ffffff';
@@ -303,31 +332,58 @@ export const EXAMPLE_WIDGETS = [
   var BG          = 'rgba(0,0,0,.35)';
   var RADIUS      = 8;
   var MAX_POINTS  = 600;
+  var SMOOTH_MS   = 1000;            // moving-average window (ms) smoothing the profile and the value (0 = off)
   // -------------------------------
-  var col = ctx.columns[0], W = ctx.width, H = ctx.height, s = ctx.state, pad = 8;
-  if (!s.pts || s.col !== col) { s.pts = ctx.all(col, MAX_POINTS); s.col = col; s.st = ctx.stats(col); }
+  var col = ctx.columns[0], W = ctx.width, H = ctx.height, s = ctx.state;
+  var scale = Math.min(W / 520, H / 140);  // sizes scale with the widget (settings are for the default 520x140)
+  var fsz = FONT_SIZE * scale, pad = 8 * scale;
+  // cache key includes every setting the cached curve depends on, so editing them takes effect
+  var key = col + '|' + MAX_POINTS + '|' + SMOOTH_MS;
+  if (s.key !== key) {
+    var raw = ctx.all(col, MAX_POINTS);
+    if (SMOOTH_MS > 0) {
+      // centered moving average (sliding-window sum, O(n))
+      var sm = [], lo = 0, hi = 0, sum = 0, cnt = 0, j;
+      for (j = 0; j < raw.length; j++) {
+        var tj = raw[j].t;
+        while (hi < raw.length && raw[hi].t <= tj + SMOOTH_MS / 2) { if (typeof raw[hi].v === 'number') { sum += raw[hi].v; cnt++; } hi++; }
+        while (lo < raw.length && raw[lo].t < tj - SMOOTH_MS / 2) { if (typeof raw[lo].v === 'number') { sum -= raw[lo].v; cnt--; } lo++; }
+        sm.push({ t: tj, v: cnt > 0 ? sum / cnt : raw[j].v });
+      }
+      raw = sm;
+    }
+    s.pts = raw; s.key = key; s.st = ctx.stats(col);
+  }
   var pts = s.pts, st = s.st;
   if (!pts.length || !st) return '<div style="color:#fff;font:12px Arial">no data for ' + col + '</div>';
   var t0 = pts[0].t, t1 = pts[pts.length - 1].t; if (t1 === t0) t1 = t0 + 1;
   var min = st.min, max = st.max; if (max === min) max = min + 1;
   function X(t) { return pad + (t - t0) / (t1 - t0) * (W - 2 * pad); }
-  function Y(v) { return H - pad - (v - min) / (max - min) * (H - 2 * pad - FONT_SIZE); }
+  function Y(v) { return H - pad - (v - min) / (max - min) * (H - 2 * pad - fsz); }
   var d = '', first = true;
   pts.forEach(function (p) { if (typeof p.v !== 'number') return; d += (first ? 'M' : 'L') + X(p.t).toFixed(1) + ',' + Y(p.v).toFixed(1); first = false; });
-  var area = d + 'L' + X(t1).toFixed(1) + ',' + (H - pad) + 'L' + X(t0).toFixed(1) + ',' + (H - pad) + 'Z';
+  var area = d + 'L' + X(t1).toFixed(1) + ',' + (H - pad).toFixed(1) + 'L' + X(t0).toFixed(1) + ',' + (H - pad).toFixed(1) + 'Z';
   var id = 'g' + Math.abs(W * 31 + H);
   var svg = '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + FILL_TOP + '"/><stop offset="1" stop-color="' + FILL_BOTTOM + '"/></linearGradient></defs>';
-  svg += '<path class="area" d="' + area + '" fill="url(#' + id + ')"/><path class="line" d="' + d + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="1.5"/>';
+  svg += '<path class="area" d="' + area + '" fill="url(#' + id + ')"/><path class="line" d="' + d + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="' + (LINE_WIDTH * scale).toFixed(2) + '"/>';
   var v = values[0], sh = 'text-shadow:0 0 3px #000;';
+  if (SMOOTH_MS > 0 && time >= t0 && time <= t1 && pts.length > 1) {
+    // dot and value label follow the smoothed profile
+    var a = 0, b = pts.length - 1, m;
+    while (b - a > 1) { m = (a + b) >> 1; if (pts[m].t <= time) a = m; else b = m; }
+    var pa = pts[a], pb = pts[b];
+    if (typeof pa.v === 'number' && typeof pb.v === 'number') v = pb.t > pa.t ? pa.v + (pb.v - pa.v) * (time - pa.t) / (pb.t - pa.t) : pa.v;
+  }
   if (typeof v === 'number' && time >= t0 && time <= t1) {
     var x = X(time), y = Y(v);
-    svg += '<circle class="dot" cx="' + x + '" cy="' + y + '" r="' + DOT_SIZE + '" fill="' + DOT_COLOR + '" stroke="#fff" stroke-width="2"/>';
-    var lx = x + 10, anchor = 'start'; if (x > W - 80) { lx = x - 10; anchor = 'end'; }
-    svg += '<text class="value" x="' + lx + '" y="' + (y - 8) + '" text-anchor="' + anchor + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + (FONT_SIZE * 1.3) + '" font-weight="bold" style="' + sh + '">' + (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</text>';
+    svg += '<circle class="dot" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (DOT_SIZE * scale).toFixed(2) + '" fill="' + DOT_COLOR + '" stroke="#fff" stroke-width="' + (2 * scale).toFixed(2) + '"/>';
+    var lx = x + 10 * scale, anchor = 'start'; if (x > W - 80 * scale) { lx = x - 10 * scale; anchor = 'end'; }
+    svg += '<text class="value" x="' + lx.toFixed(1) + '" y="' + (y - 8 * scale).toFixed(1) + '" text-anchor="' + anchor + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + (fsz * 1.3).toFixed(1) + '" font-weight="bold" style="' + sh + '">' + (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</text>';
   }
-  if (SHOW_MINMAX) svg += '<text class="minmax" x="' + (W - pad) + '" y="' + (FONT_SIZE + 2) + '" text-anchor="end" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + FONT_SIZE + '" style="' + sh + '">min ' + (min * MULTIPLIER).toFixed(DIGITS) + ' / max ' + (max * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</text>';
-  // CSS hooks: #profile (svg), .area, .line, .dot, .value, .minmax
-  return '<svg id="profile" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + RADIUS + 'px">' + svg + '</svg>';
+  if (LABEL) svg += '<text class="label" x="' + pad.toFixed(1) + '" y="' + (fsz + 2 * scale).toFixed(1) + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + fsz.toFixed(1) + '" font-weight="bold" style="' + sh + '">' + LABEL + '</text>';
+  if (SHOW_MINMAX) svg += '<text class="minmax" x="' + (W - pad).toFixed(1) + '" y="' + (fsz + 2 * scale).toFixed(1) + '" text-anchor="end" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + fsz.toFixed(1) + '" style="' + sh + '">min ' + (min * MULTIPLIER).toFixed(DIGITS) + ' / max ' + (max * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</text>';
+  // CSS hooks: #profile (svg), .area, .line, .dot, .value, .label, .minmax
+  return '<svg id="profile" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px">' + svg + '</svg>';
 }`,
   },
   {
@@ -573,38 +629,41 @@ export const EXAMPLE_WIDGETS = [
   var COLOR        = '#fff';
   var ACCENT       = '#ff3030';    // needle / center mark
   var BG           = 'rgba(0,0,0,.45)';
-  var RADIUS       = 8;
+  var RADIUS       = 8;            // at the default 220x60 size; scales with the widget (like all sizes below)
   var FONT_SIZE    = 14;
-  var DEG_PER_PX   = 1;            // tape: degrees per pixel (smaller = wider view)
+  var DEG_PER_PX   = 1;            // tape: degrees per pixel at the default size (smaller = wider view)
   // -------------------------------
   var hd = values[0]; if (typeof hd !== 'number') hd = 0;
   if (HEADING_UNIT === 'decideg') hd /= 10; else if (HEADING_UNIT === 'rad') hd = hd * 180 / Math.PI;
   hd = ((hd % 360) + 360) % 360;
   var W = ctx.width, H = ctx.height, names = { 0: 'N', 90: 'E', 180: 'S', 270: 'W', 45: 'NE', 135: 'SE', 225: 'SW', 315: 'NW' };
+  var scale = Math.min(W / 220, H / 60);  // sizes scale with the widget (settings are for the default 220x60)
+  var fsz = FONT_SIZE * scale;
   var svg = '';
   if (STYLE === 'rose') {
-    var cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 4;
+    var cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 4 * scale;
     svg += '<g class="rose" transform="translate(' + cx + ',' + cy + ') rotate(' + (-hd) + ')">';
     for (var a = 0; a < 360; a += 15) {
       var big = a % 90 === 0, len = big ? r * 0.25 : a % 45 === 0 ? r * 0.18 : r * 0.1;
-      svg += '<line class="tick' + (big ? ' tick-major' : '') + '" x1="0" y1="' + (-r) + '" x2="0" y2="' + (-r + len) + '" stroke="' + COLOR + '" stroke-width="' + (big ? 2 : 1) + '" transform="rotate(' + a + ')"/>';
-      if (names[a] && big) svg += '<text class="tick-label" transform="rotate(' + a + ') translate(0,' + (-r + len + FONT_SIZE) + ')" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + FONT_SIZE + '" font-weight="bold">' + names[a] + '</text>';
+      svg += '<line class="tick' + (big ? ' tick-major' : '') + '" x1="0" y1="' + (-r).toFixed(1) + '" x2="0" y2="' + (-r + len).toFixed(1) + '" stroke="' + COLOR + '" stroke-width="' + ((big ? 2 : 1) * scale).toFixed(2) + '" transform="rotate(' + a + ')"/>';
+      if (names[a] && big) svg += '<text class="tick-label" transform="rotate(' + a + ') translate(0,' + (-r + len + fsz).toFixed(1) + ')" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + fsz.toFixed(1) + '" font-weight="bold">' + names[a] + '</text>';
     }
-    svg += '</g><path class="needle" d="M' + cx + ',' + (cy - r - 2) + ' l-6,-8 l12,0 z" fill="' + ACCENT + '"/>';
-    svg += '<text class="heading" x="' + cx + '" y="' + (cy + FONT_SIZE / 2) + '" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + (FONT_SIZE * 1.3) + '" font-weight="bold">' + hd.toFixed(0) + '°</text>';
+    svg += '</g><path class="needle" d="M' + cx + ',' + (cy - r - 2 * scale).toFixed(1) + ' l' + (-6 * scale).toFixed(1) + ',' + (-8 * scale).toFixed(1) + ' l' + (12 * scale).toFixed(1) + ',0 z" fill="' + ACCENT + '"/>';
+    svg += '<text class="heading" x="' + cx + '" y="' + (cy + fsz / 2).toFixed(1) + '" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + (fsz * 1.3).toFixed(1) + '" font-weight="bold">' + hd.toFixed(0) + '°</text>';
   } else {
-    var mid = W / 2, span = W * DEG_PER_PX / 2;
+    var px = DEG_PER_PX / scale;  // keep the same visible span at any widget size
+    var mid = W / 2, span = W * px / 2;
     var from = Math.ceil((hd - span) / 5) * 5, to = Math.floor((hd + span) / 5) * 5;
     for (var d = from; d <= to; d += 5) {
-      var x = mid + (d - hd) / DEG_PER_PX, dd = ((d % 360) + 360) % 360, big2 = dd % 30 === 0;
-      svg += '<line class="tick' + (big2 ? ' tick-major' : '') + '" x1="' + x + '" x2="' + x + '" y1="' + (H - 4) + '" y2="' + (H - (big2 ? 16 : 9)) + '" stroke="' + COLOR + '" stroke-width="' + (big2 ? 2 : 1) + '"/>';
-      if (big2) svg += '<text class="tick-label" x="' + x + '" y="' + (H - 20) + '" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + FONT_SIZE + '" font-weight="' + (names[dd] ? 'bold' : 'normal') + '">' + (names[dd] || dd) + '</text>';
+      var x = mid + (d - hd) / px, dd = ((d % 360) + 360) % 360, big2 = dd % 30 === 0;
+      svg += '<line class="tick' + (big2 ? ' tick-major' : '') + '" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + (H - 4 * scale).toFixed(1) + '" y2="' + (H - (big2 ? 16 : 9) * scale).toFixed(1) + '" stroke="' + COLOR + '" stroke-width="' + ((big2 ? 2 : 1) * scale).toFixed(2) + '"/>';
+      if (big2) svg += '<text class="tick-label" x="' + x.toFixed(1) + '" y="' + (H - 20 * scale).toFixed(1) + '" text-anchor="middle" fill="' + COLOR + '" font-family="Arial" font-size="' + fsz.toFixed(1) + '" font-weight="' + (names[dd] ? 'bold' : 'normal') + '">' + (names[dd] || dd) + '</text>';
     }
-    svg += '<path class="needle" d="M' + mid + ',' + (H - 2) + ' l-6,-8 l12,0 z" fill="' + ACCENT + '"/>';
-    svg += '<rect class="heading-bg" x="' + (mid - 22) + '" y="2" width="44" height="' + (FONT_SIZE + 6) + '" rx="3" fill="' + ACCENT + '"/><text class="heading" x="' + mid + '" y="' + (FONT_SIZE + 3) + '" text-anchor="middle" fill="#fff" font-family="Arial" font-size="' + FONT_SIZE + '" font-weight="bold">' + hd.toFixed(0) + '°</text>';
+    svg += '<path class="needle" d="M' + mid + ',' + (H - 2 * scale).toFixed(1) + ' l' + (-6 * scale).toFixed(1) + ',' + (-8 * scale).toFixed(1) + ' l' + (12 * scale).toFixed(1) + ',0 z" fill="' + ACCENT + '"/>';
+    svg += '<rect class="heading-bg" x="' + (mid - 22 * scale).toFixed(1) + '" y="' + (2 * scale).toFixed(1) + '" width="' + (44 * scale).toFixed(1) + '" height="' + (fsz + 6 * scale).toFixed(1) + '" rx="' + (3 * scale).toFixed(1) + '" fill="' + ACCENT + '"/><text class="heading" x="' + mid + '" y="' + (fsz + 3 * scale).toFixed(1) + '" text-anchor="middle" fill="#fff" font-family="Arial" font-size="' + fsz.toFixed(1) + '" font-weight="bold">' + hd.toFixed(0) + '°</text>';
   }
   // CSS hooks: #compass (svg), .rose, .tick, .tick-major, .tick-label, .needle, .heading, .heading-bg
-  return '<svg id="compass" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + RADIUS + 'px">' + svg + '</svg>';
+  return '<svg id="compass" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px">' + svg + '</svg>';
 }`,
   },
 ];

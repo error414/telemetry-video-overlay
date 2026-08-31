@@ -71,6 +71,24 @@ Export renders the HTML through an SVG `<foreignObject>` into a canvas, so:
 - Typical knobs: colors, `BG`, `RADIUS`, `FONT`, `FONT_SIZE`, `LABEL`, `UNIT`, `MULTIPLIER`, `DIGITS`, `MIN`/`MAX` with `null` meaning "from `ctx.stats`", style enums (`'arrow' | 'plane' | 'dot'`), unit enums (`'deg' | 'decideg' | 'rad'`).
 - Scaling: prefer `ctx.stats(col)` over the visible window so axes don't jump; offer `SCALE = 'flight' | 'window' | 'fixed'` when relevant.
 
+## Size scaling and smoothing (include in every new widget)
+
+- **Scale with the widget size.** Settings are in units of the widget's default `w×h`; derive
+  `var scale = Math.min(ctx.width / <defW>, ctx.height / <defH>);` and multiply every pixel size by it —
+  fonts, line/stroke widths, dot radii, paddings, offsets, corner radius. Note it in the SETTINGS comments
+  (`// at the default 400x150 size; scales with the widget`). Leave enough top/side padding for text at any
+  font size (e.g. `top = Math.max(6 * scale, fsz * 0.6)` so the topmost axis number's ascenders aren't clipped).
+  For density-like knobs (e.g. tape `DEG_PER_PX`) divide by `scale` so the widget looks identical, just bigger.
+- **Offer smoothing for noisy data.** Telemetry (baro, current, GPS speed…) is noisy — graphs and values benefit
+  from a `SMOOTH_MS` setting (centered moving average, sliding-window sum O(n), `0 = off`; see the Line graph /
+  Flight graph examples). Markers/dots and the displayed value must follow the smoothed curve, not the raw value.
+- **Cache keys must include the settings they depend on.** `ctx.state` survives code edits, so key caches like
+  `s.key = col + '|' + MAX_POINTS + '|' + SMOOTH_MS` — a cache checked only against the column ignores settings
+  changes until restart.
+- **Pin scrolling-graph line ends to the window edges.** Raw samples make both ends pop as points enter/leave the
+  window; keep an overhanging sample on each side and interpolate points exactly at the window edges (see the
+  Line graph example).
+
 ## INAV blackbox column names (after `blackbox_decode`)
 
 Headers depend on the decoder unit options (Files tab). Common ones:
