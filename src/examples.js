@@ -3,7 +3,7 @@
 // Library tab and are refreshed automatically when EXAMPLES_VERSION changes.
 
 // Bump when examples change: the library's "Example:" entries are refreshed automatically.
-export const EXAMPLES_VERSION = 25;
+export const EXAMPLES_VERSION = 27;
 
 export const EXAMPLE_WIDGETS = [
   {
@@ -491,7 +491,7 @@ export const EXAMPLE_WIDGETS = [
   var ARROW_COLOR = '#ff3030';
   var ARROW_STROKE= '#ffffff';
   var HEADING_UNIT= 'deg';          // 'deg' | 'decideg' (value/10) | 'rad'
-  var HEADING_OFFSET = 0;           // add degrees if the arrow points the wrong way
+  var HEADING_OFFSET = -90;         // add degrees if the arrow points the wrong way
   var SHOW_ATTRIBUTION = true;      // tile providers require attribution
   // -------------------------------
   var TILES = {
@@ -625,6 +625,7 @@ export const EXAMPLE_WIDGETS = [
     code: `function (values, time, ctx) {
   // ---------- SETTINGS ----------
   var HEADING_UNIT = 'deg';        // 'deg' | 'decideg' | 'rad'
+  var HEADING_OFFSET = -90;        // add degrees if the compass points the wrong way
   var STYLE        = 'tape';       // 'tape' (sliding ribbon) | 'rose' (rotating rose)
   var COLOR        = '#fff';
   var ACCENT       = '#ff3030';    // needle / center mark
@@ -635,7 +636,7 @@ export const EXAMPLE_WIDGETS = [
   // -------------------------------
   var hd = values[0]; if (typeof hd !== 'number') hd = 0;
   if (HEADING_UNIT === 'decideg') hd /= 10; else if (HEADING_UNIT === 'rad') hd = hd * 180 / Math.PI;
-  hd = ((hd % 360) + 360) % 360;
+  hd = ((hd + HEADING_OFFSET) % 360 + 360) % 360;
   var W = ctx.width, H = ctx.height, names = { 0: 'N', 90: 'E', 180: 'S', 270: 'W', 45: 'NE', 135: 'SE', 225: 'SW', 315: 'NW' };
   var scale = Math.min(W / 220, H / 60);  // sizes scale with the widget (settings are for the default 220x60)
   var fsz = FONT_SIZE * scale;
@@ -664,6 +665,100 @@ export const EXAMPLE_WIDGETS = [
   }
   // CSS hooks: #compass (svg), .rose, .tick, .tick-major, .tick-label, .needle, .heading, .heading-bg
   return '<svg id="compass" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px">' + svg + '</svg>';
+}`,
+  },
+  {
+    name: 'Example: Compass 3D',
+    columns: 'heading',
+    w: 280,
+    h: 170,
+    opacity: 0.92,
+    code: `function (values, time, ctx) {
+  // 3D compass: a perspective compass ring lying flat, rotating under a fixed marker (column = heading).
+  // ---------- SETTINGS ----------
+  var HEADING_UNIT = 'deg';        // 'deg' | 'decideg' (value/10) | 'rad'
+  var HEADING_OFFSET = -90;        // add degrees if the ring points the wrong way
+  var INVERT       = false;        // flip rotation direction if the ring turns the wrong way
+  var SMOOTH_MS    = 300;          // heading smoothing window (ms, 0 = off; wrap-safe)
+  var TILT_DEG     = 30;           // camera angle above the ring plane (10 = flat/edge-on, 80 = top-down)
+  var DEPTH        = 3.2;          // perspective strength (2 = strong, 6 = almost none)
+  var COLOR        = '#ffffff';    // ticks / labels / rim
+  var NORTH_COLOR  = '#ff5050';    // N label
+  var ACCENT       = '#ff3030';    // fixed front marker
+  var BG           = 'rgba(0,0,0,.4)';
+  var RADIUS       = 8;            // panel corner radius at the default 280x170 size; scales
+  var FONT_SIZE    = 15;           // cardinal letters at the default size; scales with the widget
+  var SHOW_READOUT = true;         // big degrees + cardinal in the middle
+  // -------------------------------
+  var W = ctx.width, H = ctx.height, scale = Math.min(W / 280, H / 170);
+  var fsz = FONT_SIZE * scale, lw = Math.max(1, 1.5 * scale);
+  var names = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
+  function toDeg(v) { return HEADING_UNIT === 'decideg' ? v / 10 : HEADING_UNIT === 'rad' ? v * 180 / Math.PI : v; }
+  // heading with triangular-weighted circular mean (the 359->0 wrap breaks plain averaging)
+  var hv = values[0], hasData = typeof hv === 'number', hd = hasData ? toDeg(hv) : 0;
+  if (hasData && SMOOTH_MS > 0) {
+    var sam = ctx.range(ctx.columns[0], time - SMOOTH_MS, time + SMOOTH_MS, 120) || [], sx = 0, sy = 0, ws = 0, k;
+    for (k = 0; k < sam.length; k++) {
+      if (typeof sam[k].v !== 'number') continue;
+      var wq = 1 - Math.abs(sam[k].t - time) / SMOOTH_MS; if (wq <= 0) continue;
+      var rr = toDeg(sam[k].v) * Math.PI / 180;
+      sx += Math.cos(rr) * wq; sy += Math.sin(rr) * wq; ws += wq;
+    }
+    if (ws) hd = Math.atan2(sy, sx) * 180 / Math.PI;
+  }
+  hd = ((hd + HEADING_OFFSET) % 360 + 360) % 360;
+  if (INVERT) hd = (360 - hd) % 360;
+  // 3D projection: ring lies in a horizontal plane, camera TILT_DEG above it, DEPTH controls perspective.
+  // a = bearing relative to the current heading; a=0 is the point closest to the viewer (front).
+  var DF = Math.max(1.5, DEPTH), E = TILT_DEG * Math.PI / 180, sinE = Math.sin(E), cosE = Math.cos(E);
+  var topPad = fsz * 0.6 + 6 * scale, botPad = 16 * scale;
+  var pF = DF / (DF - cosE), pB = DF / (DF + cosE);  // perspective at the front / back of the outer rim
+  var R = Math.max(5, Math.min((W / 2 - 12 * scale) / 1.06, (H - topPad - botPad) / (sinE * (pF + pB))));
+  var cx = W / 2, cy = topPad + sinE * R * pB;
+  function pt(a, rad) { // perspective depends on the point's true depth: cos(a) * (rad/R)
+    var r2 = a * Math.PI / 180, p = DF / (DF - Math.cos(r2) * cosE * (rad / R));
+    return [cx + Math.sin(r2) * rad * p, cy + Math.cos(r2) * sinE * rad * p, p];
+  }
+  function alpha(p) { return (0.32 + 0.68 * (p - pB) / (pF - pB)).toFixed(2); }
+  // rim band (outer + inner projected circles)
+  var outer = '', inner = '', a, q;
+  for (a = 0; a <= 360; a += 5) {
+    q = pt(a, R); outer += (a ? 'L' : 'M') + q[0].toFixed(1) + ',' + q[1].toFixed(1);
+    q = pt(360 - a, R * 0.84); inner += (a ? 'L' : 'M') + q[0].toFixed(1) + ',' + q[1].toFixed(1);
+  }
+  var svg = '<path class="band" d="' + outer + 'Z ' + inner + 'Z" fill-rule="evenodd" fill="rgba(255,255,255,.07)"/>'
+    + '<path class="rim" d="' + outer + 'Z" fill="none" stroke="' + COLOR + '" stroke-opacity=".45" stroke-width="' + lw.toFixed(2) + '" stroke-linejoin="round"/>';
+  // ticks + billboarded labels, painted back-to-front so near covers far
+  var items = [], b, rel, p1, p2, major, lab;
+  for (b = 0; b < 360; b += 15) {
+    rel = b - hd; major = b % 45 === 0;
+    p1 = pt(rel, major ? R * 0.78 : R * 0.86); p2 = pt(rel, R);
+    var el = '<line class="tick' + (major ? ' tick-major' : '') + '" x1="' + p1[0].toFixed(1) + '" y1="' + p1[1].toFixed(1) + '" x2="' + p2[0].toFixed(1) + '" y2="' + p2[1].toFixed(1)
+      + '" stroke="' + COLOR + '" stroke-opacity="' + alpha(p2[2]) + '" stroke-width="' + ((major ? 2 : 1) * scale * p2[2]).toFixed(2) + '"/>';
+    if (major) {
+      lab = names[b]; var card = b % 90 === 0;
+      var lp = pt(rel, R * 0.58), lf = fsz * (card ? 1 : 0.72) * lp[2];
+      el += '<text class="cardinal' + (b === 0 ? ' north' : '') + '" x="' + lp[0].toFixed(1) + '" y="' + (lp[1] + lf * 0.35).toFixed(1) + '" text-anchor="middle" fill="' + (b === 0 ? NORTH_COLOR : COLOR)
+        + '" fill-opacity="' + alpha(lp[2]) + '" font-family="Arial" font-size="' + lf.toFixed(1) + '"' + (card ? ' font-weight="bold"' : '') + ' style="text-shadow:0 0 3px #000">' + lab + '</text>';
+    }
+    items.push([p2[2], el]);
+  }
+  items.sort(function (u, v) { return u[0] - v[0]; });
+  for (k = 0; k < items.length; k++) svg += items[k][1];
+  // fixed front marker just outside the near rim, pointing at the current heading
+  var fr = pt(0, R);
+  svg += '<path class="marker" d="M' + cx.toFixed(1) + ',' + (fr[1] + 3 * scale).toFixed(1)
+    + ' l' + (-7 * scale).toFixed(1) + ',' + (11 * scale).toFixed(1) + ' l' + (14 * scale).toFixed(1) + ',0 z" fill="' + ACCENT + '" stroke="#fff" stroke-width="' + (1.5 * scale).toFixed(2) + '"/>';
+  if (SHOW_READOUT) {
+    var txt = hasData ? hd.toFixed(0) + '\\u00B0' : '--';
+    var card2 = hasData ? names[(Math.round(hd / 45) * 45) % 360] : '';
+    svg += '<text class="readout" x="' + cx.toFixed(1) + '" y="' + (cy + fsz * 0.35).toFixed(1) + '" text-anchor="middle" fill="' + COLOR
+      + '" font-family="Arial" font-size="' + (fsz * 1.7).toFixed(1) + '" font-weight="bold" style="text-shadow:0 0 4px #000,0 0 4px #000">' + txt + '</text>'
+      + '<text class="readout-cardinal" x="' + cx.toFixed(1) + '" y="' + (cy + fsz * 1.5).toFixed(1) + '" text-anchor="middle" fill="rgba(255,255,255,.75)"'
+      + ' font-family="Arial" font-size="' + (fsz * 0.85).toFixed(1) + '" style="text-shadow:0 0 3px #000">' + card2 + '</text>';
+  }
+  // CSS hooks: #compass3d (svg), .band, .rim, .tick, .tick-major, .cardinal, .north, .marker, .readout, .readout-cardinal
+  return '<svg id="compass3d" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px">' + svg + '</svg>';
 }`,
   },
   {
