@@ -126,16 +126,22 @@ ipcMain.handle('video:probe', async (_e, file) => {
   };
 });
 
-// ---------- preview proxy (low-res h264 copy for smooth in-app playback) ----------
+// ---------- preview proxy (re-encoded copy for smooth in-app playback) ----------
 let proxyProc = null;
 /**
  * kind = 'full'  : same resolution / fps / bit depth, re-encoded with NVENC (plays in Chromium even when the
  *                  camera's original HEVC stream is rejected by the D3D11 decoder, e.g. DJI 4K120 10-bit)
  * kind = 'light' : 1080p / 30 fps H.264 for weak machines
+ *
+ * Encodes into a fragmented MP4 (*.preview-proxy.part.mp4) so the renderer can already play it via
+ * MSE while ffmpeg is still writing ('proxy:live' event + 'proxy:tail' reads), then remuxes it
+ * losslessly to a plain faststart MP4 once finished.
  */
-ipcMain.handle('video:makeProxy', async (_e, file, duration, kind = 'light') => {
+ipcMain.handle('video:makeProxy', async (_e, file, duration, kind = 'light', fps = 60) => {
   if (proxyProc) throw new Error('Proxy already being created');
-  const out = file.replace(/\.[^.]+$/, '') + '.preview-proxy.mp4';
+  const base = file.replace(/\.[^.]+$/, '');
+  const out = base + '.preview-proxy.mp4';
+  const part = base + '.preview-proxy.part.mp4';
   const nvenc = await canNvenc();
   const cuda = await canCudaDecode(file);
   const args = ['-y', '-hide_banner', '-loglevel', 'error', '-stats'];
@@ -143,16 +149,19 @@ ipcMain.handle('video:makeProxy', async (_e, file, duration, kind = 'light') => 
     if (cuda) args.push('-hwaccel', 'cuda');
     if (cuda && nvenc) args.push('-hwaccel_output_format', 'cuda'); // frames stay on the GPU
     args.push('-i', file, '-map', '0:v:0', '-an');
-    if (nvenc) args.push('-c:v', 'hevc_nvenc', '-preset', 'p4', '-tune', 'hq', '-rc', 'vbr', '-cq', '22', '-b:v', '0', '-tag:v', 'hvc1');
+    // p1 encodes ~2x faster than p4 at the same -cq with virtually identical file size — fine for a preview
+    if (nvenc) args.push('-c:v', 'hevc_nvenc', '-preset', 'p1', '-rc', 'vbr', '-cq', '22', '-b:v', '0', '-tag:v', 'hvc1');
     else args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p');
-    args.push('-movflags', '+faststart', out);
   } else {
     if (cuda) args.push('-hwaccel', 'cuda');
     args.push('-i', file, '-map', '0:v:0', '-an', '-vf', 'scale=-2:1080', '-r', '30');
-    if (nvenc) args.push('-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '23', '-b:v', '0');
+    if (nvenc) args.push('-c:v', 'h264_nvenc', '-preset', 'p1', '-rc', 'vbr', '-cq', '23', '-b:v', '0');
     else args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23');
-    args.push('-pix_fmt', 'yuv420p', '-movflags', '+faststart', out);
+    args.push('-pix_fmt', 'yuv420p');
   }
+  // ~1s GOP so every fragment starts on a keyframe and seeking during creation stays snappy
+  args.push('-g', String(Math.max(1, Math.round(kind === 'light' ? 30 : fps))));
+  args.push('-movflags', 'frag_keyframe+empty_moov+default_base_moof', part);
   proxyProc = spawn(ffmpegPath, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
   let err = '';
   proxyProc.stderr.on('data', (d) => {
@@ -161,23 +170,46 @@ ipcMain.handle('video:makeProxy', async (_e, file, duration, kind = 'light') => 
     const m = /time=(\d+):(\d+):([\d.]+)/.exec(s);
     if (m && win && duration) win.webContents.send('proxy:progress', Math.min(1, (+m[1] * 3600 + +m[2] * 60 + +m[3]) / duration));
   });
+  if (win) win.webContents.send('proxy:live', { part, codec: kind === 'full' && nvenc ? 'hevc' : 'h264' });
   const proc = proxyProc;
   const code = await new Promise((resolve) => proc.on('close', resolve));
   const cancelled = proc.cancelled;
   proxyProc = null;
-  if (cancelled) {
+  if (cancelled || code !== 0) {
     try {
-      await fs.promises.unlink(out);
+      await fs.promises.unlink(part);
     } catch {
       /* ignore */
     }
-    return null; // user cancelled — not an error
-  }
-  if (code !== 0) {
+    if (cancelled) return null; // user cancelled — not an error
     const last = err.trim().split('\n').filter((l) => !/^frame=/.test(l)).pop() || 'exit code ' + code;
     throw new Error('ffmpeg failed: ' + last);
   }
+  // lossless remux: moov up front, no fragmentation → fast open and seeking in later sessions
+  await run(ffmpegPath, ['-y', '-hide_banner', '-loglevel', 'error', '-i', part, '-c', 'copy', '-movflags', '+faststart', out]);
+  await fs.promises.unlink(part).catch(() => {});
   return out;
+});
+
+// Tail-read of a (possibly still growing) file: current size + up to maxLen bytes from `offset`.
+// The file may not exist yet (polling starts before ffmpeg opens it) — that is not an error.
+ipcMain.handle('proxy:tail', async (_e, p, offset, maxLen) => {
+  let fh;
+  try {
+    fh = await fs.promises.open(p, 'r');
+  } catch {
+    return { size: 0, data: null };
+  }
+  try {
+    const size = (await fh.stat()).size;
+    const len = Math.max(0, Math.min(size - offset, maxLen || 8 << 20));
+    if (!len) return { size, data: null };
+    const buf = Buffer.alloc(len);
+    const { bytesRead } = await fh.read(buf, 0, len, offset);
+    return { size, data: buf.buffer.slice(0, bytesRead) };
+  } finally {
+    await fh.close();
+  }
 });
 ipcMain.handle('video:cancelProxy', () => {
   if (proxyProc) {

@@ -26,10 +26,13 @@ into `node_modules` on install), nothing else needs to be installed.
    The time column and unit (µs/ms/s) are auto-detected and can be changed in the *Files* tab.
    All files share one time base (blackbox `time (us)`), so no per-file alignment is needed.
    *Camera HEVC files* (e.g. DJI 4K/120 10-bit) are often rejected by Chromium's decoder
-   (`PIPELINE_ERROR_DECODE`) even though the GPU could decode them. In *Files* click
-   **Create full-quality proxy (GPU)** – a same-resolution/fps NVENC re-encode (~3 min for a
+   (`PIPELINE_ERROR_DECODE`) even though the GPU could decode them — DJI's low-latency
+   encoder uses HEVC *tiles*, which Chromium's D3D11 pipeline doesn't accept. In *Files* click
+   **Create full-quality proxy (GPU)** – a same-resolution/fps NVENC re-encode (~1.5 min for a
    3.5 min 4K/120 clip) that plays at full 120 fps in the app – or **Light proxy** (1080p/30)
-   for weaker machines. Export always uses the original file.
+   for weaker machines. The preview already plays *while* the proxy is being encoded (the
+   growing fragmented MP4 is streamed into the player via MSE; seeking ahead of the encoded
+   part waits until ffmpeg gets there). Export always uses the original file.
 3. **Widgets** tab – create a widget. Settings: name, columns, x/y/w/h, opacity, code.
    *Columns* is a comma-separated text field; each entry must match a CSV header exactly
    (the field has autocomplete; the column list is also in the *Files* tab, click to copy).

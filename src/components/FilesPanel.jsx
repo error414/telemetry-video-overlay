@@ -67,18 +67,21 @@ export default function FilesPanel({ video, openVideo, layout, setLayout, lt, re
               </div>
             )}
             {proxyProgress != null ? (
-              <div className="mt-2 flex items-center gap-2">
-                <div className="flex-1 progress">
-                  <div className="" style={{ width: proxyProgress * 100 + '%' }} />
+              <div className="mt-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 progress">
+                    <div className="" style={{ width: proxyProgress * 100 + '%' }} />
+                  </div>
+                  <span className="font-mono">{Math.round(proxyProgress * 100)}%</span>
+                  <button className="btn btn-xs btn-danger" onClick={cancelProxy}>
+                    Cancel
+                  </button>
                 </div>
-                <span className="font-mono">{Math.round(proxyProgress * 100)}%</span>
-                <button className="btn btn-xs btn-danger" onClick={cancelProxy}>
-                  Cancel
-                </button>
+                {video.liveProxy && !video.proxy && <div className="hint mt-1">The preview already plays while the proxy is being created — parts not encoded yet buffer until ffmpeg reaches them.</div>}
               </div>
             ) : (
               <div className="flex gap-2 mt-2 flex-wrap">
-                <button className={'btn btn-xs ' + (heavy && !video.proxy ? 'btn-primary' : '')} onClick={() => makeProxy('full')} title="Same resolution, frame rate and bit depth, re-encoded on the GPU (NVENC). ~3 min for 3.5 min of 4K/120.">
+                <button className={'btn btn-xs ' + (heavy && !video.proxy ? 'btn-primary' : '')} onClick={() => makeProxy('full')} title="Same resolution, frame rate and bit depth, re-encoded on the GPU (NVENC). ~1.5 min for 3.5 min of 4K/120; the preview plays during creation.">
                   {video.proxy ? 'Re-create' : 'Create'} full-quality proxy (GPU)
                 </button>
                 <button className="btn btn-xs" onClick={() => makeProxy('light')} title="1080p / 30 fps H.264 — small and fast, for weaker machines">

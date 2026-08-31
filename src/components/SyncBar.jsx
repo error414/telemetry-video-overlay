@@ -7,8 +7,10 @@ function fmtTime(s) {
   return m + ':' + sec.toFixed(3).padStart(6, '0');
 }
 
-export default function SyncBar({ video, videoRef, time, setTime, offset, setOffset, store, storeVersion, columnNames, setStatus, disabled }) {
+export default function SyncBar({ video, videoRef, time, setTime, offset, setOffset, store, storeVersion, columnNames, setStatus, disabled, seekLimit }) {
   const dur = video ? video.duration : 0;
+  // while a live proxy is encoding, only the already-written part is seekable
+  const limit = seekLimit != null ? Math.min(dur, seekLimit) : dur;
   const [playing, setPlaying] = useState(false);
   const [graphCol, setGraphCol] = useState('');
   const canvasRef = useRef(null);
@@ -23,7 +25,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
   const seek = (t) => {
     if (disabled) return;
     const v = videoRef.current;
-    t = Math.max(0, Math.min(dur, t));
+    t = Math.max(0, Math.min(limit, t));
     if (v) v.currentTime = t;
     setTime(t);
   };
@@ -126,6 +128,12 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     const tEnd = ((store.duration() - offset) / span) * W;
     g.fillStyle = 'rgba(79,195,199,.12)';
     g.fillRect(Math.max(0, tStart), 0, Math.min(W, tEnd) - Math.max(0, tStart), H);
+    // grey out the part a live proxy has not encoded yet (not seekable)
+    if (limit < span - 0.5) {
+      const lx = (limit / span) * W;
+      g.fillStyle = 'rgba(128,128,128,.22)';
+      g.fillRect(lx, 0, W - lx, H);
+    }
     // playhead
     g.strokeStyle = '#f2a93b';
     g.lineWidth = 2 * devicePixelRatio;
@@ -134,7 +142,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     g.moveTo(px, 0);
     g.lineTo(px, H);
     g.stroke();
-  }, [graphCol, offset, time, dur, store, storeVersion]);
+  }, [graphCol, offset, time, dur, limit, store, storeVersion]);
 
   const onCanvasClick = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -155,6 +163,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
         </button>
         <span className="mono w-28">{fmtTime(time)}</span>
         <input type="range" min={0} max={dur || 0} step={0.001} value={time} onChange={(e) => seek(Number(e.target.value))} className="flex-1" disabled={!video || disabled} />
+        {limit < dur - 0.5 && !disabled && <span className="text-xs hint">encoded to {fmtTime(limit)}</span>}
         {disabled && <span className="text-xs" style={{ color: 'var(--accent)' }}>playback locked — create a proxy in Files</span>}
         <span className="mono hint">{fmtTime(dur)}</span>
       </div>

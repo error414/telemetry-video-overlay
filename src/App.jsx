@@ -199,20 +199,24 @@ export default function App() {
 
   const [proxyProgress, setProxyProgress] = useState(null);
   useEffect(() => window.api.onProxyProgress(setProxyProgress), []);
+  // the proxy is playable while still being encoded: main announces the growing .part file
+  // and the Stage plays it through MSE (liveProxy.js) until the finished proxy takes over
+  useEffect(() => window.api.onProxyLive(({ part, codec }) => setVideo((v) => (v ? { ...v, liveProxy: part, liveCodec: codec } : v))), []);
   const makeProxy = useCallback(async (kind = 'full') => {
     if (!video) return;
     setProxyProgress(0);
     try {
-      const proxy = await window.api.makeProxy(video.path, video.duration, kind);
+      const proxy = await window.api.makeProxy(video.path, video.duration, kind, video.fps);
       if (!proxy) {
         setStatus('Proxy creation cancelled');
         return;
       }
-      setVideo((v) => ({ ...v, proxy }));
+      setVideo((v) => ({ ...v, proxy, liveProxy: null }));
       setStatus('Preview proxy created: ' + proxy);
     } catch (e) {
       setStatus('Proxy error: ' + e.message);
     } finally {
+      setVideo((v) => (v && v.proxy ? v : v ? { ...v, liveProxy: null } : v));
       setProxyProgress(null);
     }
   }, [video]);
@@ -473,7 +477,21 @@ export default function App() {
               setEditorOpen(true);
             }}
           />
-          <SyncBar video={video} videoRef={videoRef} time={time} setTime={setTime} offset={offset} setOffset={setOffset} store={store} storeVersion={storeVersion} columnNames={columnNames} setStatus={showPlayError} disabled={playbackBlocked && !(video && video.proxy)} />
+          <SyncBar
+            video={video}
+            videoRef={videoRef}
+            time={time}
+            setTime={setTime}
+            offset={offset}
+            setOffset={setOffset}
+            store={store}
+            storeVersion={storeVersion}
+            columnNames={columnNames}
+            setStatus={showPlayError}
+            disabled={playbackBlocked && !(video && (video.proxy || video.liveProxy))}
+            // while the live proxy is still encoding, seeking is capped to the part ffmpeg has written
+            seekLimit={video && video.liveProxy && !video.proxy && proxyProgress != null ? Math.max(0, proxyProgress * video.duration - 1) : undefined}
+          />
         </main>
 
         <aside className="w-[430px] flex flex-col min-h-0" style={{ background: 'var(--panel)', borderLeft: '1px solid var(--border)' }}>

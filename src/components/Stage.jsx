@@ -1,9 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { renderWidget, widgetBoxStyle, widgetDomId } from '../widgetRuntime.js';
+import { startLiveProxy } from '../liveProxy.js';
 import ShadowHtml from './ShadowHtml.jsx';
 
 function toFileUrl(p) {
   return 'file:///' + p.replace(/\\/g, '/').replace(/^\//, '').split('/').map(encodeURIComponent).join('/');
+}
+
+// codec string for the live-proxy SourceBuffer; Chromium matches the codec family, not the exact profile
+function liveProxyMime(video) {
+  if (video.liveCodec === 'hevc') {
+    const tenBit = video.pixFmt && video.pixFmt.includes('10');
+    return `video/mp4; codecs="${tenBit ? 'hvc1.2.4.L186.B0' : 'hvc1.1.6.L186.B0'}"`;
+  }
+  return 'video/mp4; codecs="avc1.640033"';
 }
 
 export default function Stage({ video, videoRef, widgets, store, storeVersion, offset, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, lt, setStatus, onOpenEditor }) {
@@ -26,6 +36,27 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
     ro.observe(el);
     return () => ro.disconnect();
   }, [vw, vh]);
+
+  // ---- live proxy: play the proxy through MSE while ffmpeg is still writing it ----
+  const live = !!(video && video.liveProxy && !video.proxy);
+  const timeKeepRef = useRef(0); // last playhead position, survives source swaps
+  timeKeepRef.current = time;
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !live) return;
+    const h = startLiveProxy(v, video.liveProxy, liveProxyMime(video), video.duration, timeKeepRef.current);
+    return () => h.stop();
+  }, [live, video && video.liveProxy]); // eslint-disable-line react-hooks/exhaustive-deps
+  // restore the playhead when the source swaps for the same video (original → live proxy → finished proxy)
+  const srcUrl = video && !live ? toFileUrl(video.proxy || video.path) : null;
+  const lastSrcRef = useRef({ path: video && video.path, src: srcUrl });
+  useEffect(() => {
+    const v = videoRef.current;
+    const prev = lastSrcRef.current;
+    const path = video && video.path;
+    if (v && srcUrl && path && prev.path === path && prev.src !== srcUrl) v.currentTime = timeKeepRef.current;
+    lastSrcRef.current = { path, src: srcUrl };
+  }, [srcUrl, video && video.path]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // rAF loop reading the video clock
   useEffect(() => {
@@ -96,7 +127,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
           {video ? (
             <video
               ref={videoRef}
-              src={toFileUrl(video.proxy || video.path)}
+              src={srcUrl || undefined}
               style={{ width: vw, height: vh, display: 'block', objectFit: 'fill' }}
               onSeeked={(e) => setTime(e.target.currentTime)}
               onPause={(e) => setTime(e.target.currentTime)}

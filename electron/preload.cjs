@@ -22,12 +22,18 @@ contextBridge.exposeInMainWorld('api', {
   paths: () => ipcRenderer.invoke('app:paths'),
   openBlackbox: () => ipcRenderer.invoke('dialog:openBlackbox'),
   decodeBlackbox: (file, opts) => ipcRenderer.invoke('blackbox:decode', file, opts),
-  makeProxy: (p, duration, kind) => ipcRenderer.invoke('video:makeProxy', p, duration, kind),
+  makeProxy: (p, duration, kind, fps) => ipcRenderer.invoke('video:makeProxy', p, duration, kind, fps),
   cancelProxy: () => ipcRenderer.invoke('video:cancelProxy'),
+  proxyTail: (p, offset, maxLen) => ipcRenderer.invoke('proxy:tail', p, offset, maxLen),
   exists: (p) => ipcRenderer.invoke('fs:exists', p),
   onProxyProgress: (cb) => {
     const h = (_e, f) => cb(f);
     ipcRenderer.on('proxy:progress', h);
     return () => ipcRenderer.removeListener('proxy:progress', h);
+  },
+  onProxyLive: (cb) => {
+    const h = (_e, info) => cb(info);
+    ipcRenderer.on('proxy:live', h);
+    return () => ipcRenderer.removeListener('proxy:live', h);
   },
 });
