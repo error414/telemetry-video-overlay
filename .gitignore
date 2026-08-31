@@ -1,4 +1,6 @@
 node_modules
 dist
+release
 *.preview-proxy.mp4
+*.preview-proxy.part.mp4
 .idea

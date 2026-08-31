@@ -3,9 +3,11 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-// Bundled binaries (ffmpeg-static / ffprobe-static ship platform executables in node_modules)
-const ffmpegPath = require('ffmpeg-static');
-const ffprobePath = require('ffprobe-static').path;
+// Bundled binaries (ffmpeg-static / ffprobe-static ship platform executables in node_modules).
+// In a packaged app they live in app.asar.unpacked (asar is not executable) — see asarUnpack in package.json.
+const fixAsar = (p) => (app.isPackaged ? p.replace('app.asar', 'app.asar.unpacked') : p);
+const ffmpegPath = fixAsar(require('ffmpeg-static'));
+const ffprobePath = fixAsar(require('ffprobe-static').path);
 
 // webSecurity is intentionally off (local file:// video from the dev server); hide the dev-only warnings.
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
@@ -26,8 +28,11 @@ function createWindow() {
     },
   });
   win.setMenuBarVisibility(false);
-  const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
-  win.loadURL(devUrl);
+  if (app.isPackaged) {
+    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  } else {
+    win.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173');
+  }
   // Forward renderer errors to the terminal so they are visible without DevTools.
   win.webContents.on('console-message', (_e, level, msg, line, src) => {
     if (level >= 2) console.error('[renderer]', msg, src ? `(${src}:${line})` : '');
@@ -220,7 +225,11 @@ ipcMain.handle('video:cancelProxy', () => {
 ipcMain.handle('fs:exists', (_e, p) => fs.existsSync(p));
 
 // ---------- INAV blackbox decoder (bundled from iNavFlight/blackbox-tools) ----------
-const bbDecodePath = path.join(__dirname, '..', 'bin', 'blackbox-tools', 'bin', process.platform === 'win32' ? 'blackbox_decode.exe' : 'blackbox_decode');
+// packaged: shipped via extraResources next to the asar; dev: in the repo's bin/
+const bbDecodeExe = process.platform === 'win32' ? 'blackbox_decode.exe' : 'blackbox_decode';
+const bbDecodePath = app.isPackaged
+  ? path.join(process.resourcesPath, 'blackbox-tools', 'bin', bbDecodeExe)
+  : path.join(__dirname, '..', 'bin', 'blackbox-tools', 'bin', bbDecodeExe);
 
 ipcMain.handle('dialog:openBlackbox', async () => {
   const r = await dialog.showOpenDialog(win, {
