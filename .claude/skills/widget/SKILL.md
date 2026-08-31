@@ -277,24 +277,90 @@ var chevron = '<path d="M0,' + (-r) + ' L' + r + ',' + r + ' L0,' + (r * 0.4) + 
 Load through `ctx.image` only; show a small "loading map…" note while any tile returns
 `undefined` and a failure note when `null`.
 
-## INAV blackbox column names (after `blackbox_decode`)
+## INAV blackbox columns — complete reference (after `blackbox_decode`)
 
-Headers depend on the decoder unit options (Files tab). Common ones:
+Verified against INAV firmware `src/main/blackbox/blackbox.c` (field definition arrays) and
+INAV `blackbox-tools` `src/blackbox_decode.c` + `src/units.h` (CSV formatting). INAV only —
+Betaflight logs differ.
 
-| data | header |
+**How the CSV header is formed:** a column gets a ` (unit)` suffix **only** when a decoder
+`--unit-*` option applies to it (`vbat (V)`, `time (us)`, `BaroAlt (cm)`, `GPS_speed (m/s)`).
+Every other column is dumped **raw with no suffix** — e.g. `attitude[2]` stays in decidegrees
+and is never converted by the decoder.
+
+**Decoder unit options** (Files tab exposes some of these; defaults marked):
+
+| option | values (default first) | raw unit in log | conversion |
+|---|---|---|---|
+| `--unit-frame-time` | `us`, ms, s | µs | ms = /1000, s = /1e6 |
+| `--unit-vbat` | `V`, mV, raw | 0.01 V (centivolts) | V = /100, mV = ×10 |
+| `--unit-amperage` | `A`, mA, raw | 0.01 A | A = /100, mA = ×10 |
+| `--unit-height` (`BaroAlt` only) | `cm`, m, ft | cm | m = /100, ft = /100 × 3.28084 |
+| `--unit-gps-speed` | `m/s`, km/h, mi/h, raw | cm/s | m/s = /100, km/h = /100 × 3.6 |
+| `--unit-rotation` (`gyroADC[]` only) | `raw`, deg/s, rad/s | raw ADC | via log-header `gyroScale` |
+| `--unit-acceleration` (`accSmooth[]` only) | `raw`, g, m/s2 | raw ADC (`acc_1G` = 1 g) | g via `acc_1G`, m/s² = g × 9.80665 |
+| `--unit-flags` | `flags` (text names), raw | bitfield | — |
+
+**Main frame fields** (per loop iteration; presence depends on FC config):
+
+| columns | unit / range |
 |---|---|
-| time | `time (us)` (the time column itself is not exposed as a value) |
-| sticks | `rcCommand[0..3]` = roll, pitch, yaw (≈ −500…500 around 0), throttle (≈ 1000–2000) |
-| motors | `motor[0..n]` |
-| attitude | `attitude[0..2]` roll/pitch/yaw in **decidegrees** (`/10`) |
-| simulated IMU | `roll`, `pitch`, `heading` (degrees, only with "Simulate IMU") |
-| altitude | `BaroAlt (cm)` or `(m)`, `navPos[2]`, `GPS_altitude` |
-| GPS | `GPS_numSat`, `GPS_coord[0]` lat, `GPS_coord[1]` lon, `GPS_speed (m/s)` / `(km/h)`, `GPS_ground_course` |
-| battery | `vbat (V)`, `amperage (A)`, `energyCumulative (mAh)` |
-| flags | `flightModeFlags (flags)`, `stateFlags (flags)`, `failsafePhase (flags)` — strings, use `ctx.raw` |
+| `loopIteration`, `time` | counter; µs |
+| `axisRate[0..2]`, `axisP/I/D/F[0..2]`, `fwAltP/I/D/Out`, `fwPosP/I/D/Out`, `mcPosAxisP[0..2]`, `mcVelAxisP/I/D/FF/Out[0..2]`, `mcSurfaceP/I/D/Out` | internal PID values, raw |
+| `rcData[0..3]` | µs, 1000–2000 |
+| `rcCommand[0..3]` | roll/pitch/yaw ≈ ±500 around 0, throttle 1000–2000 |
+| `vbat`, `amperage` | raw 0.01 V / 0.01 A → default CSV `vbat (V)`, `amperage (A)` |
+| `magADC[0..2]`, `gyroRaw[0..2]` | raw ADC |
+| `BaroAlt` | cm (→ `(cm)`/`(m)`/`(ft)` per option) |
+| `AirSpeed` | cm/s (pitot) |
+| `surfaceRaw` | cm, rangefinder without tilt correction |
+| `rssi` | 0–1023 |
+| `gyroADC[0..2]` | raw ADC (→ deg/s / rad/s per option) |
+| `gyroPeakRoll/Pitch/Yaw[0..2]` | Hz (dynamic notch peaks) |
+| `accSmooth[0..2]` | raw ADC, `acc_1G` = 1 g (→ g / m/s² per option) |
+| `accVib` | vibration level, raw |
+| **`attitude[0..2]`** | roll, pitch, yaw in **decidegrees** (/10 → deg); never converted |
+| `debug[0..7]` | depends on debug mode |
+| `motor[0..7]`, `servo[0..33]` | µs |
+| `navState`, `navFlags` | enum; bitfield |
+| `navEPH`, `navEPV`, `navPos[0..2]`, `navTgtPos[0..2]`, `navSurf` | cm |
+| `navVel[0..2]`, `navTgtVel[0..2]` | cm/s |
+| `navTgtHdg` | centidegrees (/100 → deg) |
+| `navAcc[0..2]` | cm/s² |
 
-Duplicate names across CSV files can be disambiguated as `file.csv:column`. When unsure, pick a
-plausible default and say so — the user fixes the Columns field with autocomplete.
+**GPS fields** (merged into the main CSV with `--merge-gps` — the app uses this; otherwise a
+separate `.gps.csv`):
+
+| column | raw → CSV |
+|---|---|
+| `GPS_fixType`, `GPS_numSat` | enum (0–3); count |
+| `GPS_coord[0]` lat, `GPS_coord[1]` lon | 1e7 deg → CSV **degrees**, 7 decimals |
+| `GPS_altitude` | logged as `llh.alt / 100` → **meters**, integer, no suffix |
+| `GPS_speed` | cm/s → per `--unit-gps-speed`, suffixed `(m/s)` / `(km/h)` |
+| **`GPS_ground_course`** | decidegrees → CSV **degrees**, 1 decimal, **no suffix** |
+| `GPS_hdop` | dimensionless ×100 |
+| `GPS_eph`, `GPS_epv` | cm |
+| `GPS_velned[0..2]` | cm/s (NED) |
+| `GPS_home_lat`, `GPS_home_lon` | added by decoder, degrees |
+
+**Slow frame fields** (change rarely; value holds between samples):
+`activeWpNumber`; `flightModeFlags`, `activeFlightModeFlags`, `stateFlags`, `failsafePhase`
+(text names by default — strings, use `ctx.raw`; `flightModeFlags2` is merged into
+`flightModeFlags`); `rxSignalReceived`, `rxFlightChannelsValid` (0/1); `rxUpdateRate` (Hz);
+`hwHealthStatus` (packed bits); `powerSupplyImpedance` (mΩ); `sagCompensatedVBat`
+(**stays 0.01 V — decoder converts only `vbat`**); `wind[0..2]` (cm/s NED);
+`mspOverrideFlags`; `IMUTemperature`, `baroTemperature`, `sens0..7Temp` (0.1 °C, invalid =
+−1250); `escRPM` (rpm); `escTemperature` (°C).
+
+**Columns added by the decoder itself:** `roll`, `pitch`, `heading` (degrees, `--simulate-imu`);
+`energyCumulative (mAh)` (whenever amperage is logged); `currentVirtual` +
+`energyCumulativeVirtual (mAh)` (`--simulate-current-meter`); `dateTime` (`--datetime`).
+
+**Practical takeaways:** `attitude[]` is the one angle column still in decidegrees in the CSV
+(hence `HEADING_UNIT = 'decideg'`), while `GPS_ground_course` and simulated `heading` are
+already in degrees. Duplicate names across CSV files can be disambiguated as
+`file.csv:column`. When unsure, pick a plausible default and say so — the user fixes the
+Columns field with autocomplete.
 
 ## Where to put the widget
 
