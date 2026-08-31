@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Smoke-test widgets in Node with synthetic telemetry and a fake ctx.
-//   node .claude/skills/widget/test-widgets.mjs            -> all EXAMPLE_WIDGETS from src/examples.js
-//   node .claude/skills/widget/test-widgets.mjs file.json  -> widgets from an export/import JSON
+//   node .claude/skills/widget/test-widgets.mjs                                 -> all EXAMPLE_WIDGETS from src/examples.js
+//   node .claude/skills/widget/test-widgets.mjs file.json                       -> widgets from an export/import JSON
+//   node .claude/skills/widget/test-widgets.mjs file.js --columns "a, b"        -> one bare widget function in a .js file
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
@@ -9,7 +10,10 @@ import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', '..', '..');
 
 let widgets;
-if (process.argv[2]) {
+if (process.argv[2] && process.argv[2].endsWith('.js')) {
+  const ci = process.argv.indexOf('--columns');
+  widgets = [{ name: path.basename(process.argv[2]), columns: ci > 0 ? process.argv[ci + 1] : '', code: readFileSync(process.argv[2], 'utf8') }];
+} else if (process.argv[2]) {
   const j = JSON.parse(readFileSync(process.argv[2], 'utf8'));
   widgets = Array.isArray(j) ? j : j.widgets || [];
 } else {
@@ -39,7 +43,16 @@ const series = {
   'rcCommand[3]': (i) => 1000 + (i % 100) * 10,
   'vbat (V)': (i) => 16.8 - i * 0.01,
   'amperage (A)': (i) => 5 + (i % 30),
+  'energyCumulative (mAh)': (i) => i * 4,
+  'navPos[2]': (i) => 1000 + Math.sin(i / 10) * 500,
+  GPS_altitude: (i) => 250 + Math.sin(i / 10) * 5,
+  'motor[0]': (i) => 1200 + (i % 50) * 10,
+  'motor[1]': (i) => 1250 + (i % 40) * 10,
+  'motor[2]': (i) => 1300 + (i % 30) * 10,
+  'motor[3]': (i) => 1350 + (i % 20) * 10,
   'flightModeFlags (flags)': (i) => (i < 100 ? 'ANGLE' : 'NAV RTH'),
+  'stateFlags (flags)': () => 'GPS_FIX_HOME|GPS_FIX',
+  'failsafePhase (flags)': () => 'IDLE',
 };
 const at = (name, i) => (series[name] ? series[name](i) : undefined);
 function range(name, from, to, max = 2000) {
