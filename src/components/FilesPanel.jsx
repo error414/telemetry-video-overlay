@@ -1,14 +1,19 @@
 import React from 'react';
 
+// opts: array of values, or [value, label] pairs when the blackbox_decode CLI value
+// (e.g. "kph") should be shown with a nicer label (e.g. "km/h")
 const SEL = (label, key, opts, bbOptions, setBbOptions) => (
   <label key={key} className="flex items-center justify-between gap-2">
     <span className="hint">{label}</span>
     <select className="input" style={{ width: 90 }} value={bbOptions[key]} onChange={(e) => setBbOptions((o) => ({ ...o, [key]: e.target.value }))}>
-      {opts.map((v) => (
-        <option key={v} value={v}>
-          {v}
-        </option>
-      ))}
+      {opts.map((v) => {
+        const [value, text] = Array.isArray(v) ? v : [v, v];
+        return (
+          <option key={value} value={value}>
+            {text}
+          </option>
+        );
+      })}
     </select>
   </label>
 );
@@ -119,7 +124,7 @@ export default function FilesPanel({ video, openVideo, removeVideo, layout, setL
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={bbOptions.datetime} onChange={(e) => setBbOptions((o) => ({ ...o, datetime: e.target.checked }))} /> Add dateTime column (UTC)
           </label>
-          {SEL('GPS speed', 'unitGpsSpeed', ['mps', 'kph', 'mph'], bbOptions, setBbOptions)}
+          {SEL('GPS speed', 'unitGpsSpeed', [['mps', 'm/s'], ['kph', 'km/h'], ['mph', 'mph']], bbOptions, setBbOptions)}
           {SEL('Height', 'unitHeight', ['m', 'cm', 'ft'], bbOptions, setBbOptions)}
           {SEL('Rotation', 'unitRotation', ['raw', 'deg/s', 'rad/s'], bbOptions, setBbOptions)}
           {SEL('Acceleration', 'unitAcceleration', ['raw', 'g', 'm/s2'], bbOptions, setBbOptions)}
