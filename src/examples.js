@@ -3,7 +3,7 @@
 // Library tab and are refreshed automatically when EXAMPLES_VERSION changes.
 
 // Bump when examples change: the library's "Example:" entries are refreshed automatically.
-export const EXAMPLES_VERSION = 18;
+export const EXAMPLES_VERSION = 19;
 
 export const EXAMPLE_WIDGETS = [
   {
@@ -140,9 +140,34 @@ export const EXAMPLE_WIDGETS = [
       var tj = raw[j].t;
       while (hi < raw.length && raw[hi].t <= tj + SMOOTH_MS / 2) { if (typeof raw[hi].v === 'number') { sum += raw[hi].v; cnt++; } hi++; }
       while (lo < raw.length && raw[lo].t < tj - SMOOTH_MS / 2) { if (typeof raw[lo].v === 'number') { sum -= raw[lo].v; cnt--; } lo++; }
-      if (tj >= time - WINDOW_MS && tj <= time) pts.push({ t: tj, v: cnt > 0 ? sum / cnt : raw[j].v });
+      pts.push({ t: tj, v: cnt > 0 ? sum / cnt : raw[j].v });
     }
-  } else pts = ctx.range(ctx.columns[0], time - WINDOW_MS, time, 300);
+  } else {
+    pts = ctx.range(ctx.columns[0], time - WINDOW_MS, time, 300);
+    // range ends at the last sample <= time; add the interpolated current value so the
+    // right end reaches the window edge instead of jumping when a new sample arrives
+    if (typeof values[0] === 'number' && (!pts.length || pts[pts.length - 1].t < time)) pts.push({ t: time, v: values[0] });
+  }
+  // pts overhang the window (a sample before the start, the current value / smoothing tail
+  // at the end); replace the overhang with points interpolated exactly at the window edges,
+  // otherwise both line ends visibly jump by one sample as points enter and leave the window
+  (function () {
+    var t0 = time - WINDOW_MS, t1 = time, out = [], i, p, q;
+    for (i = 0; i < pts.length; i++) {
+      p = pts[i];
+      if (p.t < t0) {
+        q = pts[i + 1];
+        if (q && q.t > t0 && typeof p.v === 'number' && typeof q.v === 'number')
+          out.push({ t: t0, v: p.v + (q.v - p.v) * (t0 - p.t) / (q.t - p.t) });
+      } else if (p.t > t1) {
+        q = pts[i - 1];
+        if (q && q.t < t1 && typeof p.v === 'number' && typeof q.v === 'number')
+          out.push({ t: t1, v: q.v + (p.v - q.v) * (t1 - q.t) / (p.t - q.t) });
+        break;
+      } else out.push(p);
+    }
+    pts = out;
+  })();
   var W = ctx.width, H = ctx.height, pad = 6 * scale;
   function colFor(dv) { var c = LINE_COLOR, i; for (i = 0; i < THRESHOLDS.length; i++) if (dv >= THRESHOLDS[i][0]) c = THRESHOLDS[i][1]; return c; }
   var min, max;
