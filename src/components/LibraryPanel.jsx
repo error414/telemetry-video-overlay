@@ -26,7 +26,7 @@ function Item({ w, addWidget, exportLib, removeFromLibrary }) {
   );
 }
 
-export default function LibraryPanel({ library, setLibrary, addWidget, setStatus }) {
+export default function LibraryPanel({ library, setLibrary, addWidget, setStatus, confirm }) {
   const restoreExamples = () => {
     setLibrary((l) => [...l.filter((w) => !w.name.startsWith('Example:')), ...EXAMPLE_WIDGETS.map((w) => ({ ...w, id: Math.random().toString(36).slice(2, 10) }))]);
     setStatus('Example widgets restored to their current versions');
@@ -53,7 +53,12 @@ export default function LibraryPanel({ library, setLibrary, addWidget, setStatus
 
   const examples = library.filter((w) => w.name.startsWith('Example:'));
   const own = library.filter((w) => !w.name.startsWith('Example:'));
-  const removeFromLibrary = (id) => setLibrary((l) => l.filter((x) => x.id !== id));
+  const removeFromLibrary = async (id) => {
+    const w = library.find((x) => x.id === id);
+    if (!w) return;
+    if (!(await confirm(`Delete "${w.name}" from the library?`))) return;
+    setLibrary((l) => l.filter((x) => x.id !== id));
+  };
 
   return (
     <div>

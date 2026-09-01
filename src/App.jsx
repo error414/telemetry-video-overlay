@@ -10,6 +10,7 @@ import WidgetsPanel, { ColumnsInput } from './components/WidgetsPanel.jsx';
 import LibraryPanel from './components/LibraryPanel.jsx';
 import ExportPanel, { EXPORT_MODES } from './components/ExportPanel.jsx';
 import CodeEditorModal from './components/CodeEditorModal.jsx';
+import { useConfirm } from './components/ConfirmDialog.jsx';
 
 const LIB_KEY = 'telemetry-overlay.widgetLibrary.v1';
 const PROJECT_KEY = 'telemetry-overlay.lastProject.v1';
@@ -108,6 +109,8 @@ export default function App() {
   const [playError, setPlayError] = useState(null);
   // once the decoder is known to be broken, lock all video transport (play/step/seek) until a proxy exists
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  // yes/no dialog for every remove/delete action
+  const [confirm, confirmDialog] = useConfirm();
   const showPlayError = useCallback((msg, { block = true } = {}) => {
     setStatus(msg);
     setPlayError(msg);
@@ -199,20 +202,24 @@ export default function App() {
   );
 
   const removeSource = useCallback(
-    (id) => {
+    async (id) => {
+      const src = store.sources.find((x) => x.id === id);
+      if (!src) return;
+      if (!(await confirm(`Remove "${src.name || src.path}" from the project? The file stays on disk.`))) return;
       store.sources = store.sources.filter((x) => x.id !== id);
       store.rebuild();
       bump();
     },
-    [store]
+    [store, confirm]
   );
 
-  const removeAllSources = useCallback(() => {
+  const removeAllSources = useCallback(async () => {
+    if (!(await confirm(`Remove all ${store.sources.length} telemetry files from the project? The files stay on disk.`))) return;
     store.sources = [];
     store.rebuild();
     bump();
     setStatus('All telemetry files removed');
-  }, [store]);
+  }, [store, confirm]);
 
   // ---- Video ----
   const probeVideo = useCallback(async (p) => {
@@ -287,14 +294,15 @@ export default function App() {
   }, [probeVideo, warnIfUndecodable, widgets.length]);
 
   // removes the video from the project only — the file (and any proxy) stays on disk
-  const removeVideo = useCallback(() => {
+  const removeVideo = useCallback(async () => {
+    if (!(await confirm('Remove the video from the project? The file (and any proxy) stays on disk.'))) return;
     if (proxyProgress != null) window.api.cancelProxy();
     setVideo(null);
     setPlaybackBlocked(false);
     setPlayError(null);
     setTime(0);
     setStatus('Video removed from the project');
-  }, [proxyProgress]);
+  }, [proxyProgress, confirm]);
 
   // ---- Widgets ----
   const updateWidget = useCallback((id, patch) => setWidgets((ws) => ws.map((w) => (w.id === id ? { ...w, ...patch } : w))), []);
@@ -304,7 +312,15 @@ export default function App() {
     setSelectedId(w.id);
     setTab('widgets');
   }, []);
-  const removeWidget = useCallback((id) => setWidgets((ws) => ws.filter((w) => w.id !== id)), []);
+  const removeWidget = useCallback(
+    async (id) => {
+      const w = widgets.find((x) => x.id === id);
+      if (!w) return;
+      if (!(await confirm(`Delete widget "${w.name}"?`))) return;
+      setWidgets((ws) => ws.filter((x) => x.id !== id));
+    },
+    [widgets, confirm]
+  );
 
   // ---- Export job (lives here so it survives tab switches) ----
   const [job, setJob] = useState({ mode: 'video', quality: 'bitrate', encoder: 'auto', overlayFps: 30, running: false, progress: null, log: '', result: null, out: null, setup: null });
@@ -639,7 +655,7 @@ export default function App() {
                 }}
               />
             )}
-            {tab === 'library' && <LibraryPanel library={library} setLibrary={setLibrary} addWidget={addWidget} setStatus={setStatus} />}
+            {tab === 'library' && <LibraryPanel library={library} setLibrary={setLibrary} addWidget={addWidget} setStatus={setStatus} confirm={confirm} />}
             {tab === 'export' && <ExportPanel video={video} widgets={widgets} job={job} setJobOption={setJobOption} startExport={startExport} cancelExport={cancelExport} />}
           </div>
         </aside>
@@ -670,6 +686,7 @@ export default function App() {
         <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} offset={offset} columnNames={columnNames} ColumnsInput={ColumnsInput} />
       )}
 
+      {confirmDialog}
       {playError && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(5,8,11,.72)' }} onMouseDown={(e) => e.target === e.currentTarget && setPlayError(null)}>
           <div className="rounded-lg p-5 flex flex-col gap-4" style={{ width: 'min(92vw, 560px)', background: 'var(--panel)', border: '1px solid var(--border-strong)', boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}>
