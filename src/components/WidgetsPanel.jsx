@@ -105,109 +105,124 @@ export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidg
 
   return (
     <div>
-      <div className="section-title">
-        Widgets on video
-        <button className="btn btn-xs btn-primary" style={{ marginLeft: 'auto' }} onClick={() => addWidget()}>
-          + New widget
-        </button>
-      </div>
-      {widgets.length === 0 && <div className="hint mb-2">No widgets yet. Create one or add from the Library.</div>}
-      <ul className="mb-3 flex flex-col gap-0.5">
-        {widgets.map((w) => (
-          <li key={w.id} className={'row ' + (selected && selected.id === w.id ? 'row-active' : '')} onClick={() => setSelectedId(w.id)} onDoubleClick={() => (setSelectedId(w.id), openEditor())}>
-            <input type="checkbox" checked={w.visible !== false} onChange={(e) => updateWidget(w.id, { visible: e.target.checked })} onClick={(e) => e.stopPropagation()} title="Visible" />
-            <span className="flex-1 truncate">{w.name}</span>
-            <button className="btn btn-xs btn-icon" onClick={(e) => (e.stopPropagation(), move(w.id, -1))} title="Send backward">
-              ↑
-            </button>
-            <button className="btn btn-xs btn-icon" onClick={(e) => (e.stopPropagation(), move(w.id, 1))} title="Bring forward">
-              ↓
-            </button>
-            <button className="btn btn-xs btn-icon" onClick={(e) => (e.stopPropagation(), addWidget({ ...w, id: undefined, name: w.name + ' copy', x: w.x + 20, y: w.y + 20 }))} title="Duplicate">
-              ⧉
-            </button>
-            <button className="btn btn-xs btn-icon btn-danger" onClick={(e) => (e.stopPropagation(), removeWidget(w.id))} title="Delete">
-              ✕
-            </button>
-          </li>
-        ))}
-      </ul>
+      <section className="bay bay-amber">
+        <header className="bay-head">
+          <span className="bay-tick" />
+          Widgets on video
+          <span className="bay-note">{widgets.length ? widgets.length + (widgets.length === 1 ? ' widget' : ' widgets') : 'empty'}</span>
+          <button className="btn btn-xs btn-primary" onClick={() => addWidget()}>
+            + New widget
+          </button>
+        </header>
+        <div className="bay-body">
+          {widgets.length === 0 && <div className="hint">No widgets yet. Create one or add from the Library.</div>}
+          <ul className="flex flex-col gap-0.5">
+            {widgets.map((w) => (
+              <li key={w.id} className={'row ' + (selected && selected.id === w.id ? 'row-active' : '')} onClick={() => setSelectedId(w.id)} onDoubleClick={() => (setSelectedId(w.id), openEditor())}>
+                <input type="checkbox" checked={w.visible !== false} onChange={(e) => updateWidget(w.id, { visible: e.target.checked })} onClick={(e) => e.stopPropagation()} title="Visible" />
+                <span className="flex-1 truncate">{w.name}</span>
+                <button className="btn btn-xs btn-icon" onClick={(e) => (e.stopPropagation(), move(w.id, -1))} title="Send backward">
+                  ↑
+                </button>
+                <button className="btn btn-xs btn-icon" onClick={(e) => (e.stopPropagation(), move(w.id, 1))} title="Bring forward">
+                  ↓
+                </button>
+                <button className="btn btn-xs btn-icon" onClick={(e) => (e.stopPropagation(), addWidget({ ...w, id: undefined, name: w.name + ' copy', x: w.x + 20, y: w.y + 20 }))} title="Duplicate">
+                  ⧉
+                </button>
+                <button className="btn btn-xs btn-icon btn-danger" onClick={(e) => (e.stopPropagation(), removeWidget(w.id))} title="Delete">
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
 
       {selected && (
-        <div className="card">
-          <div className="flex items-center gap-2">
-            <input className="input font-medium" value={selected.name} onChange={(e) => updateWidget(selected.id, { name: e.target.value })} />
-            <button className="btn btn-primary" onClick={openEditor} title="Open the full editor with live preview">
-              Edit code
-            </button>
-          </div>
+        <section className="bay bay-mixed">
+          <header className="bay-head">
+            <span className="bay-tick" />
+            Selected widget
+            <span className="bay-note">{selected.w}×{selected.h} px</span>
+          </header>
+          <div className="bay-body">
+            <div className="card">
+              <div className="flex items-center gap-2">
+                <input className="input font-medium" value={selected.name} onChange={(e) => updateWidget(selected.id, { name: e.target.value })} />
+                <button className="btn btn-primary" onClick={openEditor} title="Open the full editor with live preview">
+                  Edit code
+                </button>
+              </div>
 
-          <label className="label">Columns → values[0], values[1], …</label>
-          <ColumnsInput value={selected.columns} onChange={(v) => updateWidget(selected.id, { columns: v })} columnNames={columnNames} />
-          {missing.length > 0 && (
-            <div className="text-xs mt-1" style={{ color: 'var(--warn)' }}>
-              Not found in loaded CSVs: {missing.join(', ')}
-            </div>
-          )}
-          {cols.length > 0 && (
-            <div className="mono text-xs mt-1" style={{ color: 'var(--muted)' }}>
-              {cols.map((c, i) => `[${i}] ${fmt(store.valueAt(c, time + offset))}`).join('   ')}
-            </div>
-          )}
+              <label className="label">Columns → values[0], values[1], …</label>
+              <ColumnsInput value={selected.columns} onChange={(v) => updateWidget(selected.id, { columns: v })} columnNames={columnNames} />
+              {missing.length > 0 && (
+                <div className="text-xs mt-1" style={{ color: 'var(--warn)' }}>
+                  Not found in loaded CSVs: {missing.join(', ')}
+                </div>
+              )}
+              {cols.length > 0 && (
+                <div className="mono text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                  {cols.map((c, i) => `[${i}] ${fmt(store.valueAt(c, time + offset))}`).join('   ')}
+                </div>
+              )}
 
-          <div className="grid grid-cols-4 gap-2">
-            {['x', 'y', 'w', 'h'].map((k) => (
-              <label key={k}>
-                <span className="label">{k}</span>
-                <input className="input mono" type="number" value={selected[k]} onChange={(e) => updateWidget(selected.id, { [k]: Number(e.target.value) })} />
+              <div className="grid grid-cols-4 gap-2">
+                {['x', 'y', 'w', 'h'].map((k) => (
+                  <label key={k}>
+                    <span className="label">{k}</span>
+                    <input className="input mono" type="number" value={selected[k]} onChange={(e) => updateWidget(selected.id, { [k]: Number(e.target.value) })} />
+                  </label>
+                ))}
+              </div>
+
+              <label className="label">
+                Opacity <span className="mono" style={{ color: 'var(--text)' }}>{selected.opacity}</span>
               </label>
-            ))}
+              <input type="range" min={0} max={1} step={0.01} value={selected.opacity} onChange={(e) => updateWidget(selected.id, { opacity: Number(e.target.value) })} />
+
+              <label className="label">Code</label>
+              <textarea
+                className="input mono text-xs h-56 whitespace-pre"
+                spellCheck={false}
+                value={selected.code}
+                onChange={(e) => updateWidget(selected.id, { code: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const t = e.target;
+                    const s = t.selectionStart;
+                    const v = t.value.slice(0, s) + '  ' + t.value.slice(t.selectionEnd);
+                    updateWidget(selected.id, { code: v });
+                    requestAnimationFrame(() => t.setSelectionRange(s + 2, s + 2));
+                  }
+                }}
+              />
+              {out && out.error && (
+                <pre className="text-xs whitespace-pre-wrap mt-1" style={{ color: 'var(--bad)' }}>
+                  {out.error}
+                </pre>
+              )}
+
+              <label className="label">CSS (scoped to this widget; hover the editor preview for ids/classes)</label>
+              <textarea className="input mono text-xs h-24 whitespace-pre" spellCheck={false} value={selected.css || ''} placeholder={'.label { fill: #ffd166; }\n:root { filter: drop-shadow(0 0 6px #000); }'} onChange={(e) => updateWidget(selected.id, { css: e.target.value })} />
+
+              <details className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
+                <summary className="cursor-pointer">Widget API reference</summary>
+                <pre className="mono whitespace-pre-wrap mt-1 p-2 rounded" style={{ background: 'var(--bg)' }}>
+                  {API_DOC}
+                </pre>
+              </details>
+
+              <div className="flex gap-2 mt-3">
+                <button className="btn" onClick={() => saveToLibrary(selected)}>
+                  Save to library
+                </button>
+              </div>
+            </div>
           </div>
-
-          <label className="label">
-            Opacity <span className="mono" style={{ color: 'var(--text)' }}>{selected.opacity}</span>
-          </label>
-          <input type="range" min={0} max={1} step={0.01} value={selected.opacity} onChange={(e) => updateWidget(selected.id, { opacity: Number(e.target.value) })} />
-
-          <label className="label">Code</label>
-          <textarea
-            className="input mono text-xs h-56 whitespace-pre"
-            spellCheck={false}
-            value={selected.code}
-            onChange={(e) => updateWidget(selected.id, { code: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === 'Tab') {
-                e.preventDefault();
-                const t = e.target;
-                const s = t.selectionStart;
-                const v = t.value.slice(0, s) + '  ' + t.value.slice(t.selectionEnd);
-                updateWidget(selected.id, { code: v });
-                requestAnimationFrame(() => t.setSelectionRange(s + 2, s + 2));
-              }
-            }}
-          />
-          {out && out.error && (
-            <pre className="text-xs whitespace-pre-wrap mt-1" style={{ color: 'var(--bad)' }}>
-              {out.error}
-            </pre>
-          )}
-
-          <label className="label">CSS (scoped to this widget; hover the editor preview for ids/classes)</label>
-          <textarea className="input mono text-xs h-24 whitespace-pre" spellCheck={false} value={selected.css || ''} placeholder={'.label { fill: #ffd166; }\n:root { filter: drop-shadow(0 0 6px #000); }'} onChange={(e) => updateWidget(selected.id, { css: e.target.value })} />
-
-          <details className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
-            <summary className="cursor-pointer">Widget API reference</summary>
-            <pre className="mono whitespace-pre-wrap mt-1 p-2 rounded" style={{ background: 'var(--bg)' }}>
-              {API_DOC}
-            </pre>
-          </details>
-
-          <div className="flex gap-2 mt-3">
-            <button className="btn" onClick={() => saveToLibrary(selected)}>
-              Save to library
-            </button>
-          </div>
-        </div>
+        </section>
       )}
     </div>
   );

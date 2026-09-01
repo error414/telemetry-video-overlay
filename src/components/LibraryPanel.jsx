@@ -57,37 +57,47 @@ export default function LibraryPanel({ library, setLibrary, addWidget, setStatus
 
   return (
     <div>
-      <div className="section-title">
-        Saved widgets
-        <span style={{ marginLeft: 'auto' }} className="flex gap-1">
+      <section className="bay bay-amber">
+        <header className="bay-head">
+          <span className="bay-tick" />
+          Saved widgets
+          <span className="bay-note">{own.length ? own.length + (own.length === 1 ? ' widget' : ' widgets') : 'empty'}</span>
           <button className="btn btn-xs" onClick={importLib}>
             Import…
           </button>
           <button className="btn btn-xs" onClick={() => exportLib(library, 'widgets.json')} disabled={!library.length}>
             Export all…
           </button>
-        </span>
-      </div>
-      <p className="hint mb-2">Widgets saved here stay in the application and can be added to any project. Use Import/Export to share them as JSON.</p>
-      <div className="flex flex-col gap-1.5">
-        {own.map((w) => (
-          <Item key={w.id} w={w} addWidget={addWidget} exportLib={exportLib} removeFromLibrary={removeFromLibrary} />
-        ))}
-      </div>
-      {!own.length && <div className="hint">No own widgets yet — select a widget on the video and click "Save to library".</div>}
+        </header>
+        <div className="bay-body">
+          <p className="hint mb-2">Widgets saved here stay in the application and can be added to any project. Use Import/Export to share them as JSON.</p>
+          <div className="flex flex-col gap-1.5">
+            {own.map((w) => (
+              <Item key={w.id} w={w} addWidget={addWidget} exportLib={exportLib} removeFromLibrary={removeFromLibrary} />
+            ))}
+          </div>
+          {!own.length && <div className="hint">No own widgets yet — select a widget on the video and click "Save to library".</div>}
+        </div>
+      </section>
 
-      <div className="section-title mt-5">
-        Examples
-        <button className="btn btn-xs" style={{ marginLeft: 'auto' }} onClick={restoreExamples} title="Re-add the built-in example widgets (replaces existing 'Example:' entries)">
-          Restore
-        </button>
-      </div>
-      <p className="hint mb-2">Each example starts with a SETTINGS block — colors, units, sizes. Add one, then "Edit code".</p>
-      <div className="flex flex-col gap-1.5">
-        {examples.map((w) => (
-          <Item key={w.id} w={w} addWidget={addWidget} exportLib={exportLib} removeFromLibrary={removeFromLibrary} />
-        ))}
-      </div>
+      <section className="bay bay-tele">
+        <header className="bay-head">
+          <span className="bay-tick" />
+          Examples
+          <span className="bay-note">{examples.length} built-in</span>
+          <button className="btn btn-xs" onClick={restoreExamples} title="Re-add the built-in example widgets (replaces existing 'Example:' entries)">
+            Restore
+          </button>
+        </header>
+        <div className="bay-body">
+          <p className="hint mb-2">Each example starts with a SETTINGS block — colors, units, sizes. Add one, then "Edit code".</p>
+          <div className="flex flex-col gap-1.5">
+            {examples.map((w) => (
+              <Item key={w.id} w={w} addWidget={addWidget} exportLib={exportLib} removeFromLibrary={removeFromLibrary} />
+            ))}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

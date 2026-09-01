@@ -4,6 +4,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { css as cssLang } from '@codemirror/lang-css';
 import { githubDark } from '@uiw/codemirror-theme-github';
 import { renderWidget, parseColumns, widgetDomId } from '../widgetRuntime.js';
+import { colorPicker } from './cmColorPicker.js';
 import ShadowHtml from './ShadowHtml.jsx';
 
 /** Build a readable selector for an element: tag#id.class1.class2 */
@@ -97,13 +98,13 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
               {tab === 'code' ? (
-                <CodeMirror value={widget.code} height="100%" theme={githubDark} extensions={[javascript()]} onChange={(v) => updateWidget(widget.id, { code: v })} basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }} style={{ height: '100%' }} />
+                <CodeMirror value={widget.code} height="100%" theme={githubDark} extensions={[javascript(), colorPicker]} onChange={(v) => updateWidget(widget.id, { code: v })} basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }} style={{ height: '100%' }} />
               ) : (
                 <CodeMirror
                   value={widget.css || ''}
                   height="100%"
                   theme={githubDark}
-                  extensions={[cssLang()]}
+                  extensions={[cssLang(), colorPicker]}
                   placeholder={CSS_PLACEHOLDER}
                   onChange={(v) => updateWidget(widget.id, { css: v })}
                   basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }}

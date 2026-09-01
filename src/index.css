@@ -275,6 +275,66 @@ input[type='radio'] {
   border-radius: 6px;
   padding: 10px 12px;
 }
+
+/* ---- section bays (Files tab): enclosed rack modules, one per section.
+   Header strip is hue-coded: amber = machine (video), teal = telemetry data,
+   split tick = the decoder (machine log in, telemetry out). Body is recessed
+   to --bg so cards and buttons read as sitting inside the module. */
+.bay {
+  margin-bottom: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.bay-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-strong);
+  font: 600 11px var(--font-cond);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.bay-tick {
+  flex: none;
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+}
+.bay-amber .bay-head {
+  background: rgba(242, 169, 59, 0.08);
+  color: var(--accent);
+}
+.bay-amber .bay-tick {
+  background: var(--accent);
+}
+.bay-tele .bay-head {
+  background: rgba(79, 195, 199, 0.08);
+  color: var(--tele);
+}
+.bay-tele .bay-tick {
+  background: var(--tele);
+}
+.bay-mixed .bay-head {
+  background: linear-gradient(90deg, rgba(242, 169, 59, 0.08), rgba(79, 195, 199, 0.08));
+  color: var(--text);
+}
+.bay-mixed .bay-tick {
+  background: linear-gradient(180deg, var(--accent) 0 50%, var(--tele) 50% 100%);
+}
+.bay-note {
+  margin-left: auto;
+  font: 500 10px var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.bay-body {
+  padding: 10px;
+}
 .chip {
   display: inline-flex;
   align-items: center;
