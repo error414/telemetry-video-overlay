@@ -1,0 +1,49 @@
+#!/bin/sh
+# Refuses to push a release tag (vX.Y.Z) whose version does not match the
+# "version" in package.json of the tagged commit, or whose commit is not on
+# origin/main. Enabled by `npm install` (prepare script sets core.hooksPath).
+# Bypass with `git push --no-verify` if you really must.
+
+remote="$1"
+zero=0000000000000000000000000000000000000000
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in refs/tags/v*) ;; *) continue ;; esac
+  [ "$local_sha" = "$zero" ] && continue   # tag deletion
+
+  tag=${remote_ref#refs/tags/}
+  tag_version=${tag#v}
+
+  # tag object -> commit
+  commit=$(git rev-list -n 1 "$local_sha" 2>/dev/null) || commit=$local_sha
+
+  pkg_version=$(git show "$commit:package.json" 2>/dev/null \
+    | sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+
+  if [ -z "$pkg_version" ]; then
+    echo "pre-push: $tag: package.json not found in tagged commit $commit" >&2
+    status=1
+    continue
+  fi
+
+  if [ "$tag_version" != "$pkg_version" ]; then
+    echo "pre-push: tag $tag does not match package.json version $pkg_version" >&2
+    echo "          bump package.json (npm version $tag_version) and re-tag, or tag v$pkg_version" >&2
+    status=1
+    continue
+  fi
+
+  main_ref="refs/remotes/$remote/main"
+  if git show-ref --verify --quiet "$main_ref"; then
+    if ! git merge-base --is-ancestor "$commit" "$main_ref"; then
+      echo "pre-push: tag $tag points to $commit which is not on $remote/main (push main first)" >&2
+      status=1
+      continue
+    fi
+  else
+    echo "pre-push: warning: $main_ref not found, skipping main-branch check for $tag" >&2
+  fi
+done
+
+exit $status

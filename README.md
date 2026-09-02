@@ -14,6 +14,23 @@ npm start
 ffmpeg / ffprobe come from the `ffmpeg-static` / `ffprobe-static` npm packages (downloaded
 into `node_modules` on install), nothing else needs to be installed.
 
+## Release
+
+`npm run dist` builds the Windows installer and portable exe into `release/`.
+
+Releases are published by GitHub Actions (`.github/workflows/release.yml`): push a version
+tag and the workflow builds and creates a GitHub release with the installer / portable exe
+attached (auto-generated notes). The tag must equal `v` + the `version` in `package.json`
+and its commit must be on `main`; the `pre-push` hook in `.githooks/` (enabled by
+`npm install`) refuses to push a tag that does not, and the workflow checks it again.
+
+```
+npm version 0.4.0          # bumps package.json + package-lock.json, commits, creates tag v0.4.0
+git push origin main --follow-tags
+```
+
+A tag with a suffix (`v0.4.0-beta.1`) is published as a pre-release.
+
 ## Workflow
 
 1. **Open video** (mp4/mov/mkv …). It is probed with ffprobe (resolution, fps, codec, bitrate).
