@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   saveOutput: (name, ext) => ipcRenderer.invoke('dialog:saveOutput', name, ext),
   openDir: () => ipcRenderer.invoke('dialog:openDir'),
   readText: (p) => ipcRenderer.invoke('fs:readText', p),
+  readBytes: (p) => ipcRenderer.invoke('fs:readBytes', p),
   writeText: (p, t) => ipcRenderer.invoke('fs:writeText', p, t),
   probe: (p) => ipcRenderer.invoke('video:probe', p),
   exportStart: (o) => ipcRenderer.invoke('export:start', o),

@@ -461,6 +461,20 @@ input[type='radio'] {
   background: var(--accent);
   transition: width 0.2s;
 }
+/* indeterminate: a sliding segment for work with no measurable percentage */
+.progress > div.indet {
+  width: 40%;
+  transition: none;
+  animation: progress-indet 1.2s ease-in-out infinite;
+}
+@keyframes progress-indet {
+  from {
+    margin-left: -40%;
+  }
+  to {
+    margin-left: 100%;
+  }
+}
 
 /* ---- stage toolbar + status bar ---- */
 .stage-toolbar {

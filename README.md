@@ -25,6 +25,11 @@ into `node_modules` on install), nothing else needs to be installed.
    **Add CSV** still works for CSVs you decoded elsewhere (`LOG.01.csv` *and* `LOG.01.gps.csv`).
    The time column and unit (µs/ms/s) are auto-detected and can be changed in the *Files* tab.
    All files share one time base (blackbox `time (us)`), so no per-file alignment is needed.
+   Logs denser than 120 Hz are thinned while loading (a 500 Hz log keeps every 4th sample →
+   125 Hz): widgets render at most 120 fps, so more samples only cost memory and load time.
+   The *Files* tab shows the detected rate and the step; GPS files (≤ 25 Hz) are kept whole.
+   Whole-flight statistics (`ctx.stats` min/max/mean) are computed from the kept samples, so a
+   spike shorter than the step (e.g. under 8 ms for a 500 Hz log) may read slightly lower.
    *Camera HEVC files* (e.g. DJI 4K/120 10-bit) are often rejected by Chromium's decoder
    (`PIPELINE_ERROR_DECODE`) even though the GPU could decode them — DJI's low-latency
    encoder uses HEVC *tiles*, which Chromium's D3D11 pipeline doesn't accept. In *Files* click

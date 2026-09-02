@@ -3,7 +3,7 @@
 // Library tab and are refreshed automatically when EXAMPLES_VERSION changes.
 
 // Bump when examples change: the library's "Example:" entries are refreshed automatically.
-export const EXAMPLES_VERSION = 27;
+export const EXAMPLES_VERSION = 28;
 
 export const EXAMPLE_WIDGETS = [
   {
@@ -23,14 +23,21 @@ export const EXAMPLE_WIDGETS = [
   var FONT       = 'Arial, sans-serif';
   var SIZE       = 64;           // value font size at the default 320x110 size; scales with the widget
   var SHADOW     = '0 0 8px rgba(0,0,0,.9)';  // text shadow ('' = none)
-  var BG         = 'transparent';// box background, e.g. 'rgba(0,0,0,.4)'
+  var BG         = 'rgba(0,0,0,.25)';  // box background color + transparency (last number: 0 = invisible, 1 = solid; 'transparent' = none)
   var RADIUS     = 8;            // box corner radius at the default size; scales with the widget
   var ALIGN      = 'left';       // 'left' | 'center' | 'right'
   var SHOW_MAX   = false;        // show whole-flight maximum under the value
+  var SMOOTH_MS  = 300;          // moving-average window (ms) that filters out quick small jumps of the value (0 = off)
   // -------------------------------
   var scale = Math.min(ctx.width / 320, ctx.height / 110);  // all sizes scale with the widget (settings are for the default 320x110)
   var fs = SIZE * scale, radius = RADIUS * scale;
   var v = values[0];
+  if (SMOOTH_MS > 0 && typeof v === 'number') {
+    // centered moving average: quick small spikes disappear without visible lag
+    var pts = ctx.range(ctx.columns[0], time - SMOOTH_MS / 2, time + SMOOTH_MS / 2, 50), sum = 0, n = 0, i;
+    for (i = 0; i < pts.length; i++) if (typeof pts[i].v === 'number') { sum += pts[i].v; n++; }
+    if (n > 0) v = sum / n;
+  }
   var txt = (typeof v === 'number') ? (v * MULTIPLIER).toFixed(DIGITS) : '--';
   var st = SHOW_MAX ? ctx.stats(ctx.columns[0]) : null;
   // CSS hooks: #bignum (box), .label, .value, .unit, .max

@@ -33,43 +33,136 @@ export function guessTimeUnit(colName, sample) {
 
 const UNIT_DIV = { us: 1e6, ms: 1e3, s: 1 };
 
-export function parseCsvText(text) {
-  const res = Papa.parse(text, { header: true, skipEmptyLines: true, dynamicTyping: false, transformHeader: (h) => h.trim() });
-  const columns = res.meta.fields || [];
-  return { columns, rows: res.data };
+/** Widgets render at most 120 fps, so a denser log only costs memory and load time. */
+export const TARGET_SAMPLE_RATE = 120;
+
+/**
+ * Sample rate (Hz) of a time column from the median gap between consecutive
+ * rows — robust against the odd dropped frame or duplicated timestamp. 0 when
+ * there are too few usable gaps to tell.
+ */
+export function detectSampleRate(rows, timeIndex, timeUnit) {
+  const div = UNIT_DIV[timeUnit] || 1;
+  const gaps = [];
+  for (let i = 1; i < rows.length; i++) {
+    const a = Number(rows[i - 1][timeIndex]);
+    const b = Number(rows[i][timeIndex]);
+    if (Number.isFinite(a) && Number.isFinite(b) && b > a) gaps.push((b - a) / div);
+  }
+  if (gaps.length < 8) return 0;
+  gaps.sort((x, y) => x - y);
+  const dt = gaps[gaps.length >> 1];
+  return dt > 0 ? 1 / dt : 0;
 }
 
-/** Build per-column series from parsed rows, using the chosen time column + unit. */
+/** Keep every step-th row so the result still has at least targetRate samples per second. */
+export function decimationStep(sourceRate, targetRate = TARGET_SAMPLE_RATE) {
+  return sourceRate > 0 ? Math.max(1, Math.floor(sourceRate / targetRate)) : 1;
+}
+
+/**
+ * Stream-parse a CSV (string, Blob or File) into {columns, rows} where each row is
+ * an array of raw strings in column order. Rows are decimated while they stream in:
+ * after the first `probeRows` rows the time column is guessed, its sample rate
+ * measured and only every step-th row is kept from then on (the probe buffer is
+ * thinned the same way, by absolute row index). A 145 MB / 500 Hz blackbox log so
+ * never materialises as 200k row objects — and a Blob is decoded 10 MB at a time
+ * instead of as one giant string.
+ */
+export function parseCsv(input, { targetRate = TARGET_SAMPLE_RATE, probeRows = 200 } = {}) {
+  return new Promise((resolve, reject) => {
+    let columns = null;
+    let rows = [];
+    let totalRows = 0;
+    let step = 0; // 0 = not decided yet (still probing)
+    let timeColumn;
+    let timeUnit = 's';
+    let sourceRate = 0;
+
+    const decide = () => {
+      if (columns.length) {
+        timeColumn = guessTimeColumn(columns);
+        const ti = columns.indexOf(timeColumn);
+        const sample = Number(rows[Math.min(10, rows.length - 1)]?.[ti]);
+        timeUnit = guessTimeUnit(timeColumn, sample);
+        sourceRate = detectSampleRate(rows, ti, timeUnit);
+      }
+      step = decimationStep(sourceRate, targetRate);
+      if (step > 1) rows = rows.filter((_, i) => i % step === 0);
+    };
+
+    Papa.parse(input, {
+      header: false,
+      skipEmptyLines: true,
+      dynamicTyping: false,
+      step: (res) => {
+        const row = res.data;
+        if (!columns) {
+          columns = row.map((h) => String(h).trim());
+          return;
+        }
+        if (step === 0) {
+          rows.push(row);
+          totalRows++;
+          if (totalRows >= probeRows) decide();
+          return;
+        }
+        if (totalRows % step === 0) rows.push(row);
+        totalRows++;
+      },
+      complete: () => {
+        if (!columns) columns = [];
+        if (step === 0) decide();
+        resolve({ columns, rows, timeColumn, timeUnit, sourceRate, step, totalRows });
+      },
+      error: (err) => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))),
+    });
+  });
+}
+
+/** Build per-column series from parsed rows (arrays in column order), using the chosen time column + unit. */
 export function buildSeries(parsed, timeColumn, timeUnit) {
   const div = UNIT_DIV[timeUnit] || 1;
   const rows = parsed.rows;
   const n = rows.length;
+  const ti = parsed.columns.indexOf(timeColumn);
   const t = new Float64Array(n);
   let valid = 0;
   const idx = [];
   for (let i = 0; i < n; i++) {
-    const tv = Number(rows[i][timeColumn]);
+    const tv = Number(rows[i][ti]);
     if (!Number.isFinite(tv)) continue;
     t[valid++] = tv / div;
     idx.push(i);
   }
   const tt = t.subarray(0, valid);
   const series = {};
-  for (const col of parsed.columns) {
-    if (col === timeColumn) continue;
-    const v = new Array(valid);
+  parsed.columns.forEach((col, ci) => {
+    if (ci === ti) return;
+    // Fully numeric columns go into a Float64Array — cheap to structured-clone out
+    // of the CSV worker; on the first non-numeric value fall back to a plain array.
+    const f = new Float64Array(valid);
+    let v = null;
     let numeric = true;
     for (let k = 0; k < valid; k++) {
-      const raw = typeof rows[idx[k]][col] === 'string' ? rows[idx[k]][col].trim() : rows[idx[k]][col];
+      const cell = rows[idx[k]][ci];
+      const raw = typeof cell === 'string' ? cell.trim() : cell;
       const num = raw === '' || raw == null ? NaN : Number(raw);
+      if (v === null) {
+        if (Number.isFinite(num)) {
+          f[k] = num;
+          continue;
+        }
+        v = Array.from(f.subarray(0, k));
+      }
       if (Number.isFinite(num)) v[k] = num;
       else {
         v[k] = raw;
         if (raw !== '' && raw != null) numeric = false;
       }
     }
-    series[col] = { t: tt, v, numeric };
-  }
+    series[col] = { t: tt, v: v || f, numeric };
+  });
   return { series, firstTime: valid ? tt[0] : 0, lastTime: valid ? tt[valid - 1] : 0, count: valid };
 }
 
@@ -89,7 +182,7 @@ function lastIndexLE(t, x) {
 
 export class TelemetryStore {
   constructor() {
-    this.sources = []; // {id, path, name, columns, timeColumn, timeUnit, parsed, series, firstTime, lastTime, count}
+    this.sources = []; // {id, path, name, columns, timeColumn, timeUnit, series, firstTime, lastTime, count, totalRows, sourceRate, step} — raw (decimated) rows stay in the CSV worker
     this.columns = {}; // merged column name -> series (first file wins)
     this.origin = 0;
   }

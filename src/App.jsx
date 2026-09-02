@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { TelemetryStore, parseCsvText, buildSeries, guessTimeColumn, guessTimeUnit } from './telemetry.js';
+import { TelemetryStore } from './telemetry.js';
+import { csvWorker } from './csvWorkerClient.js';
 import { newWidget } from './widgetRuntime.js';
 import { EXAMPLE_WIDGETS, EXAMPLES_VERSION } from './examples.js';
 import { runExport } from './export.js';
@@ -135,20 +136,29 @@ export default function App() {
   useEffect(() => localStorage.setItem(LIB_KEY, JSON.stringify(library)), [library]);
 
   // ---- CSV sources ----
+  // Phase text shown while a blackbox log is being decoded / a CSV parsed; the
+  // heavy parsing itself runs in a Web Worker so the UI never freezes.
+  const [busy, setBusy] = useState(null);
   const addCsvFiles = useCallback(
     async (paths) => {
-      for (const p of paths) {
-        try {
-          const text = await window.api.readText(p);
-          const parsed = parseCsvText(text);
-          const timeColumn = guessTimeColumn(parsed.columns);
-          const sample = Number(parsed.rows[Math.min(10, parsed.rows.length - 1)]?.[timeColumn]);
-          const timeUnit = guessTimeUnit(timeColumn, sample);
-          const built = buildSeries(parsed, timeColumn, timeUnit);
-          store.sources.push({ id: uid(), path: p, name: p.split(/[\\/]/).pop(), columns: parsed.columns, timeColumn, timeUnit, parsed, ...built });
-        } catch (e) {
-          setStatus('CSV error: ' + e.message);
+      let done = 0;
+      try {
+        for (const p of paths) {
+          const name = p.split(/[\\/]/).pop();
+          setBusy(`Loading ${name}${paths.length > 1 ? ` (${++done}/${paths.length})` : ''}…`);
+          try {
+            // Raw bytes: handed to the worker without a copy and streamed there,
+            // instead of a 150 MB string crossing IPC + postMessage twice.
+            const bytes = await window.api.readBytes(p);
+            const id = uid();
+            const built = await csvWorker.parse(id, bytes);
+            store.sources.push({ id, path: p, name, ...built });
+          } catch (e) {
+            setStatus('CSV error: ' + e.message);
+          }
         }
+      } finally {
+        setBusy(null);
       }
       store.rebuild();
       bump();
@@ -173,6 +183,7 @@ export default function App() {
     try {
       for (const f of files) {
         setStatus('Decoding ' + f + ' …');
+        setBusy('Decoding ' + f.split(/[\\/]/).pop() + '…');
         const r = await window.api.decodeBlackbox(f, bbOptions);
         if (!r.files.length) {
           setStatus('Decoder produced no CSV for ' + f + ': ' + r.log.slice(-300));
@@ -186,15 +197,20 @@ export default function App() {
       setStatus('Decode error: ' + e.message);
     } finally {
       setDecoding(false);
+      setBusy(null);
     }
   }, [bbOptions, addCsvFiles]);
 
   const updateSource = useCallback(
-    (id, patch) => {
+    async (id, patch) => {
       const s = store.sources.find((x) => x.id === id);
       if (!s) return;
       Object.assign(s, patch);
-      Object.assign(s, buildSeries(s.parsed, s.timeColumn, s.timeUnit));
+      try {
+        Object.assign(s, await csvWorker.rebuild(id, s.timeColumn, s.timeUnit));
+      } catch (e) {
+        setStatus('CSV error: ' + e.message);
+      }
       store.rebuild();
       bump();
     },
@@ -207,6 +223,7 @@ export default function App() {
       if (!src) return;
       if (!(await confirm(`Remove "${src.name || src.path}" from the project? The file stays on disk.`))) return;
       store.sources = store.sources.filter((x) => x.id !== id);
+      csvWorker.remove(id);
       store.rebuild();
       bump();
     },
@@ -215,6 +232,7 @@ export default function App() {
 
   const removeAllSources = useCallback(async () => {
     if (!(await confirm(`Remove all ${store.sources.length} telemetry files from the project? The files stay on disk.`))) return;
+    for (const s of store.sources) csvWorker.remove(s.id);
     store.sources = [];
     store.rebuild();
     bump();
@@ -396,6 +414,7 @@ export default function App() {
 
   const loadProjectData = useCallback(
     async (j) => {
+      for (const s of store.sources) csvWorker.remove(s.id);
       store.sources = [];
       if (j.sources) {
         await addCsvFiles(j.sources.map((s) => s.path));
@@ -488,10 +507,10 @@ export default function App() {
           <button className="btn" onClick={openVideo} disabled={locked}>
             Open video
           </button>
-          <button className="btn" onClick={decodeBlackbox} disabled={decoding || locked}>
+          <button className="btn" onClick={decodeBlackbox} disabled={decoding || busy != null || locked}>
             {decoding ? 'Decoding…' : 'Add blackbox log'}
           </button>
-          <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())} disabled={locked}>
+          <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())} disabled={busy != null || locked}>
             Add CSV
           </button>
         </div>
@@ -569,10 +588,10 @@ export default function App() {
                     <button className="btn btn-primary" onClick={openVideo}>
                       Open video…
                     </button>
-                    <button className="btn" onClick={decodeBlackbox} disabled={decoding}>
+                    <button className="btn" onClick={decodeBlackbox} disabled={decoding || busy != null}>
                       {decoding ? 'Decoding…' : 'Decode blackbox…'}
                     </button>
-                    <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())}>
+                    <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())} disabled={busy != null}>
                       Add CSV…
                     </button>
                   </div>
@@ -625,6 +644,7 @@ export default function App() {
                 cancelProxy={() => window.api.cancelProxy()}
                 decodeBlackbox={decodeBlackbox}
                 decoding={decoding}
+                busy={busy}
                 bbOptions={bbOptions}
                 setBbOptions={setBbOptions}
                 store={store}
@@ -663,7 +683,12 @@ export default function App() {
 
       <footer className="statusbar">
         {locked && job.progress && <span className="chip chip-accent">export {Math.round((100 * job.progress.frame) / job.progress.total)}%</span>}
-        <span className="truncate" style={{ flex: 1, minWidth: 0, color: locked ? 'var(--accent)' : undefined }}>{status}</span>
+        {busy && (
+          <div className="progress" style={{ width: 90, flex: 'none' }} title={busy}>
+            <div className="indet" />
+          </div>
+        )}
+        <span className="truncate" style={{ flex: 1, minWidth: 0, color: locked ? 'var(--accent)' : undefined }}>{busy || status}</span>
         {video && (
           <span className="readout">
             {video.width}×{video.height} · {video.fps.toFixed(2)} fps · {video.codec}

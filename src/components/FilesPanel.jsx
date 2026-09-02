@@ -18,7 +18,7 @@ const SEL = (label, key, opts, bbOptions, setBbOptions) => (
   </label>
 );
 
-export default function FilesPanel({ video, openVideo, removeVideo, layout, setLayout, lt, rebaseLayout, makeProxy, proxyProgress, cancelProxy, decodeBlackbox, decoding, bbOptions, setBbOptions, store, storeVersion, addCsvFiles, updateSource, removeSource, removeAllSources }) {
+export default function FilesPanel({ video, openVideo, removeVideo, layout, setLayout, lt, rebaseLayout, makeProxy, proxyProgress, cancelProxy, decodeBlackbox, decoding, busy, bbOptions, setBbOptions, store, storeVersion, addCsvFiles, updateSource, removeSource, removeAllSources }) {
   void storeVersion;
   const heavy = video && (video.codec === 'hevc' || video.width > 1920 || video.fps > 60);
   return (
@@ -150,9 +150,17 @@ export default function FilesPanel({ video, openVideo, removeVideo, layout, setL
               </label>
             </div>
           </details>
-          <button className="btn btn-primary" onClick={decodeBlackbox} disabled={decoding}>
+          <button className="btn btn-primary" onClick={decodeBlackbox} disabled={decoding || busy != null}>
             {decoding ? 'Decoding…' : 'Decode blackbox log…'}
           </button>
+          {busy && (
+            <div className="mt-2">
+              <div className="progress">
+                <div className="indet" />
+              </div>
+              <div className="hint mt-1">{busy}</div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -175,6 +183,11 @@ export default function FilesPanel({ video, openVideo, removeVideo, layout, setL
                   <div className="hint mt-1">
                     {s.count} rows · {s.columns.length} columns · {s.count ? (s.lastTime - s.firstTime).toFixed(1) : 0} s · starts at {(s.firstTime - store.origin).toFixed(3)} s
                   </div>
+                  {s.step > 1 && (
+                    <div className="hint" title={`The file has ${s.totalRows} rows sampled at ~${Math.round(s.sourceRate)} Hz; widgets render at most 120 fps, so only every ${s.step}. sample was kept to save memory and load time.`}>
+                      {Math.round(s.sourceRate)} Hz log → every {s.step}. sample kept ({Math.round(s.sourceRate / s.step)} Hz)
+                    </div>
+                  )}
                 </div>
                 <button className="btn btn-xs btn-danger" onClick={() => removeSource(s.id)}>
                   ✕
@@ -213,7 +226,7 @@ export default function FilesPanel({ video, openVideo, removeVideo, layout, setL
             </div>
           ))}
           <div className="flex gap-2">
-            <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())}>
+            <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())} disabled={busy != null}>
               Add CSV…
             </button>
             {store.sources.length > 0 && (

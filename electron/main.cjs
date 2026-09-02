@@ -85,6 +85,7 @@ ipcMain.handle('dialog:openDir', async () => {
 });
 
 ipcMain.handle('fs:readText', async (_e, p) => fs.promises.readFile(p, 'utf8'));
+ipcMain.handle('fs:readBytes', async (_e, p) => fs.promises.readFile(p));
 ipcMain.handle('fs:writeText', async (_e, p, text) => fs.promises.writeFile(p, text, 'utf8'));
 
 // ---------- ffprobe ----------
