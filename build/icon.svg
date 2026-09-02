@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Telemetry Overlay app icon: a simplified LCD monitor showing a telemetry trace (teal) with the playhead (amber).
+       Same palette as the app's "ground station" theme (src/index.css). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a222c"/>
+      <stop offset="1" stop-color="#0d1116"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0f14"/>
+      <stop offset="1" stop-color="#05080b"/>
+    </linearGradient>
+    <clipPath id="screenClip">
+      <rect x="168" y="216" width="688" height="424" rx="22"/>
+    </clipPath>
+  </defs>
+
+  <!-- tile -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <rect x="14" y="14" width="996" height="996" rx="212" fill="none" stroke="#2a343f" stroke-width="10"/>
+
+  <!-- monitor bezel -->
+  <rect x="112" y="160" width="800" height="536" rx="52" fill="#222b35"/>
+  <rect x="112" y="160" width="800" height="536" rx="52" fill="none" stroke="#3a4753" stroke-width="14"/>
+
+  <!-- screen -->
+  <rect x="168" y="216" width="688" height="424" rx="22" fill="url(#screen)"/>
+  <g clip-path="url(#screenClip)">
+    <!-- faint grid, like the layout grid on the stage -->
+    <g stroke="#1b242d" stroke-width="6">
+      <path d="M168 322h688M168 428h688M168 534h688"/>
+      <path d="M340 216v424M512 216v424M684 216v424"/>
+    </g>
+    <!-- area under the trace -->
+    <path d="M168 560 L250 540 L330 470 L410 500 L470 360 L540 300 L610 420 L680 380 L760 470 L856 430 L856 640 L168 640 Z" fill="#4fc3c7" fill-opacity="0.14"/>
+    <!-- telemetry trace -->
+    <path d="M168 560 L250 540 L330 470 L410 500 L470 360 L540 300 L610 420 L680 380 L760 470 L856 430" fill="none" stroke="#4fc3c7" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- playhead -->
+    <rect x="596" y="216" width="28" height="424" fill="#f2a93b"/>
+    <path d="M568 216h84l-42 46z" fill="#f2a93b"/>
+  </g>
+
+  <!-- stand -->
+  <rect x="462" y="696" width="100" height="84" fill="#2a343f"/>
+  <rect x="282" y="776" width="460" height="56" rx="28" fill="#3a4753"/>
+</svg>

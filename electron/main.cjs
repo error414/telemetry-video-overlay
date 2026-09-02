@@ -19,6 +19,8 @@ function createWindow() {
     width: 1500,
     height: 950,
     backgroundColor: '#171717',
+    // packaged builds take the window icon from the exe (build/icon.ico via electron-builder); in dev use the PNG
+    icon: app.isPackaged ? undefined : path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
