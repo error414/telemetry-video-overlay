@@ -4,6 +4,7 @@
   "description": "Overlay HTML/JS widgets driven by INAV blackbox CSV telemetry onto video",
   "main": "electron/main.cjs",
   "private": true,
+  "license": "GPL-3.0-only",
   "scripts": {
     "start": "concurrently -k -s first \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && electron .\"",
     "dev": "npm start",

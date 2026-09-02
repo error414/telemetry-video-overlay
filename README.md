@@ -144,3 +144,7 @@ Every frame is rendered with the same widget code into an offscreen canvas (SVG
 `foreignObject`) at video resolution and piped as raw RGBA into ffmpeg, which overlays it on
 the source video (or encodes it alone with alpha). Expect ~20–60 frames/s of rendering
 depending on widget complexity.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 – see [LICENSE](LICENSE).
