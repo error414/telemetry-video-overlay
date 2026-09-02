@@ -3,7 +3,7 @@
 // Library tab and are refreshed automatically when EXAMPLES_VERSION changes.
 
 // Bump when examples change: the library's "Example:" entries are refreshed automatically.
-export const EXAMPLES_VERSION = 28;
+export const EXAMPLES_VERSION = 29;
 
 export const EXAMPLE_WIDGETS = [
   {
@@ -116,6 +116,7 @@ export const EXAMPLE_WIDGETS = [
     code: `function (values, time, ctx) {
   // ---------- SETTINGS ----------
   var WINDOW_MS  = 20000;        // how much history to show (ms)
+  var CLIP_TO_RANGE = false;     // true = draw nothing outside the export range (sync bar in/out points)
   var SMOOTH_MS  = 300;          // moving-average window (ms) smoothing the line and the value (0 = off)
   var LABEL      = 'ALT';        // label ('' = column name)
   var MULTIPLIER = 1;            // value scaling (cm -> m = 0.01)
@@ -158,23 +159,27 @@ export const EXAMPLE_WIDGETS = [
   // pts overhang the window (a sample before the start, the current value / smoothing tail
   // at the end); replace the overhang with points interpolated exactly at the window edges,
   // otherwise both line ends visibly jump by one sample as points enter and leave the window
-  (function () {
-    var t0 = time - WINDOW_MS, t1 = time, out = [], i, p, q;
-    for (i = 0; i < pts.length; i++) {
-      p = pts[i];
+  function clip(arr, t0, t1) {
+    var out = [], i, p, q;
+    for (i = 0; i < arr.length; i++) {
+      p = arr[i];
       if (p.t < t0) {
-        q = pts[i + 1];
+        q = arr[i + 1];
         if (q && q.t > t0 && typeof p.v === 'number' && typeof q.v === 'number')
           out.push({ t: t0, v: p.v + (q.v - p.v) * (t0 - p.t) / (q.t - p.t) });
       } else if (p.t > t1) {
-        q = pts[i - 1];
+        q = arr[i - 1];
         if (q && q.t < t1 && typeof p.v === 'number' && typeof q.v === 'number')
           out.push({ t: t1, v: q.v + (p.v - q.v) * (t1 - q.t) / (p.t - q.t) });
         break;
       } else out.push(p);
     }
-    pts = out;
-  })();
+    return out;
+  }
+  pts = clip(pts, time - WINDOW_MS, time);
+  var smoothedNow = pts.length ? pts[pts.length - 1].v : undefined;  // smoothed value at the current time
+  // and cut the line at the export range edges when asked to
+  if (CLIP_TO_RANGE && ctx.exportRange) pts = clip(pts, ctx.exportRange.from, ctx.exportRange.to);
   var W = ctx.width, H = ctx.height, pad = 6 * scale;
   function colFor(dv) { var c = LINE_COLOR, i; for (i = 0; i < THRESHOLDS.length; i++) if (dv >= THRESHOLDS[i][0]) c = THRESHOLDS[i][1]; return c; }
   var min, max;
@@ -206,7 +211,7 @@ export const EXAMPLE_WIDGETS = [
   });
   var line = segs.map(function (s) { return '<polyline class="line" points="' + s.p.join(' ') + '" fill="none" stroke="' + s.c + '" stroke-width="' + lw.toFixed(2) + '" stroke-linejoin="round"/>'; }).join('');
   var v = values[0];
-  if (SMOOTH_MS > 0 && typeof v === 'number' && pts.length) v = pts[pts.length - 1].v;  // show the smoothed value too
+  if (SMOOTH_MS > 0 && typeof v === 'number' && typeof smoothedNow === 'number') v = smoothedNow;  // show the smoothed value too
   var vcol = (typeof v === 'number') ? colFor(v * MULTIPLIER) : TEXT_COLOR;
   var txt = (LABEL || ctx.columns[0]) + ': <tspan class="value" fill="' + vcol + '">' + (typeof v === 'number' ? (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT : '--') + '</tspan>';
   // CSS hooks: #graph (svg), .grid, .area, .line, .label, .value
@@ -250,6 +255,7 @@ export const EXAMPLE_WIDGETS = [
   var SHADOW      = true;            // text shadow for readability over video
   var MAX_POINTS  = 600;             // curve resolution
   var SMOOTH_MS   = 1000;            // moving-average window (ms) smoothing the curve and the value (0 = off)
+  var CLIP_TO_RANGE = false;         // true = the chart spans only the export range (sync bar in/out points) instead of the whole flight
   // -------------------------------
   var col = ctx.columns[0], W = ctx.width, H = ctx.height, s = ctx.state;
   var scale = Math.min(W / 520, H / 160);  // sizes scale with the widget (settings are for the default 520x160)
@@ -257,10 +263,23 @@ export const EXAMPLE_WIDGETS = [
   // top leaves room for the ascenders of the topmost axis number so it is not clipped
   var left = AXIS_LABELS ? fsz * 3.2 : 6 * scale, bottom = TITLE ? fsz + 10 * scale : 6 * scale, top = Math.max(6 * scale, fsz * 0.6), right = 8 * scale;
   var cw = W - left - right, ch = H - top - bottom;
-  // cache key includes every setting the cached curve depends on, so editing them takes effect
-  var key = col + '|' + MAX_POINTS + '|' + SMOOTH_MS;
+  // cache key includes every setting the cached curve depends on, so editing them takes effect,
+  // and ctx.dataVersion, so a widget rendered before the CSV finished loading picks the data up
+  var er = (CLIP_TO_RANGE && ctx.exportRange) ? ctx.exportRange : null;
+  var key = col + '|' + MAX_POINTS + '|' + SMOOTH_MS + '|' + (er ? er.from + '-' + er.to : 'all') + '|' + ctx.dataVersion;
   if (s.key !== key) {
-    var raw = ctx.all(col, MAX_POINTS);
+    var raw = er ? ctx.range(col, er.from, er.to, MAX_POINTS) : ctx.all(col, MAX_POINTS), st0 = ctx.stats(col);
+    if (er) { // keep only the export range (ends interpolated exactly at its edges) and scale the axis to it
+      var cl = [], mn = Infinity, mx = -Infinity, q, p0, p1;
+      for (q = 0; q < raw.length; q++) {
+        p0 = raw[q];
+        if (p0.t < er.from) { p1 = raw[q + 1]; if (p1 && p1.t > er.from && typeof p0.v === 'number' && typeof p1.v === 'number') cl.push({ t: er.from, v: p0.v + (p1.v - p0.v) * (er.from - p0.t) / (p1.t - p0.t) }); }
+        else if (p0.t > er.to) { p1 = raw[q - 1]; if (p1 && p1.t < er.to && typeof p0.v === 'number' && typeof p1.v === 'number') cl.push({ t: er.to, v: p1.v + (p0.v - p1.v) * (er.to - p1.t) / (p0.t - p1.t) }); break; }
+        else cl.push(p0);
+      }
+      for (q = 0; q < cl.length; q++) if (typeof cl[q].v === 'number') { if (cl[q].v < mn) mn = cl[q].v; if (cl[q].v > mx) mx = cl[q].v; }
+      raw = cl; st0 = isFinite(mn) ? { min: mn, max: mx } : null;
+    }
     if (SMOOTH_MS > 0) {
       // centered moving average (sliding-window sum, O(n))
       var sm = [], lo = 0, hi = 0, sum = 0, cnt = 0, j;
@@ -272,11 +291,11 @@ export const EXAMPLE_WIDGETS = [
       }
       raw = sm;
     }
-    s.pts = raw; s.key = key; s.st = ctx.stats(col);
+    s.pts = raw; s.key = key; s.st = st0;
   }
   var pts = s.pts, st = s.st;
-  if (!pts.length || !st) return '<div style="color:#fff;font:12px Arial">no data for ' + col + '</div>';
-  var t0 = pts[0].t, t1 = pts[pts.length - 1].t; if (t1 === t0) t1 = t0 + 1;
+  if (!pts.length || !st) return '<div style="color:#fff;font:12px Arial">no data for ' + col + (er ? ' in the export range' : '') + '</div>';
+  var t0 = er ? er.from : pts[0].t, t1 = er ? er.to : pts[pts.length - 1].t; if (t1 === t0) t1 = t0 + 1;
   var min = MIN !== null ? MIN : (BASELINE === 'zero' ? Math.min(0, st.min * MULTIPLIER) : st.min * MULTIPLIER);
   var max = MAX !== null ? MAX : st.max * MULTIPLIER; if (max === min) max = min + 1;
   function X(t) { return left + (t - t0) / (t1 - t0) * cw; }
@@ -340,14 +359,28 @@ export const EXAMPLE_WIDGETS = [
   var RADIUS      = 8;
   var MAX_POINTS  = 600;
   var SMOOTH_MS   = 1000;            // moving-average window (ms) smoothing the profile and the value (0 = off)
+  var CLIP_TO_RANGE = false;         // true = the profile spans only the export range (sync bar in/out points) instead of the whole flight
   // -------------------------------
   var col = ctx.columns[0], W = ctx.width, H = ctx.height, s = ctx.state;
   var scale = Math.min(W / 520, H / 140);  // sizes scale with the widget (settings are for the default 520x140)
   var fsz = FONT_SIZE * scale, pad = 8 * scale;
-  // cache key includes every setting the cached curve depends on, so editing them takes effect
-  var key = col + '|' + MAX_POINTS + '|' + SMOOTH_MS;
+  // cache key includes every setting the cached curve depends on, so editing them takes effect,
+  // and ctx.dataVersion, so a widget rendered before the CSV finished loading picks the data up
+  var er = (CLIP_TO_RANGE && ctx.exportRange) ? ctx.exportRange : null;
+  var key = col + '|' + MAX_POINTS + '|' + SMOOTH_MS + '|' + (er ? er.from + '-' + er.to : 'all') + '|' + ctx.dataVersion;
   if (s.key !== key) {
-    var raw = ctx.all(col, MAX_POINTS);
+    var raw = er ? ctx.range(col, er.from, er.to, MAX_POINTS) : ctx.all(col, MAX_POINTS), st0 = ctx.stats(col);
+    if (er) { // keep only the export range (ends interpolated exactly at its edges) and scale the axis to it
+      var cl = [], mn = Infinity, mx = -Infinity, q, p0, p1;
+      for (q = 0; q < raw.length; q++) {
+        p0 = raw[q];
+        if (p0.t < er.from) { p1 = raw[q + 1]; if (p1 && p1.t > er.from && typeof p0.v === 'number' && typeof p1.v === 'number') cl.push({ t: er.from, v: p0.v + (p1.v - p0.v) * (er.from - p0.t) / (p1.t - p0.t) }); }
+        else if (p0.t > er.to) { p1 = raw[q - 1]; if (p1 && p1.t < er.to && typeof p0.v === 'number' && typeof p1.v === 'number') cl.push({ t: er.to, v: p1.v + (p0.v - p1.v) * (er.to - p1.t) / (p0.t - p1.t) }); break; }
+        else cl.push(p0);
+      }
+      for (q = 0; q < cl.length; q++) if (typeof cl[q].v === 'number') { if (cl[q].v < mn) mn = cl[q].v; if (cl[q].v > mx) mx = cl[q].v; }
+      raw = cl; st0 = isFinite(mn) ? { min: mn, max: mx } : null;
+    }
     if (SMOOTH_MS > 0) {
       // centered moving average (sliding-window sum, O(n))
       var sm = [], lo = 0, hi = 0, sum = 0, cnt = 0, j;
@@ -359,11 +392,11 @@ export const EXAMPLE_WIDGETS = [
       }
       raw = sm;
     }
-    s.pts = raw; s.key = key; s.st = ctx.stats(col);
+    s.pts = raw; s.key = key; s.st = st0;
   }
   var pts = s.pts, st = s.st;
-  if (!pts.length || !st) return '<div style="color:#fff;font:12px Arial">no data for ' + col + '</div>';
-  var t0 = pts[0].t, t1 = pts[pts.length - 1].t; if (t1 === t0) t1 = t0 + 1;
+  if (!pts.length || !st) return '<div style="color:#fff;font:12px Arial">no data for ' + col + (er ? ' in the export range' : '') + '</div>';
+  var t0 = er ? er.from : pts[0].t, t1 = er ? er.to : pts[pts.length - 1].t; if (t1 === t0) t1 = t0 + 1;
   var min = st.min, max = st.max; if (max === min) max = min + 1;
   function X(t) { return pad + (t - t0) / (t1 - t0) * (W - 2 * pad); }
   function Y(v) { return H - pad - (v - min) / (max - min) * (H - 2 * pad - fsz); }
@@ -500,6 +533,7 @@ export const EXAMPLE_WIDGETS = [
   var HEADING_UNIT= 'deg';          // 'deg' | 'decideg' (value/10) | 'rad'
   var HEADING_OFFSET = -90;         // add degrees if the arrow points the wrong way
   var SHOW_ATTRIBUTION = true;      // tile providers require attribution
+  var CLIP_TO_RANGE = false;        // true = only the part of the track inside the export range (sync bar in/out points) is drawn and fitted
   // -------------------------------
   var TILES = {
     'osm':         ['https://tile.openstreetmap.org/{z}/{x}/{y}.png', '© OpenStreetMap'],
@@ -512,17 +546,24 @@ export const EXAMPLE_WIDGETS = [
     var n = Math.pow(2, z) * TS, r = lat * Math.PI / 180;
     return [(lon + 180) / 360 * n, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n];
   }
-  if (!s.path) { // load the whole track once
-    var lat = ctx.all(ctx.columns[0], 4000), lon = ctx.all(ctx.columns[1], 4000);
+  // the track is loaded once and again whenever the telemetry files (ctx.dataVersion), the
+  // columns or the export range change — a widget rendered before the CSV finished loading
+  // would otherwise keep an empty track forever
+  var er = (CLIP_TO_RANGE && ctx.exportRange) ? ctx.exportRange : null;
+  var pathKey = ctx.columns[0] + '|' + ctx.columns[1] + '|' + (er ? er.from + '-' + er.to : 'all') + '|' + ctx.dataVersion;
+  if (s.pathKey !== pathKey) {
+    var lat = er ? ctx.range(ctx.columns[0], er.from, er.to, 4000) : ctx.all(ctx.columns[0], 4000);
+    var lon = er ? ctx.range(ctx.columns[1], er.from, er.to, 4000) : ctx.all(ctx.columns[1], 4000);
     var n = Math.min(lat.length, lon.length), i;
-    s.path = []; s.minLat = 90; s.maxLat = -90; s.minLon = 180; s.maxLon = -180;
+    s.pathKey = pathKey; s.path = []; s.minLat = 90; s.maxLat = -90; s.minLon = 180; s.maxLon = -180;
     for (i = 0; i < n; i++) {
       var la = lat[i].v, lo = lon[i].v;
       if (typeof la !== 'number' || typeof lo !== 'number' || (Math.abs(la) < 0.001 && Math.abs(lo) < 0.001)) continue;
+      if (er && (lat[i].t < er.from || lat[i].t > er.to)) continue;
       s.path.push({ t: lat[i].t, lat: la, lon: lo });
       if (la < s.minLat) s.minLat = la; if (la > s.maxLat) s.maxLat = la; if (lo < s.minLon) s.minLon = lo; if (lo > s.maxLon) s.maxLon = lo;
     }
-    s.proj = {};
+    s.proj = {}; s.fitW = -1; // projected coords and the fit zoom depend on the track
   }
   if (s.fitW !== W || s.fitH !== H || s.fitPad !== PADDING) { // (re)compute fit zoom when the box is resized
     s.fitW = W; s.fitH = H; s.fitPad = PADDING; s.fitZoom = 1;
@@ -531,7 +572,7 @@ export const EXAMPLE_WIDGETS = [
       if (b[0] - a[0] <= W - 2 * PADDING && b[1] - a[1] <= H - 2 * PADDING) { s.fitZoom = z; break; }
     }
   }
-  if (!s.path.length) return '<div style="width:100%;height:100%;background:' + BG + ';border-radius:' + RADIUS + 'px;color:#fff;font:12px Arial;display:flex;align-items:center;justify-content:center">no GPS data</div>';
+  if (!s.path.length) return '<div style="width:100%;height:100%;background:' + BG + ';border-radius:' + RADIUS + 'px;color:#fff;font:12px Arial;display:flex;align-items:center;justify-content:center">no GPS data' + (er ? ' in the export range' : '') + '</div>';
   var lat0 = values[0], lon0 = values[1], hasPos = typeof lat0 === 'number' && typeof lon0 === 'number' && !(Math.abs(lat0) < 0.001 && Math.abs(lon0) < 0.001);
   function idxAt(t) { var a = 0, b = s.path.length - 1, m; while (a < b) { m = (a + b) >> 1; if (s.path[m].t < t) a = m + 1; else b = m; } return a; }
   function smoothPos(t, la0, lo0) { // triangular-weighted average of track samples around t (deterministic, so seeking/export stay consistent)
@@ -604,7 +645,7 @@ export const EXAMPLE_WIDGETS = [
     var str = (pr[j][0] - ox).toFixed(1) + ',' + (pr[j][1] - oy).toFixed(1);
     full.push(str); if (pr[j][2] <= time) trail.push(str);
   }
-  if (hasPos && trail.length) { var tip = px(lat0, lon0, zoom); trail.push((tip[0] - ox).toFixed(1) + ',' + (tip[1] - oy).toFixed(1)); }
+  if (hasPos && trail.length && (!er || time <= er.to)) { var tip = px(lat0, lon0, zoom); trail.push((tip[0] - ox).toFixed(1) + ',' + (tip[1] - oy).toFixed(1)); }
   var svg = '<polyline class="track" points="' + full.join(' ') + '" fill="none" stroke="' + TRACK_COLOR + '" stroke-width="' + TRACK_WIDTH + '" stroke-linejoin="round"/>';
   if (TRAIL_COLOR && trail.length > 1) svg += '<polyline class="trail" points="' + trail.join(' ') + '" fill="none" stroke="' + TRAIL_COLOR + '" stroke-width="' + TRAIL_WIDTH + '" stroke-linejoin="round"/>';
   if (hasPos) {

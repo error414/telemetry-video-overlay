@@ -505,6 +505,8 @@ export default function App() {
 
   const selected = useMemo(() => widgets.find((w) => w.id === selectedId) || null, [widgets, selectedId]);
   const columnNames = useMemo(() => store.columnNames(), [store, storeVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  // export range + video length for ctx.exportRange in widget previews (the Stage builds its own)
+  const widgetEnv = useMemo(() => ({ range, duration: video ? video.duration : 0 }), [range, video]);
   const locked = job.running;
 
   return (
@@ -571,6 +573,7 @@ export default function App() {
             offset={offset}
             time={time}
             setTime={setTime}
+            range={range}
             selectedId={selectedId}
             setSelectedId={setSelectedId}
             updateWidget={updateWidget}
@@ -679,6 +682,7 @@ export default function App() {
                 store={store}
                 time={time}
                 offset={offset}
+                env={widgetEnv}
                 openEditor={() => setEditorOpen(true)}
                 saveToLibrary={(w) => {
                   setLibrary((l) => [...l, { ...w, id: uid() }]);
@@ -719,7 +723,7 @@ export default function App() {
       </footer>
 
       {editorOpen && selected && (
-        <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} offset={offset} columnNames={columnNames} ColumnsInput={ColumnsInput} />
+        <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} offset={offset} columnNames={columnNames} ColumnsInput={ColumnsInput} env={widgetEnv} />
       )}
 
       {confirmDialog}

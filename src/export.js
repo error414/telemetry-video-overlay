@@ -72,7 +72,7 @@ export async function runExport({ mode, out, info, widgets, store, offset, quali
         return { cancelled: true };
       }
       const t = span.start + i / fps;
-      const buf = await renderFrameToCanvas(canvas, widgets, store, t, offset, region, lt);
+      const buf = await renderFrameToCanvas(canvas, widgets, store, t, offset, region, lt, { range: span, duration: info.duration });
       await window.api.exportFrame(buf);
       if (i % 5 === 0 || i === totalFrames - 1) {
         const el = (performance.now() - t0) / 1000;

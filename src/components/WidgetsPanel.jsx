@@ -88,7 +88,7 @@ export function ColumnsInput({ value, onChange, columnNames }) {
   );
 }
 
-export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidget, updateWidget, removeWidget, setWidgets, columnNames, store, time, offset, saveToLibrary, openEditor }) {
+export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidget, updateWidget, removeWidget, setWidgets, columnNames, store, time, offset, saveToLibrary, openEditor, env }) {
   const move = (id, dir) =>
     setWidgets((ws) => {
       const i = ws.findIndex((w) => w.id === id);
@@ -101,7 +101,7 @@ export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidg
 
   const cols = selected ? parseColumns(selected.columns) : [];
   const missing = cols.filter((c) => !store.columns[c]);
-  const out = selected ? renderWidget(selected, store, time, offset) : null;
+  const out = selected ? renderWidget(selected, store, time, offset, 'id', env) : null;
 
   return (
     <div>

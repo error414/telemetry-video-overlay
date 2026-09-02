@@ -102,6 +102,8 @@ function (values, time, ctx) {
 | `ctx.all(name, maxPoints)` | the whole flight as `[{t, v}]` (altitude profiles, tracks) |
 | `ctx.stats(name)` | whole-flight `{min, max, mean, count, tMin, tMax}` — use it for stable axis scaling |
 | `ctx.duration` | telemetry length in ms |
+| `ctx.exportRange` | `{from, to}` — the export range (sync bar in/out points, or the whole video) in telemetry ms; `null` without a video. The example graphs / GPS map have a `CLIP_TO_RANGE` setting that limits them to it |
+| `ctx.dataVersion` | changes whenever telemetry files are added, removed or rebuilt — put it in `ctx.state` cache keys |
 | `ctx.image(url)` | loads an image (map tile, icon) and returns a `data:` URL once cached, `undefined` while loading (the widget re-renders automatically). Works in export too. |
 
 The example widgets in the Library all start with a `SETTINGS` block (colors, units,

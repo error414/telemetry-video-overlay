@@ -53,6 +53,8 @@ Widget record (what the library / project JSON stores):
 | `ctx.all(name, maxPoints)` | the whole flight `[{t, v}]` — for profiles, tracks |
 | `ctx.stats(name)` | `{min, max, mean, count, tMin, tMax}` for the whole flight (cached by the app) — use for stable axis scaling |
 | `ctx.duration` | telemetry length in ms |
+| `ctx.exportRange` | `{from, to}` in telemetry ms — the part of the video that will be exported (sync bar in/out points, or the whole video); `null` when no video is loaded. Whole-flight widgets offer `CLIP_TO_RANGE` (see SETTINGS) and use `ctx.range(col, from, to, max)` instead of `ctx.all` when it is on |
+| `ctx.dataVersion` | integer that changes whenever telemetry files are added / removed / rebuilt. **Every `ctx.state` cache key must include it** — CSVs load asynchronously, so a widget is usually rendered before its data exists and would otherwise cache "no data" forever |
 | `ctx.state` | plain object persisting between calls **per placed widget**; survives code edits — cache expensive work here (see Caching) |
 | `ctx.fmt(v, digits)` | number → string, `'--'` for missing values |
 | `ctx.image(url)` | async image loader: returns a `data:` URL once loaded, `undefined` while loading, `null` on failure; the widget re-renders automatically when the image arrives; the data URL works in export (this is the **only** way to use remote images) |
@@ -129,6 +131,10 @@ block, keep the rest readable too. Modern syntax compiles but don't use backtick
   (`// at the default 400x150 size; scales with the widget`).
 - Scaling mode when relevant: `SCALE = 'flight' | 'window' | 'fixed'` — default `'flight'`
   (axes from `ctx.stats`, no jumping).
+- Whole-flight / history widgets (profiles, tracks, scrolling graphs): `CLIP_TO_RANGE = false`
+  — when `true` and `ctx.exportRange` is set, show only data inside the export range (and
+  scale axes / fit the map to that part). Name it exactly `CLIP_TO_RANGE` — the test runner
+  recognises it and runs the widget in both modes.
 
 ## Sizing, smoothing, caching (include in every widget)
 
@@ -145,9 +151,12 @@ block, keep the rest readable too. Modern syntax compiles but don't use backtick
   edits, so a cache checked only against the column ignores settings changes until restart:
 
   ```js
-  var s = ctx.state, key = col + '|' + MAX_POINTS + '|' + SMOOTH_MS;
+  var s = ctx.state, key = col + '|' + MAX_POINTS + '|' + SMOOTH_MS + '|' + ctx.dataVersion;
   if (s.key !== key) { s.pts = expensive(); s.st = ctx.stats(col); s.key = key; }
   ```
+
+  `ctx.dataVersion` in the key is mandatory (see the Runtime API table) — never use a bare
+  `if (!s.pts)` guard.
 
 - **Pin scrolling-graph line ends to the window edges.** Raw samples make both ends pop as
   points enter/leave the window; keep one overhanging sample per side and interpolate points

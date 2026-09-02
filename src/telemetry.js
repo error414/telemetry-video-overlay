@@ -185,9 +185,11 @@ export class TelemetryStore {
     this.sources = []; // {id, path, name, columns, timeColumn, timeUnit, series, firstTime, lastTime, count, totalRows, sourceRate, step} — raw (decimated) rows stay in the CSV worker
     this.columns = {}; // merged column name -> series (first file wins)
     this.origin = 0;
+    this.revision = 0; // bumped on every rebuild — widgets key their ctx.state caches on it (ctx.dataVersion)
   }
 
   rebuild() {
+    this.revision++;
     this.columns = {};
     let origin = Infinity;
     for (const s of this.sources) {

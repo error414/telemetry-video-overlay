@@ -21,7 +21,7 @@ function describe(el) {
  * the right. Hovering the preview shows the element under the cursor (selector for the CSS tab);
  * clicking copies it. Edits apply immediately; "Close" just closes.
  */
-export default function CodeEditorModal({ widget, updateWidget, onClose, store, time, offset, columnNames, ColumnsInput }) {
+export default function CodeEditorModal({ widget, updateWidget, onClose, store, time, offset, columnNames, ColumnsInput, env }) {
   const [previewTime, setPreviewTime] = useState(time);
   const [follow, setFollow] = useState(true);
   const [tab, setTab] = useState('code');
@@ -33,7 +33,7 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
     if (follow) setPreviewTime(time);
   }, [time, follow]);
 
-  const out = useMemo(() => renderWidget(widget, store, previewTime, offset, 'shadow'), [widget, store, previewTime, offset]);
+  const out = useMemo(() => renderWidget(widget, store, previewTime, offset, 'shadow', env), [widget, store, previewTime, offset, env]);
   const cols = parseColumns(widget.columns);
   const missing = cols.filter((c) => !store.columns[c]);
   const duration = store.duration();

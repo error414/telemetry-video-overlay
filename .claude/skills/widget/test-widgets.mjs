@@ -82,7 +82,9 @@ function stats(name) {
 
 const failures = [];
 const unknownCols = new Set();
-for (const w of widgets) {
+// widgets with a CLIP_TO_RANGE setting are also exercised with it switched on
+const variants = widgets.flatMap((w) => (/var CLIP_TO_RANGE\s*=\s*false/.test(w.code || '') ? [w, { ...w, name: w.name + ' [CLIP_TO_RANGE]', code: w.code.replace(/var CLIP_TO_RANGE\s*=\s*false/, 'var CLIP_TO_RANGE = true') }] : [w]));
+for (const w of variants) {
   const cols = (w.columns || '')
     .split(',')
     .map((s) => s.trim())
@@ -118,6 +120,8 @@ for (const w of widgets) {
         all: (n, m) => range(n, -1e12, 1e12, m),
         stats,
         duration: N * 100,
+        exportRange: { from: 2000, to: 15000 },
+        dataVersion: 1,
         fmt: (v, d = 1) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(d) : v == null ? '--' : String(v)),
         image: (url) => 'data:image/png;base64,iVBORw0KGgo=' + url.length,
       };
@@ -131,7 +135,7 @@ for (const w of widgets) {
       }
     }
   }
-  const html = fn(cols.map((c) => at(c, 50)), 5000, { videoTime: 5, width: w.w || 300, height: w.h || 100, columns: cols, state, get: (n) => at(n, 50), raw: (n) => at(n, 50), range, all: (n, m) => range(n, -1e12, 1e12, m), stats, duration: N * 100, fmt: (v, d = 1) => (typeof v === 'number' ? v.toFixed(d) : '--'), image: () => 'data:image/png;base64,iVBORw0KGgo=' });
+  const html = fn(cols.map((c) => at(c, 50)), 5000, { videoTime: 5, width: w.w || 300, height: w.h || 100, columns: cols, state, get: (n) => at(n, 50), raw: (n) => at(n, 50), range, all: (n, m) => range(n, -1e12, 1e12, m), stats, duration: N * 100, exportRange: { from: 2000, to: 15000 }, dataVersion: 1, fmt: (v, d = 1) => (typeof v === 'number' ? v.toFixed(d) : '--'), image: () => 'data:image/png;base64,iVBORw0KGgo=' });
   console.log(`ok  ${w.name}  (${String(html).length} chars)`);
 }
 if (unknownCols.size) console.log('note: columns without synthetic data (values were undefined): ' + [...unknownCols].join(', '));
