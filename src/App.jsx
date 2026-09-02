@@ -101,6 +101,7 @@ export default function App() {
 
   const [video, setVideo] = useState(null); // probe info
   const [offset, setOffset] = useState(0); // seconds added to video time to get telemetry time
+  const [range, setRange] = useState({ start: 0, end: null }); // exported part of the video in seconds; end null = to the end
   const [widgets, setWidgets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [library, setLibrary] = useState(loadLibrary);
@@ -297,6 +298,7 @@ export default function App() {
       const info = await probeVideo(p);
       setVideo(info);
       setPlaybackBlocked(false);
+      setRange({ start: 0, end: null }); // in/out points belong to the previous video
       setLayout((l) => {
         if (widgets.length === 0) return { w: info.width, h: info.height }; // empty project → this video is the reference
         if (l && l.w) return l; // keep the existing reference
@@ -319,6 +321,7 @@ export default function App() {
     setPlaybackBlocked(false);
     setPlayError(null);
     setTime(0);
+    setRange({ start: 0, end: null });
     setStatus('Video removed from the project');
   }, [proxyProgress, confirm]);
 
@@ -371,6 +374,7 @@ export default function App() {
         encoder: job.encoder,
         overlayFps: job.overlayFps,
         lt,
+        range,
         onStart: (setup) => setJob((j) => ({ ...j, setup })),
         onProgress: (p) => setJob((j) => ({ ...j, progress: p })),
         isCancelled: () => cancelRef.current,
@@ -381,7 +385,9 @@ export default function App() {
       setJob((j) => ({ ...j, running: false, result: 'error', log: j.log + '\n' + e.message }));
       setStatus('Export failed — see the Export tab');
     }
-  }, [video, job.running, job.mode, job.quality, widgets, store, offset]);
+    // lt is declared further down (useMemo) — read at call time, so it must not be listed here
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, widgets, store, offset, range]);
   const cancelExport = useCallback(() => (cancelRef.current = true), []);
 
   // ---- Project save/load ----
@@ -395,6 +401,7 @@ export default function App() {
           layout,
           sources: store.sources.map((s) => ({ path: s.path, timeColumn: s.timeColumn, timeUnit: s.timeUnit })),
           offset,
+          range,
           widgets,
         },
         null,
@@ -402,7 +409,7 @@ export default function App() {
       ),
     // storeVersion: store is a stable instance — source add/remove/edit only bumps the version,
     // and without it here the autosave effect below never sees those changes
-    [video, store, storeVersion, layout, offset, widgets]
+    [video, store, storeVersion, layout, offset, range, widgets]
   );
 
   const saveProject = useCallback(async () => {
@@ -424,6 +431,8 @@ export default function App() {
         }
       }
       setOffset(j.offset || 0);
+      const r = j.range || {};
+      setRange({ start: typeof r.start === 'number' && r.start > 0 ? r.start : 0, end: typeof r.end === 'number' ? r.end : null });
       if (j.layout && j.layout.w) setLayout(j.layout);
       const seen = new Set();
       setWidgets(
@@ -611,8 +620,10 @@ export default function App() {
             columnNames={columnNames}
             setStatus={showPlayError}
             disabled={playbackBlocked && !(video && (video.proxy || video.liveProxy))}
-            // while the live proxy is still encoding, seeking is capped to the part ffmpeg has written
+            // while the live proxy is still encoding, seeking (and the export in/out points) is capped to the part ffmpeg has written
             seekLimit={video && video.liveProxy && !video.proxy && proxyProgress != null ? Math.max(0, proxyProgress * video.duration - 1) : undefined}
+            range={range}
+            setRange={setRange}
           />
         </main>
 
@@ -676,7 +687,7 @@ export default function App() {
               />
             )}
             {tab === 'library' && <LibraryPanel library={library} setLibrary={setLibrary} addWidget={addWidget} setStatus={setStatus} confirm={confirm} />}
-            {tab === 'export' && <ExportPanel video={video} widgets={widgets} job={job} setJobOption={setJobOption} startExport={startExport} cancelExport={cancelExport} />}
+            {tab === 'export' && <ExportPanel video={video} widgets={widgets} job={job} setJobOption={setJobOption} startExport={startExport} cancelExport={cancelExport} range={range} />}
           </div>
         </aside>
       </div>

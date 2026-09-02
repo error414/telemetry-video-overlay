@@ -47,6 +47,11 @@ into `node_modules` on install), nothing else needs to be installed.
    the video timeline and moves with the offset – align a visible event (throttle-up, launch)
    with the same moment in the video. "Telemetry start = here" sets the offset so the first
    telemetry sample is at the current frame.
+   *Export range* – by default the whole video is exported; to export only a part, set the
+   in/out points: `I` / `O` keys or "In = here" / "Out = here" at the playhead, drag the amber
+   markers on the timeline, or type a timecode. The part outside the range is dimmed. While a
+   proxy is still being encoded the points can only be placed inside the already encoded part
+   (same limit as seeking). The range is saved with the project.
 5. **Library** – "Save to library" stores a widget inside the app; Import/Export as JSON.
    Projects (video path, CSV paths, offset, widgets) can be saved/opened too, and the last
    state is restored on restart.
@@ -55,6 +60,8 @@ into `node_modules` on install), nothing else needs to be installed.
      same resolution/fps, either at the source bitrate or CRF 17; audio and metadata copied.
    * *Overlay only with alpha* – ProRes 4444 `.mov`, VP9 `.webm`, or PNG sequence.
      Yes, alpha export is possible; ProRes 4444 is what NLEs (Premiere/Resolve/FCP) accept best.
+   * Only the export range from the sync bar is rendered (video mode cuts the source with
+     frame-accurate `-ss`/`-t`; overlay-only modes start at the in point).
 
 ## Widget API
 

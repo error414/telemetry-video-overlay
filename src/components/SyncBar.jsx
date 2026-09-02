@@ -1,19 +1,57 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { fmtTime, parseTime } from '../time.js';
 
-function fmtTime(s) {
-  if (!Number.isFinite(s)) return '0:00.000';
-  const m = Math.floor(s / 60);
-  const sec = s - m * 60;
-  return m + ':' + sec.toFixed(3).padStart(6, '0');
+const EMPTY_RANGE = { start: 0, end: null };
+const HANDLE_HIT = 7; // px around an in/out marker that grabs it instead of scrubbing
+
+/** Text field for a timecode ("m:ss.mmm" or seconds); commits on Enter / blur, Escape reverts. */
+function TimeInput({ value, onCommit, disabled, title }) {
+  const [text, setText] = useState(fmtTime(value));
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) setText(fmtTime(value));
+  }, [value, editing]);
+  const commit = () => {
+    const t = parseTime(text);
+    if (Number.isFinite(t)) onCommit(t);
+    setEditing(false);
+  };
+  return (
+    <input
+      className="input mono"
+      style={{ width: 84, padding: '2px 6px', color: 'var(--accent)' }}
+      value={text}
+      disabled={disabled}
+      title={title}
+      onFocus={() => setEditing(true)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        else if (e.key === 'Escape') {
+          setText(fmtTime(value));
+          setEditing(false);
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
 }
 
-export default function SyncBar({ video, videoRef, time, setTime, offset, setOffset, store, storeVersion, columnNames, setStatus, disabled, seekLimit }) {
+export default function SyncBar({ video, videoRef, time, setTime, offset, setOffset, store, storeVersion, columnNames, setStatus, disabled, seekLimit, range = EMPTY_RANGE, setRange }) {
   const dur = video ? video.duration : 0;
-  // while a live proxy is encoding, only the already-written part is seekable
+  // while a live proxy is encoding, only the already-written part is seekable (and selectable for export)
   const limit = seekLimit != null ? Math.min(dur, seekLimit) : dur;
+  const frame = 1 / (video && video.fps ? video.fps : 30);
   const [playing, setPlaying] = useState(false);
   const [graphCol, setGraphCol] = useState('');
   const canvasRef = useRef(null);
+
+  // export range in video seconds; end === null means "to the end of the video"
+  const inT = Math.max(0, Math.min(dur, range.start || 0));
+  const outT = range.end == null ? dur : Math.max(inT, Math.min(dur, range.end));
+  const fullRange = inT <= 0 && range.end == null;
+  const rangeLocked = disabled || !dur;
 
   useEffect(() => {
     if (!graphCol && columnNames.length) {
@@ -46,6 +84,22 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     if (v) v.currentTime = t;
     setTime(t);
   };
+
+  // move the in or out point; both are capped to the encoded part exactly like seeking,
+  // and they keep at least one frame between them
+  const setPoint = (which, t) => {
+    if (rangeLocked || !setRange) return;
+    t = Math.max(0, Math.min(limit, t));
+    setRange((r) => {
+      let start = Math.max(0, (r && r.start) || 0);
+      let end = r && r.end != null ? Math.min(dur, r.end) : dur;
+      if (which === 'in') start = Math.max(0, Math.min(t, end - frame));
+      else end = Math.min(dur, Math.max(t, start + frame));
+      return { start: +start.toFixed(3), end: end >= dur - frame / 2 ? null : +end.toFixed(3) };
+    });
+  };
+  const resetRange = () => setRange && setRange(EMPTY_RANGE);
+
   // Heavy files (e.g. HEVC 4K/120fps) can fail silently: play() resolves, no error/stalled event fires,
   // but the decoder never outputs a frame. Detect it by checking decoded-frame count shortly after play.
   const stallCheckRef = useRef(0);
@@ -89,7 +143,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     seek(time + n / (video ? video.fps : 30));
   };
 
-  // keyboard: space play, arrows frame step, shift+arrows = 1s, [ ] adjust offset
+  // keyboard: space play, arrows frame step, shift+arrows = 1s, [ ] adjust offset, I / O export in/out point
   useEffect(() => {
     const h = (e) => {
       // ignore shortcuts while typing anywhere editable (inputs, textareas, CodeMirror's contenteditable)
@@ -102,6 +156,8 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
       else if (e.code === 'ArrowLeft') stepFrame(e.shiftKey ? -(video ? video.fps : 30) : -1);
       else if (e.key === '[') setOffset((o) => +(o - (e.shiftKey ? 1 : 0.01)).toFixed(3));
       else if (e.key === ']') setOffset((o) => +(o + (e.shiftKey ? 1 : 0.01)).toFixed(3));
+      else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'i' || e.key === 'I')) setPoint('in', time);
+      else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'o' || e.key === 'O')) setPoint('out', time);
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -115,41 +171,69 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     const W = (c.width = c.clientWidth * devicePixelRatio);
     const H = (c.height = c.clientHeight * devicePixelRatio);
     g.clearRect(0, 0, W, H);
-    if (!graphCol || !store.columns[graphCol]) return;
     const span = dur || store.duration() || 1;
-    const pts = store.range(graphCol, offset, span + offset, Math.floor(W));
-    if (!pts.length) return;
+    // the trace needs telemetry; the range markers and the playhead below are drawn even without it
+    const pts = graphCol && store.columns[graphCol] ? store.range(graphCol, offset, span + offset, Math.floor(W)) : [];
     let min = Infinity;
     let max = -Infinity;
     for (const p of pts) if (typeof p.v === 'number') {
       if (p.v < min) min = p.v;
       if (p.v > max) max = p.v;
     }
-    if (!Number.isFinite(min)) return;
-    if (max === min) max = min + 1;
-    g.strokeStyle = '#4fc3c7';
-    g.lineWidth = devicePixelRatio;
-    g.beginPath();
-    let first = true;
-    for (const p of pts) {
-      if (typeof p.v !== 'number') continue;
-      const x = ((p.t - offset) / span) * W;
-      const y = H - ((p.v - min) / (max - min)) * (H - 4) - 2;
-      if (first) g.moveTo(x, y);
-      else g.lineTo(x, y);
-      first = false;
+    if (Number.isFinite(min)) {
+      if (max === min) max = min + 1;
+      g.strokeStyle = '#4fc3c7';
+      g.lineWidth = devicePixelRatio;
+      g.beginPath();
+      let first = true;
+      for (const p of pts) {
+        if (typeof p.v !== 'number') continue;
+        const x = ((p.t - offset) / span) * W;
+        const y = H - ((p.v - min) / (max - min)) * (H - 4) - 2;
+        if (first) g.moveTo(x, y);
+        else g.lineTo(x, y);
+        first = false;
+      }
+      g.stroke();
+      // telemetry extent (for finding overlap when offset is way off)
+      const tStart = ((0 - offset) / span) * W;
+      const tEnd = ((store.duration() - offset) / span) * W;
+      g.fillStyle = 'rgba(79,195,199,.12)';
+      g.fillRect(Math.max(0, tStart), 0, Math.min(W, tEnd) - Math.max(0, tStart), H);
     }
-    g.stroke();
-    // telemetry extent (for finding overlap when offset is way off)
-    const tStart = ((0 - offset) / span) * W;
-    const tEnd = ((store.duration() - offset) / span) * W;
-    g.fillStyle = 'rgba(79,195,199,.12)';
-    g.fillRect(Math.max(0, tStart), 0, Math.min(W, tEnd) - Math.max(0, tStart), H);
     // grey out the part a live proxy has not encoded yet (not seekable)
     if (limit < span - 0.5) {
       const lx = (limit / span) * W;
       g.fillStyle = 'rgba(128,128,128,.22)';
       g.fillRect(lx, 0, W - lx, H);
+    }
+    // export range: dim what will not be exported, amber in/out markers with a flag at the top
+    if (dur) {
+      const ix = (inT / span) * W;
+      const ox = (outT / span) * W;
+      if (!fullRange) {
+        g.fillStyle = 'rgba(0,0,0,.45)';
+        g.fillRect(0, 0, ix, H);
+        g.fillRect(ox, 0, W - ox, H);
+      }
+      const dpr = devicePixelRatio;
+      const flagW = 7 * dpr;
+      const flagH = 9 * dpr;
+      g.fillStyle = fullRange ? 'rgba(242,169,59,.55)' : '#f2a93b';
+      g.fillRect(Math.max(0, ix - dpr), 0, 2 * dpr, H);
+      g.fillRect(Math.min(W - 2 * dpr, ox - dpr), 0, 2 * dpr, H);
+      g.beginPath();
+      g.moveTo(ix, 0);
+      g.lineTo(ix + flagW, 0);
+      g.lineTo(ix, flagH);
+      g.closePath();
+      g.fill();
+      g.beginPath();
+      g.moveTo(ox, 0);
+      g.lineTo(ox - flagW, 0);
+      g.lineTo(ox, flagH);
+      g.closePath();
+      g.fill();
     }
     // playhead
     g.strokeStyle = '#f2a93b';
@@ -159,24 +243,47 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     g.moveTo(px, 0);
     g.lineTo(px, H);
     g.stroke();
-  }, [graphCol, offset, time, dur, limit, store, storeVersion]);
+  }, [graphCol, offset, time, dur, limit, inT, outT, fullRange, store, storeVersion]);
 
-  // the timeline canvas is the scrubber: click or drag anywhere to seek
-  const scrubRef = useRef(false);
-  const seekFromEvent = (e) => {
+  // the timeline canvas is the scrubber: click or drag anywhere to seek, drag an in/out marker to move it
+  const dragRef = useRef(null); // null | 'scrub' | 'in' | 'out'
+  const timeFromEvent = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    seek(((e.clientX - r.left) / r.width) * (dur || store.duration()));
+    return ((e.clientX - r.left) / r.width) * (dur || store.duration());
+  };
+  const hitHandle = (e) => {
+    if (rangeLocked) return null;
+    const r = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - r.left;
+    const dIn = Math.abs(px - (inT / dur) * r.width);
+    const dOut = Math.abs(px - (outT / dur) * r.width);
+    if (dIn <= HANDLE_HIT && dIn <= dOut) return 'in';
+    if (dOut <= HANDLE_HIT) return 'out';
+    return null;
+  };
+  const applyDrag = (e) => {
+    const t = timeFromEvent(e);
+    if (dragRef.current === 'scrub') seek(t);
+    else {
+      // moving a marker also parks the playhead on it so the exact frame is visible in the preview
+      const v = videoRef.current;
+      if (v) v.pause();
+      setPlaying(false);
+      setPoint(dragRef.current, t);
+      seek(t);
+    }
   };
   const onTimelineDown = (e) => {
     if (disabled) return;
-    scrubRef.current = true;
+    dragRef.current = hitHandle(e) || 'scrub';
     e.currentTarget.setPointerCapture(e.pointerId);
-    seekFromEvent(e);
+    applyDrag(e);
   };
   const onTimelineMove = (e) => {
-    if (scrubRef.current) seekFromEvent(e);
+    if (dragRef.current) applyDrag(e);
+    else e.currentTarget.style.cursor = hitHandle(e) ? 'ew-resize' : '';
   };
-  const onTimelineUp = () => (scrubRef.current = false);
+  const onTimelineUp = () => (dragRef.current = null);
 
   const lockTitle = disabled ? 'Playback disabled until a preview proxy is created (Files tab)' : undefined;
   const stepOffset = (d) => setOffset((o) => +(o + d).toFixed(3));
@@ -214,7 +321,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
           <span className="tc-main">{fmtTime(time)}</span>
           <span className="tc-sub">/ {fmtTime(dur)}</span>
         </div>
-        <div className="flex-1 min-w-0" style={{ height: 64 }} title="Teal trace = telemetry column over the video timeline (moves with offset). Click or drag to seek; align a visible event (throttle-up, launch) with the same moment in the video.">
+        <div className="flex-1 min-w-0" style={{ height: 64 }} title="Teal trace = telemetry column over the video timeline (moves with offset). Click or drag to seek; drag the amber markers to set the export range. Align a visible event (throttle-up, launch) with the same moment in the video.">
           <canvas ref={canvasRef} className="timeline" onPointerDown={onTimelineDown} onPointerMove={onTimelineMove} onPointerUp={onTimelineUp} onPointerCancel={onTimelineUp} />
         </div>
       </div>
@@ -243,6 +350,31 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
         {limit < dur - 0.5 && !disabled && <span className="hint">encoded to {fmtTime(limit)}</span>}
         {disabled && <span className="chip chip-warn">playback locked — create a proxy in Files</span>}
         <span className="hint ml-auto" style={{ color: 'var(--faint)' }}>space · ←/→ frame · [ ] offset ±0.01 (shift ±1)</span>
+      </div>
+
+      <div className="flex items-center gap-3 text-xs">
+        <span className="bar-label">Export range</span>
+        <button className="btn btn-xs" onClick={() => setPoint('in', time)} disabled={rangeLocked} title="Export from the current frame (I)">
+          In = here
+        </button>
+        <TimeInput value={inT} onCommit={(t) => setPoint('in', t)} disabled={rangeLocked} title="Export start — m:ss.sss or seconds" />
+        <span className="hint">to</span>
+        <TimeInput value={outT} onCommit={(t) => setPoint('out', t)} disabled={rangeLocked} title="Export end — m:ss.sss or seconds" />
+        <button className="btn btn-xs" onClick={() => setPoint('out', time)} disabled={rangeLocked} title="Export up to the current frame (O)">
+          Out = here
+        </button>
+        {dur > 0 && (
+          <span className={'chip mono ' + (fullRange ? '' : 'chip-accent')} style={{ whiteSpace: 'nowrap' }} title="Length of the exported part">
+            {fullRange ? 'whole video' : fmtTime(outT - inT) + ' of ' + fmtTime(dur)}
+          </span>
+        )}
+        {!fullRange && (
+          <button className="btn btn-xs" onClick={resetRange} title="Export the whole video again">
+            Whole video
+          </button>
+        )}
+        {limit < dur - 0.5 && !rangeLocked && <span className="hint">range limited to the encoded part</span>}
+        <span className="hint ml-auto" style={{ color: 'var(--faint)' }}>I / O = in / out at playhead · drag the amber markers</span>
       </div>
     </div>
   );

@@ -309,7 +309,7 @@ async function canCudaDecode(file) {
 }
 
 function buildArgs(opts) {
-  const { mode, info, out, width, height, fpsStr, quality, region, gpu } = opts;
+  const { mode, info, out, width, height, fpsStr, quality, region, gpu, range } = opts;
   const args = ['-y', '-hide_banner', '-loglevel', 'error', '-stats'];
   // The overlay stream only covers the region that contains widgets (much less data than full frame).
   const r = region || { x: 0, y: 0, w: width, h: height };
@@ -317,6 +317,10 @@ function buildArgs(opts) {
 
   if (mode === 'video') {
     if (gpu && gpu.decode) args.push('-hwaccel', 'cuda');
+    // Export only the selected part. Input-side -ss seeks to the previous keyframe and drops the decoded
+    // frames before the start, so the cut is frame-exact when re-encoding; timestamps restart at 0 so
+    // the overlay stream (which begins at the range start) lines up with the first exported frame.
+    if (range && (range.start > 0 || range.end < info.duration)) args.push('-ss', range.start.toFixed(3), '-t', (range.end - range.start).toFixed(3));
     args.push('-i', info.path, ...rawIn);
     // eof_action=repeat: overlay may run at a lower fps than the video; keep the last overlay frame until the video ends
     args.push('-filter_complex', `[0:v][1:v]overlay=${r.x}:${r.y}:eof_action=repeat[v]`, '-map', '[v]');

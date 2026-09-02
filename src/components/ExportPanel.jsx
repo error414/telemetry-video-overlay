@@ -1,4 +1,6 @@
 import React from 'react';
+import { exportSpan } from '../export.js';
+import { fmtTime } from '../time.js';
 
 export const EXPORT_MODES = [
   { id: 'video', label: 'Video + overlay', sub: 'Same codec, resolution and frame rate as the source', ext: 'mp4' },
@@ -8,9 +10,10 @@ export const EXPORT_MODES = [
 ];
 
 /** Presentational: the export job itself lives in App so it survives tab switches. */
-export default function ExportPanel({ video, widgets, job, setJobOption, startExport, cancelExport }) {
+export default function ExportPanel({ video, widgets, job, setJobOption, startExport, cancelExport, range }) {
   const { mode, quality, running, progress, log, result } = job;
   const modeExt = (EXPORT_MODES.find((m) => m.id === mode) || {}).ext || 'png seq';
+  const span = video ? exportSpan(range, video.duration, video.fps) : null;
   return (
     <div>
       <section className="bay bay-amber">
@@ -96,6 +99,19 @@ export default function ExportPanel({ video, widgets, job, setJobOption, startEx
           {!widgets.length && video && (
             <div className="text-xs mt-1" style={{ color: 'var(--warn)' }}>
               Add at least one widget.
+            </div>
+          )}
+          {span && (
+            <div className="text-xs mt-2 flex items-center gap-2 flex-wrap">
+              <span className="bar-label">Range</span>
+              {span.full ? (
+                <span className="chip">whole video · {fmtTime(video.duration)}</span>
+              ) : (
+                <span className="chip chip-accent mono">
+                  {fmtTime(span.start)} to {fmtTime(span.end)} · {fmtTime(span.end - span.start)}
+                </span>
+              )}
+              <span className="hint">set in the bar under the video (I / O keys, amber markers)</span>
             </div>
           )}
 

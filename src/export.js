@@ -26,27 +26,44 @@ export function widgetRegion(widgets, width, height, pad = 16, lt = IDENTITY_LT)
 }
 
 /**
+ * Resolve the export range ({ start, end } in video seconds, end === null = to the end) against the
+ * video duration. Both ends are snapped to the source frame grid so the overlay and the cut video line up.
+ */
+export function exportSpan(range, duration, fps = 0) {
+  const snap = (t) => (fps > 0 ? Math.round(t * fps) / fps : t);
+  let start = Math.max(0, Math.min(duration, (range && range.start) || 0));
+  let end = range && range.end != null ? Math.max(start, Math.min(duration, range.end)) : duration;
+  start = snap(start);
+  end = Math.min(duration, snap(end));
+  const full = start <= 0 && end >= duration;
+  return { start, end, full };
+}
+
+/**
  * Render overlay frames and stream RGBA into ffmpeg (main process).
  * mode: 'video' | 'prores' | 'vp9' | 'png'
  * overlayFps: frames per second of the overlay stream (video mode only; default = source fps)
  * encoder: 'auto' | 'cpu'  (auto = NVENC + CUDA decode when available)
+ * range: { start, end } in video seconds (end null = video end) — only this part is exported
  */
-export async function runExport({ mode, out, info, widgets, store, offset, quality, onProgress, isCancelled, overlayFps, encoder, onStart, lt = IDENTITY_LT }) {
+export async function runExport({ mode, out, info, widgets, store, offset, quality, onProgress, isCancelled, overlayFps, encoder, onStart, lt = IDENTITY_LT, range }) {
   const width = info.width;
   const height = info.height;
   const fullFps = info.fps;
   const useLowerFps = mode === 'video' && overlayFps && overlayFps < fullFps;
   const fps = useLowerFps ? overlayFps : fullFps;
   const fpsStr = useLowerFps ? String(overlayFps) : info.fpsStr;
-  const totalFrames = Math.max(1, Math.round(info.duration * fps));
+  const span = exportSpan(range, info.duration, fullFps);
+  const totalFrames = Math.max(1, Math.round((span.end - span.start) * fps));
   // Only the video mode may crop: transparent overlay-only exports must keep the full frame size.
   const region = mode === 'video' ? widgetRegion(widgets, width, height, 16, lt) : { x: 0, y: 0, w: width, h: height };
   const canvas = document.createElement('canvas');
   canvas.width = region.w;
   canvas.height = region.h;
 
-  const start = await window.api.exportStart({ mode, out, info, width, height, fpsStr, quality, region, encoder });
-  if (onStart) onStart({ region, fps, gpu: start.gpu, totalFrames });
+  // the main process cuts the source video to the range; the overlay stream starts at the range start
+  const start = await window.api.exportStart({ mode, out, info, width, height, fpsStr, quality, region, encoder, range: span.full ? null : { start: span.start, end: span.end } });
+  if (onStart) onStart({ region, fps, gpu: start.gpu, totalFrames, span });
   const t0 = performance.now();
   try {
     for (let i = 0; i < totalFrames; i++) {
@@ -54,7 +71,7 @@ export async function runExport({ mode, out, info, widgets, store, offset, quali
         await window.api.exportCancel();
         return { cancelled: true };
       }
-      const t = i / fps;
+      const t = span.start + i / fps;
       const buf = await renderFrameToCanvas(canvas, widgets, store, t, offset, region, lt);
       await window.api.exportFrame(buf);
       if (i % 5 === 0 || i === totalFrames - 1) {
