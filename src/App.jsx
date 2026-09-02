@@ -510,7 +510,7 @@ export default function App() {
   return (
     <div className="h-full flex flex-col">
       <header className="flex items-center gap-3 px-3" style={{ height: 46, background: 'var(--panel)', borderBottom: '1px solid var(--border)' }}>
-        <span className="wordmark">Telemetry Overlay</span>
+        <span className="wordmark">Blackbox overlay for INAV</span>
         <span style={{ width: 1, height: 20, background: 'var(--border-strong)' }} />
         <div className="flex items-center gap-1.5">
           <button className="btn" onClick={openVideo} disabled={locked}>

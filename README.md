@@ -1,4 +1,4 @@
-# Telemetry Overlay
+# Blackbox overlay for INAV
 
 Desktop app (Electron + React + Tailwind) that overlays user-written HTML/JS widgets driven by
 INAV blackbox CSV telemetry onto a video, and exports the result with the bundled ffmpeg.

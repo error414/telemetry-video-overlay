@@ -1,6 +1,6 @@
 ---
 name: widget
-description: Create or modify an overlay widget for this Telemetry Overlay app (JS function returning HTML, driven by INAV blackbox CSV columns). Self-contained — everything needed (runtime API, design language, template, test runner) is in this file; no need to read the app source. Use when the user asks for a new widget, gauge, graph, map, indicator, or wants an existing example widget changed.
+description: Create or modify an overlay widget for this "Blackbox overlay for INAV" app (JS function returning HTML, driven by INAV blackbox CSV columns). Self-contained — everything needed (runtime API, design language, template, test runner) is in this file; no need to read the app source. Use when the user asks for a new widget, gauge, graph, map, indicator, or wants an existing example widget changed.
 ---
 
 # Creating a widget

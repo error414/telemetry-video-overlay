@@ -1,6 +1,6 @@
 {
   "name": "telemetry-overlay",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Overlay HTML/JS widgets driven by INAV blackbox CSV telemetry onto video",
   "main": "electron/main.cjs",
   "private": true,
@@ -11,7 +11,7 @@
   },
   "build": {
     "appId": "com.error414.telemetry-overlay",
-    "productName": "Telemetry Overlay",
+    "productName": "Blackbox overlay for INAV",
     "directories": {
       "output": "release"
     },
