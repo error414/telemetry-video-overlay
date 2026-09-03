@@ -177,6 +177,16 @@ input[type='number'] {
 .input.mono {
   font-family: var(--font-mono);
 }
+/* Chromium paints a picked <datalist> suggestion like a browser autofill (light background,
+   black text) — keep our own colours; the inset shadow covers the forced background */
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset;
+  -webkit-text-fill-color: currentColor;
+  caret-color: currentColor;
+  transition: background-color 999999s ease-out 0s;
+}
 select.input {
   cursor: pointer;
 }
