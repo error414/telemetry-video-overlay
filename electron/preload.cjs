@@ -12,7 +12,13 @@ contextBridge.exposeInMainWorld('api', {
   writeText: (p, t) => ipcRenderer.invoke('fs:writeText', p, t),
   probe: (p) => ipcRenderer.invoke('video:probe', p),
   exportStart: (o) => ipcRenderer.invoke('export:start', o),
-  exportFrame: (buf) => ipcRenderer.invoke('export:frame', buf),
+  // Frame channel of the export: a MessagePort straight from the page to the main process. Frames go
+  // through its structured clone, which skips contextBridge's slow value copy (~30 ms per 1080p frame).
+  openFramePort: () => {
+    const { port1, port2 } = new MessageChannel();
+    ipcRenderer.postMessage('export:port', null, [port1]);
+    window.postMessage({ type: 'export:port' }, '*', [port2]);
+  },
   exportFinish: () => ipcRenderer.invoke('export:finish'),
   exportCancel: () => ipcRenderer.invoke('export:cancel'),
   onExportLog: (cb) => {

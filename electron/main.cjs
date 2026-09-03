@@ -352,13 +352,11 @@ function buildArgs(opts) {
     const lo = out.toLowerCase();
     if (lo.endsWith('.mp4') || lo.endsWith('.mov')) args.push('-movflags', '+faststart');
     args.push(out);
-  } else if (mode === 'prores') {
-    args.push(...rawIn, '-c:v', 'prores_ks', '-profile:v', '4444', '-pix_fmt', 'yuva444p10le', '-vendor', 'apl0', out);
-  } else if (mode === 'vp9') {
-    args.push(...rawIn, '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '18', '-row-mt', '1', '-auto-alt-ref', '0', out);
   } else if (mode === 'png') {
-    // out is a directory; write a numbered PNG sequence
-    args.push(...rawIn, '-c:v', 'png', path.join(out, 'overlay_%06d.png'));
+    // out is a directory; write a PNG sequence numbered by source frame index (startNumber = first frame of the export range)
+    // 8-bit RGBA PNG, the depth the frames are rendered at
+    const prefix = (opts.filePrefix || 'overlay').replace(/%/g, '_');
+    args.push(...rawIn, '-c:v', 'png', '-pix_fmt', 'rgba', '-start_number', String(opts.startNumber || 0), path.join(out, prefix + '_%06d.png'));
   } else {
     throw new Error('Unknown export mode ' + mode);
   }
@@ -387,16 +385,24 @@ ipcMain.handle('export:start', async (_e, opts) => {
   return { args, gpu };
 });
 
-ipcMain.handle('export:frame', (_e, buf) => {
-  if (!exp) throw new Error('No export running');
-  const cur = exp;
-  const { proc } = cur;
-  if (proc.exitCode !== null) throw new Error('ffmpeg exited: ' + cur.error);
-  return new Promise((resolve, reject) => {
-    const ok = proc.stdin.write(Buffer.from(buf), (err) => (err ? reject(err) : null));
-    if (ok) resolve(true);
-    else proc.stdin.once('drain', () => resolve(true));
+// Frames over a MessagePort (see preload openFramePort): each message is one RGBA frame (ArrayBuffer);
+// the reply { ok } is sent once the pipe took it (after drain), { error } when the write failed.
+ipcMain.on('export:port', (e) => {
+  const [port] = e.ports;
+  port.on('message', (ev) => {
+    const cur = exp;
+    if (!cur || cur.proc.exitCode !== null) return port.postMessage({ error: cur ? 'ffmpeg exited: ' + cur.error : 'No export running' });
+    const { proc } = cur;
+    try {
+      // ev.data is the frame's ArrayBuffer (a transfer list is not supported here — it would arrive as null)
+      const ok = proc.stdin.write(Buffer.from(ev.data), (err) => (err ? port.postMessage({ error: String(err.message || err) }) : null));
+      if (ok) port.postMessage({ ok: true });
+      else proc.stdin.once('drain', () => port.postMessage({ ok: true }));
+    } catch (err) {
+      port.postMessage({ error: 'frame write failed: ' + (err.message || err) });
+    }
   });
+  port.start();
 });
 
 ipcMain.handle('export:finish', async () => {

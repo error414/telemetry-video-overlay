@@ -3,7 +3,7 @@ import { TelemetryStore } from './telemetry.js';
 import { csvWorker } from './csvWorkerClient.js';
 import { newWidget } from './widgetRuntime.js';
 import { EXAMPLE_WIDGETS, EXAMPLES_VERSION } from './examples.js';
-import { runExport } from './export.js';
+import { runExport, freeFolder } from './export.js';
 import Stage from './components/Stage.jsx';
 import SyncBar from './components/SyncBar.jsx';
 import FilesPanel from './components/FilesPanel.jsx';
@@ -344,7 +344,7 @@ export default function App() {
   );
 
   // ---- Export job (lives here so it survives tab switches) ----
-  const [job, setJob] = useState({ mode: 'video', quality: 'bitrate', encoder: 'auto', overlayFps: 30, running: false, progress: null, log: '', result: null, out: null, setup: null });
+  const [job, setJob] = useState({ mode: 'video', quality: 'bitrate', encoder: 'auto', overlayFps: 30, perWidget: false, pngScale: 1, running: false, progress: null, log: '', result: null, out: null, setup: null });
   const cancelRef = useRef(false);
   const setJobOption = useCallback((patch) => setJob((j) => ({ ...j, ...patch })), []);
   useEffect(() => window.api.onExportLog((s) => setJob((j) => ({ ...j, log: (j.log + s).slice(-4000) }))), []);
@@ -353,8 +353,13 @@ export default function App() {
     const m = EXPORT_MODES.find((x) => x.id === job.mode);
     const base = video.path.replace(/\.[^.]+$/, '');
     let out;
-    if (job.mode === 'png') out = await window.api.openDir();
-    else {
+    if (job.mode === 'png') {
+      // the user picks a location; the sequence goes into a [video name]_overlay folder inside it
+      const dir = await window.api.openDir();
+      if (!dir) return;
+      const videoName = base.split(/[\\/]/).pop();
+      out = await freeFolder(dir, videoName + '_overlay');
+    } else {
       const ext = job.mode === 'video' ? video.path.split('.').pop().toLowerCase() : m.ext;
       out = await window.api.saveOutput(base + '_overlay.' + ext, ext);
     }
@@ -373,6 +378,8 @@ export default function App() {
         quality: job.quality,
         encoder: job.encoder,
         overlayFps: job.overlayFps,
+        perWidget: job.perWidget,
+        pngScale: job.pngScale,
         lt,
         range,
         onStart: (setup) => setJob((j) => ({ ...j, setup })),
@@ -387,7 +394,7 @@ export default function App() {
     }
     // lt is declared further down (useMemo) — read at call time, so it must not be listed here
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, widgets, store, offset, range]);
+  }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, job.perWidget, job.pngScale, widgets, store, offset, range]);
   const cancelExport = useCallback(() => (cancelRef.current = true), []);
 
   // ---- Project save/load ----

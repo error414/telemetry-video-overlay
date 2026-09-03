@@ -1,12 +1,10 @@
 import React from 'react';
-import { exportSpan } from '../export.js';
+import { exportSpan, pngScaleOptions } from '../export.js';
 import { fmtTime } from '../time.js';
 
 export const EXPORT_MODES = [
   { id: 'video', label: 'Video + overlay', sub: 'Same codec, resolution and frame rate as the source', ext: 'mp4' },
-  { id: 'prores', label: 'Overlay only · ProRes 4444', sub: 'Transparent .mov with alpha — best for Premiere / Resolve / Final Cut', ext: 'mov' },
-  { id: 'vp9', label: 'Overlay only · VP9', sub: 'Transparent .webm with alpha — small, not every editor reads it', ext: 'webm' },
-  { id: 'png', label: 'Overlay only · PNG sequence', sub: 'Transparent PNG per frame into a folder — works everywhere', ext: '' },
+  { id: 'png', label: 'Overlay only · PNG sequence', sub: 'Transparent PNG per frame into a [video]_overlay folder — works everywhere', ext: '' },
 ];
 
 /** Presentational: the export job itself lives in App so it survives tab switches. */
@@ -14,6 +12,7 @@ export default function ExportPanel({ video, widgets, job, setJobOption, startEx
   const { mode, quality, running, progress, log, result } = job;
   const modeExt = (EXPORT_MODES.find((m) => m.id === mode) || {}).ext || 'png seq';
   const span = video ? exportSpan(range, video.duration, video.fps) : null;
+  const scaleOptions = pngScaleOptions(video);
   return (
     <div>
       <section className="bay bay-amber">
@@ -73,8 +72,28 @@ export default function ExportPanel({ video, widgets, job, setJobOption, startEx
               </div>
             </div>
           )}
-          {mode !== 'video' && (
-            <div className="hint mt-3">Transparent overlay at {video ? `${video.width}×${video.height} @ ${video.fps.toFixed(3)} fps` : 'source resolution'}.</div>
+          {mode === 'png' && (
+            <div className="mt-3 text-xs flex flex-col gap-1">
+              <label className="block">
+                <span className="label mt-0">Image size</span>
+                <select className="input" value={scaleOptions.includes(job.pngScale) ? job.pngScale : 1} disabled={running || !video} onChange={(e) => setJobOption({ pngScale: Number(e.target.value) })}>
+                  {scaleOptions.map((k) => (
+                    <option key={k} value={k}>
+                      {video ? `${video.width * k}×${video.height * k}` : 'video size'}
+                      {k === 1 ? ' (same as video)' : ` (${k}×)`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer mt-1">
+                <input type="checkbox" checked={!!job.perWidget} disabled={running} onChange={(e) => setJobOption({ perWidget: e.target.checked })} />
+                Each widget separately (a sub-folder per widget)
+              </label>
+              <div className="hint">
+                8-bit RGBA PNG @ {video ? `${video.fps.toFixed(3)} fps` : 'source frame rate'}; widgets are rendered natively at the chosen size (multiples of the video up to 4K UHD). Files are
+                numbered by the source frame index (frame 0 = video start), so a cut export starts at the in point's frame number. Widgets sharing a name get _1, _2, _3 folders.
+              </div>
+            </div>
           )}
         </div>
       </section>
@@ -135,6 +154,8 @@ export default function ExportPanel({ video, widgets, job, setJobOption, startEx
                   <span className="chip mono">
                     overlay {job.setup.region.w}×{job.setup.region.h} @ {job.setup.fps.toFixed(2)} fps
                   </span>
+                  {job.setup.passes > 1 && <span className="chip mono">{job.setup.passes} widget folders</span>}
+                  {mode === 'png' && <span className="chip mono">from frame {job.setup.startNumber}</span>}
                 </div>
               )}
             </div>

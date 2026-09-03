@@ -75,10 +75,17 @@ A tag with a suffix (`v0.4.0-beta.1`) is published as a pre-release.
 6. **Export**
    * *Video + overlay* – re-encodes with the same codec family (h264 → libx264, hevc → libx265),
      same resolution/fps, either at the source bitrate or CRF 17; audio and metadata copied.
-   * *Overlay only with alpha* – ProRes 4444 `.mov`, VP9 `.webm`, or PNG sequence.
-     Yes, alpha export is possible; ProRes 4444 is what NLEs (Premiere/Resolve/FCP) accept best.
+   * *Overlay only · PNG sequence* – transparent 8-bit RGBA PNG per frame at the source frame
+     rate. *Image size* is the video size by default, or an integer multiple of it up to 4K UHD
+     (3840×2160) – widgets are rendered natively at that size, not upscaled. You pick a
+     location; the files go into a `[video name]_overlay` folder there as `overlay_000123.png`
+     (if that folder already exists, `_1`, `_2`, … is appended so an earlier export is never overwritten). Frames are numbered by the source frame index (frame 0 = video
+     start), so a cut export starts at the in point's frame number and the sequence drops onto
+     the original timeline without re-aligning. *Each widget separately* writes one sub-folder
+     per visible widget (named after the widget; widgets sharing a name get `_1`, `_2`, `_3`),
+     each holding a full-frame sequence of just that widget.
    * Only the export range from the sync bar is rendered (video mode cuts the source with
-     frame-accurate `-ss`/`-t`; overlay-only modes start at the in point).
+     frame-accurate `-ss`/`-t`; the PNG sequence starts at the in point).
 
 ## Widget API
 
