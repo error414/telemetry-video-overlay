@@ -64,19 +64,21 @@ A tag with a suffix (`v0.4.0-beta.1`) is published as a pre-release.
    the video timeline and moves with the offset – align a visible event (throttle-up, launch)
    with the same moment in the video. "Telemetry start = here" sets the offset so the first
    telemetry sample is at the current frame.
-   *Auto sync…* finds the offset automatically: it decodes a few seconds of the original
-   video, tracks the camera rotation in it (optical flow) and searches the gyro log for the
-   place that rotates the same way. Pick the three gyro rate columns (INAV: `gyroADC[0..2]`,
-   any order and unit – only the magnitude of the rotation is compared, so the camera
-   mounting does not matter), let it choose the window with the strongest motion or start
-   it at the playhead, and apply the result if the two traces in the dialog line up
-   (match close to 1). It needs unstabilised footage (RockSteady / HorizonSteady off) and
-   keeps the manual controls as they are – it only proposes numbers.
+   *Auto sync…* finds offset and drift automatically. It first asks for the method:
+   *Video motion × gyro* (available) or *Gyroflow data* (reserved, not implemented yet).
+   The video method decodes six 6-second windows of the original video spread over its
+   length (each sixth at its strongest gyro motion), tracks the camera rotation in them
+   (optical flow) and searches the whole gyro log for the place that rotates the same way.
+   Pick the three gyro rate columns (INAV: `gyroADC[0..2]`, any order and unit – only the
+   magnitude of the rotation is compared, so the camera mounting does not matter) and apply
+   the result if the traces in the dialog line up (match close to 1). It needs unstabilised
+   footage (RockSteady / HorizonSteady off) and keeps the manual controls as they are – it
+   only proposes numbers.
    *Drift* – camera and flight controller keep their own clocks and they run at slightly
    different rates (0.5 ms per second was measured on a DJI O3 + H7 pair, i.e. 0.3 s over a
    10-minute flight). The drift field in the sync bar is the correction in milliseconds of
-   telemetry per second of video; Auto sync measures it when it analyses two or more windows
-   spread over the video (the *Windows* setting).
+   telemetry per second of video; Auto sync measures it from the windows spread over the
+   video.
    *Export range* – by default the whole video is exported; to export only a part, set the
    in/out points: `I` / `O` keys or "In = here" / "Out = here" at the playhead, drag the amber
    markers on the timeline, or type a timecode. The part outside the range is dimmed. While a
