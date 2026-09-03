@@ -33,6 +33,14 @@ contextBridge.exposeInMainWorld('api', {
   cancelProxy: () => ipcRenderer.invoke('video:cancelProxy'),
   proxyTail: (p, offset, maxLen) => ipcRenderer.invoke('proxy:tail', p, offset, maxLen),
   exists: (p) => ipcRenderer.invoke('fs:exists', p),
+  // auto sync: gray frames of the original video for the motion analysis
+  grayFrames: (p, start, len, w, h, total) => ipcRenderer.invoke('video:grayFrames', p, start, len, w, h, total),
+  cancelGrayFrames: () => ipcRenderer.invoke('video:cancelGrayFrames'),
+  onGrayProgress: (cb) => {
+    const h = (_e, f) => cb(f);
+    ipcRenderer.on('video:grayProgress', h);
+    return () => ipcRenderer.removeListener('video:grayProgress', h);
+  },
   onProxyProgress: (cb) => {
     const h = (_e, f) => cb(f);
     ipcRenderer.on('proxy:progress', h);

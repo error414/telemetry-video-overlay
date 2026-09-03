@@ -1,44 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { fmtTime, parseTime } from '../time.js';
+import { fmtTime } from '../time.js';
+import TimeInput from './TimeInput.jsx';
 
 const EMPTY_RANGE = { start: 0, end: null };
 const HANDLE_HIT = 7; // px around an in/out marker that grabs it instead of scrubbing
 
-/** Text field for a timecode ("m:ss.mmm" or seconds); commits on Enter / blur, Escape reverts. */
-function TimeInput({ value, onCommit, disabled, title }) {
-  const [text, setText] = useState(fmtTime(value));
-  const [editing, setEditing] = useState(false);
-  useEffect(() => {
-    if (!editing) setText(fmtTime(value));
-  }, [value, editing]);
-  const commit = () => {
-    const t = parseTime(text);
-    if (Number.isFinite(t)) onCommit(t);
-    setEditing(false);
-  };
-  return (
-    <input
-      className="input mono"
-      style={{ width: 84, padding: '2px 6px', color: 'var(--accent)' }}
-      value={text}
-      disabled={disabled}
-      title={title}
-      onFocus={() => setEditing(true)}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur();
-        else if (e.key === 'Escape') {
-          setText(fmtTime(value));
-          setEditing(false);
-          e.currentTarget.blur();
-        }
-      }}
-    />
-  );
-}
-
-export default function SyncBar({ video, videoRef, time, setTime, offset, setOffset, store, storeVersion, columnNames, setStatus, disabled, seekLimit, range = EMPTY_RANGE, setRange }) {
+export default function SyncBar({ video, videoRef, time, setTime, offset, setOffset, store, storeVersion, columnNames, setStatus, disabled, seekLimit, range = EMPTY_RANGE, setRange, onAutoSync }) {
   const dur = video ? video.duration : 0;
   // while a live proxy is encoding, only the already-written part is seekable (and selectable for export)
   const limit = seekLimit != null ? Math.min(dur, seekLimit) : dur;
@@ -343,6 +310,9 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
         </div>
         <button className="btn btn-xs" title="Set offset so that telemetry starts at the current video frame" onClick={() => setOffset(+(-time).toFixed(3))}>
           Start = here
+        </button>
+        <button className="btn btn-xs" onClick={onAutoSync} disabled={!video || !columnNames.length} title="Find the offset automatically: the camera rotation seen in a few seconds of footage is matched against the gyro log">
+          Auto sync…
         </button>
         <span className="bar-label ml-2">Trace</span>
         <input list="cols" className="input mono" style={{ width: 200, padding: '2px 8px', color: 'var(--tele)' }} value={graphCol} onChange={(e) => setGraphCol(e.target.value)} placeholder="column name" title="Telemetry column drawn on the timeline" />

@@ -11,6 +11,7 @@ import WidgetsPanel, { ColumnsInput } from './components/WidgetsPanel.jsx';
 import LibraryPanel from './components/LibraryPanel.jsx';
 import ExportPanel, { EXPORT_MODES } from './components/ExportPanel.jsx';
 import CodeEditorModal from './components/CodeEditorModal.jsx';
+import AutoSyncDialog from './components/AutoSyncDialog.jsx';
 import { useConfirm } from './components/ConfirmDialog.jsx';
 
 const LIB_KEY = 'telemetry-overlay.widgetLibrary.v1';
@@ -120,6 +121,7 @@ export default function App() {
   }, []);
   const [editMode, setEditMode] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [autoSyncOpen, setAutoSyncOpen] = useState(false);
   // layout grid (video pixels): snap on/off, size, visibility — remembered between sessions
   const [grid, setGrid] = useState(() => {
     try {
@@ -634,6 +636,7 @@ export default function App() {
             seekLimit={video && video.liveProxy && !video.proxy && proxyProgress != null ? Math.max(0, proxyProgress * video.duration - 1) : undefined}
             range={range}
             setRange={setRange}
+            onAutoSync={() => setAutoSyncOpen(true)}
           />
         </main>
 
@@ -733,6 +736,9 @@ export default function App() {
         <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} offset={offset} columnNames={columnNames} ColumnsInput={ColumnsInput} env={widgetEnv} />
       )}
 
+      {autoSyncOpen && video && (
+        <AutoSyncDialog video={video} store={store} storeVersion={storeVersion} columnNames={columnNames} offset={offset} setOffset={setOffset} time={time} onClose={() => setAutoSyncOpen(false)} setStatus={setStatus} />
+      )}
       {confirmDialog}
       {playError && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(5,8,11,.72)' }} onMouseDown={(e) => e.target === e.currentTarget && setPlayError(null)}>

@@ -64,6 +64,14 @@ A tag with a suffix (`v0.4.0-beta.1`) is published as a pre-release.
    the video timeline and moves with the offset – align a visible event (throttle-up, launch)
    with the same moment in the video. "Telemetry start = here" sets the offset so the first
    telemetry sample is at the current frame.
+   *Auto sync…* finds the offset automatically: it decodes a few seconds of the original
+   video, tracks the camera rotation in it (optical flow) and searches the gyro log for the
+   place that rotates the same way. Pick the three gyro rate columns (INAV: `gyroADC[0..2]`,
+   any order and unit – only the magnitude of the rotation is compared, so the camera
+   mounting does not matter), let it choose the window with the strongest motion or start
+   it at the playhead, and apply the result if the two traces in the dialog line up
+   (match close to 1). It needs unstabilised footage (RockSteady / HorizonSteady off) and
+   keeps the manual controls as they are – it only proposes a number.
    *Export range* – by default the whole video is exported; to export only a part, set the
    in/out points: `I` / `O` keys or "In = here" / "Out = here" at the playhead, drag the amber
    markers on the timeline, or type a timecode. The part outside the range is dimmed. While a

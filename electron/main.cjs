@@ -227,6 +227,45 @@ ipcMain.handle('video:cancelProxy', () => {
 });
 ipcMain.handle('fs:exists', (_e, p) => fs.existsSync(p));
 
+// ---------- gray frames for the auto sync (camera motion analysis) ----------
+// Decodes `len` seconds of the ORIGINAL video from `start` as 8-bit gray frames of w×h
+// (rawvideo, no timestamps — the renderer assumes the constant frame rate ffprobe reported).
+// `total` is the expected frame count, only used for the progress events.
+let grayProc = null;
+ipcMain.handle('video:grayFrames', async (_e, file, start, len, w, h, total) => {
+  if (grayProc) throw new Error('Frame extraction already running');
+  const cuda = await canCudaDecode(file);
+  const args = ['-hide_banner', '-loglevel', 'error', '-stats'];
+  if (cuda) args.push('-hwaccel', 'cuda');
+  args.push('-ss', Number(start).toFixed(4), '-t', Number(len).toFixed(3), '-i', file, '-an', '-sn', '-dn', '-vf', `scale=${w}:${h},format=gray`, '-f', 'rawvideo', 'pipe:1');
+  const proc = spawn(ffmpegPath, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  grayProc = proc;
+  const chunks = [];
+  let err = '';
+  proc.stdout.on('data', (d) => chunks.push(d));
+  proc.stderr.on('data', (d) => {
+    const s = d.toString();
+    err = (err + s).slice(-4000);
+    const m = /frame=\s*(\d+)/.exec(s);
+    if (m && win && total) win.webContents.send('video:grayProgress', Math.min(1, +m[1] / total));
+  });
+  const code = await new Promise((resolve) => proc.on('close', resolve));
+  grayProc = null;
+  if (proc.cancelled) return null;
+  if (code !== 0) {
+    const last = err.trim().split('\n').filter((l) => !/^frame=/.test(l)).pop() || 'exit code ' + code;
+    throw new Error('ffmpeg failed: ' + last);
+  }
+  const data = Buffer.concat(chunks);
+  return { data, frames: Math.floor(data.length / (w * h)) };
+});
+ipcMain.handle('video:cancelGrayFrames', () => {
+  if (grayProc) {
+    grayProc.cancelled = true;
+    grayProc.kill();
+  }
+});
+
 // ---------- INAV blackbox decoder (bundled from iNavFlight/blackbox-tools) ----------
 // packaged: shipped via extraResources next to the asar; dev: in the repo's bin/
 const bbDecodeExe = process.platform === 'win32' ? 'blackbox_decode.exe' : 'blackbox_decode';
