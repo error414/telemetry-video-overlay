@@ -96,12 +96,20 @@ export function findOffset(video, gyro, search = {}) {
     if (denom < 0) offset += (0.5 * (a - c)) / denom * step;
   }
 
-  // strongest competing peak at least 1 s away
-  let second = -Infinity;
+  // strongest competing peak: the best score outside the main peak (its half-height
+  // extent plus 1 s on each side — slow manoeuvres make the main peak broad, and that
+  // broadness is not ambiguity)
+  const bi = coarse.findIndex((p) => Math.round(p.offset / step) === bestM);
+  let lo2 = bi;
+  let hi2 = bi;
+  while (lo2 > 0 && coarse[lo2 - 1].score > 0.5 * best) lo2--;
+  while (hi2 < coarse.length - 1 && coarse[hi2 + 1].score > 0.5 * best) hi2++;
   const far = Math.round(1 / step);
-  for (const p of coarse) {
-    const m = Math.round(p.offset / step);
-    if (Math.abs(m - bestM) >= far && p.score > second) second = p.score;
+  let second = -Infinity;
+  for (let i = 0; i < coarse.length; i++) {
+    const m = Math.round(coarse[i].offset / step);
+    const inside = m >= Math.round(coarse[lo2].offset / step) - far && m <= Math.round(coarse[hi2].offset / step) + far;
+    if (!inside && coarse[i].score > second) second = coarse[i].score;
   }
   return { offset, score: fineBest, coarse, second: Number.isFinite(second) ? second : 0 };
 }

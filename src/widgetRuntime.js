@@ -1,3 +1,4 @@
+import { toTele } from './time.js';
 /**
  * Widget API
  * ----------
@@ -11,7 +12,7 @@
  *           "columns" setting, in the same order (comma separated column names of
  *           the CSV).  Numeric columns are linearly interpolated between samples.
  *           Undefined when the video time is outside the telemetry range.
- *  time   : telemetry time in integer milliseconds (video time + offset).
+ *  time   : telemetry time in integer milliseconds (video time × (1 + drift) + offset, see time.js toTele).
  *  ctx    : helper object
  *     ctx.videoTime   video time in seconds
  *     ctx.width/height  widget box size in pixels
@@ -106,21 +107,22 @@ export function waitForImages() {
  * The export range in telemetry milliseconds: range = {start, end} in video seconds (end null =
  * video end, see exportSpan), duration = video length. null without a video.
  */
-export function exportRangeMs(range, duration, offsetSec) {
+export function exportRangeMs(range, duration, sync) {
   if (!(duration > 0)) return null;
   const start = Math.max(0, Math.min(duration, (range && range.start) || 0));
   const end = range && range.end != null ? Math.max(start, Math.min(duration, range.end)) : duration;
-  return { from: Math.round((start + offsetSec) * 1000), to: Math.round((end + offsetSec) * 1000) };
+  return { from: Math.round(toTele(start, sync) * 1000), to: Math.round(toTele(end, sync) * 1000) };
 }
 
 /**
  * Render a widget to an HTML string. Never throws.
  * env: { range, duration } — export range (video seconds) and video duration, for ctx.exportRange.
+ * sync: {offset, drift} (or a plain offset in seconds) — see time.js.
  */
-export function renderWidget(widget, store, videoTime, offsetSec, scopeMode = 'id', env = {}) {
+export function renderWidget(widget, store, videoTime, sync, scopeMode = 'id', env = {}) {
   const { fn, error } = compileWidget(widget.code || '');
   if (error) return { html: errBox('Compile error: ' + error), error };
-  const relSec = videoTime + offsetSec;
+  const relSec = toTele(videoTime, sync);
   const cols = parseColumns(widget.columns);
   const values = cols.map((c) => store.valueAt(c, relSec, true));
   const timeMs = Math.round(relSec * 1000);
@@ -144,7 +146,7 @@ export function renderWidget(widget, store, videoTime, offsetSec, scopeMode = 'i
     },
     all: (n, max) => store.all(n, max).map((p) => ({ t: Math.round(p.t * 1000), v: p.v })),
     duration: Math.round(store.duration() * 1000),
-    exportRange: exportRangeMs(env.range, env.duration, offsetSec),
+    exportRange: exportRangeMs(env.range, env.duration, sync),
     dataVersion: store.revision || 0,
   };
   try {
@@ -245,13 +247,13 @@ export function widgetBoxStyle(w, extra = '', lt = IDENTITY_LT) {
 }
 
 /** Compose one SVG string with all widgets for a given time (used for export & snapshots). */
-export function composeFrameSvg(widgets, store, videoTime, offsetSec, width, height, region, lt = IDENTITY_LT, env = {}) {
+export function composeFrameSvg(widgets, store, videoTime, sync, width, height, region, lt = IDENTITY_LT, env = {}) {
   let inner = '';
   const ox = region ? region.x : 0;
   const oy = region ? region.y : 0;
   for (const w of widgets) {
     if (w.visible === false) continue;
-    const { html } = renderWidget(w, store, videoTime, offsetSec, 'id', env);
+    const { html } = renderWidget(w, store, videoTime, sync, 'id', env);
     // shift by the region origin in layout units so that (x - ox/sx) * sx = x*sx - ox
     const shifted = ox || oy ? { ...w, x: w.x - ox / lt.sx, y: w.y - oy / lt.sy } : w;
     inner += '<div id="' + widgetDomId(w) + '" style="' + widgetBoxStyle(shifted, '', lt) + '">' + html + '</div>';
@@ -264,13 +266,13 @@ export function composeFrameSvg(widgets, store, videoTime, offsetSec, width, hei
 }
 
 /** Draw a frame into a canvas (2d ctx) at full video resolution. Returns RGBA ArrayBuffer. */
-export async function renderFrameToCanvas(canvas, widgets, store, videoTime, offsetSec, region, lt = IDENTITY_LT, env = {}) {
+export async function renderFrameToCanvas(canvas, widgets, store, videoTime, sync, region, lt = IDENTITY_LT, env = {}) {
   const { width, height } = canvas;
-  let svg = composeFrameSvg(widgets, store, videoTime, offsetSec, width, height, region, lt, env);
+  let svg = composeFrameSvg(widgets, store, videoTime, sync, width, height, region, lt, env);
   // widgets may have requested images (map tiles) – wait for them and re-render so the export frame is complete
   for (let i = 0; i < 5 && hasPendingImages(); i++) {
     await waitForImages();
-    svg = composeFrameSvg(widgets, store, videoTime, offsetSec, width, height, region, lt, env);
+    svg = composeFrameSvg(widgets, store, videoTime, sync, width, height, region, lt, env);
   }
   const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   const img = new Image();

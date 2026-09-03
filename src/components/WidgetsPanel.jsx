@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { toTele } from '../time.js';
 import { parseColumns, renderWidget } from '../widgetRuntime.js';
 
 /** Comma-separated column list with autocomplete for the item under the caret. */
@@ -88,7 +89,7 @@ export function ColumnsInput({ value, onChange, columnNames }) {
   );
 }
 
-export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidget, updateWidget, removeWidget, setWidgets, columnNames, store, time, offset, saveToLibrary, openEditor, env }) {
+export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidget, updateWidget, removeWidget, setWidgets, columnNames, store, time, sync, saveToLibrary, openEditor, env }) {
   const move = (id, dir) =>
     setWidgets((ws) => {
       const i = ws.findIndex((w) => w.id === id);
@@ -101,7 +102,7 @@ export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidg
 
   const cols = selected ? parseColumns(selected.columns) : [];
   const missing = cols.filter((c) => !store.columns[c]);
-  const out = selected ? renderWidget(selected, store, time, offset, 'id', env) : null;
+  const out = selected ? renderWidget(selected, store, time, sync, 'id', env) : null;
 
   return (
     <div>
@@ -164,7 +165,7 @@ export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidg
               )}
               {cols.length > 0 && (
                 <div className="mono text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                  {cols.map((c, i) => `[${i}] ${fmt(store.valueAt(c, time + offset))}`).join('   ')}
+                  {cols.map((c, i) => `[${i}] ${fmt(store.valueAt(c, toTele(time, sync)))}`).join('   ')}
                 </div>
               )}
 
@@ -236,7 +237,7 @@ function fmt(v) {
 const API_DOC = `function (values, time, ctx) { return '<div>…</div>'; }
 
 values   array of current values of the listed columns (interpolated)
-time     telemetry time in ms (integer) = video time + offset
+time     telemetry time in ms (integer) = video time × (1 + drift) + offset
 ctx.videoTime        video time (s)
 ctx.width, ctx.height  widget box size (px)
 ctx.columns          array of column names

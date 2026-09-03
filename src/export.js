@@ -134,7 +134,7 @@ export function pngScaleOptions(info) {
  * PNG sequences always run at the source frame rate and are numbered by the source frame index
  * (frame 0 = video start), so a cut export starts at the index of the in point.
  */
-export async function runExport({ mode, out, info, widgets, store, offset, quality, onProgress, isCancelled, overlayFps, encoder, onStart, lt = IDENTITY_LT, range, perWidget, pngScale = 1 }) {
+export async function runExport({ mode, out, info, widgets, store, sync, quality, onProgress, isCancelled, overlayFps, encoder, onStart, lt = IDENTITY_LT, range, perWidget, pngScale = 1 }) {
   const scale = mode === 'png' && pngScaleOptions(info).includes(pngScale) ? pngScale : 1;
   const width = Math.round(info.width * scale);
   const height = Math.round(info.height * scale);
@@ -217,7 +217,7 @@ export async function runExport({ mode, out, info, widgets, store, offset, quali
         }
         if (sendError) throw sendError;
         const t = span.start + i / fps;
-        const buf = await renderFrameToCanvas(canvas, pass.widgets, store, t, offset, region, lt, { range: span, duration: info.duration });
+        const buf = await renderFrameToCanvas(canvas, pass.widgets, store, t, sync, region, lt, { range: span, duration: info.duration });
         if (pending.length >= PIPELINE_DEPTH) await pending.shift();
         send(buf);
         done++;

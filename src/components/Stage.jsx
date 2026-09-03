@@ -16,7 +16,7 @@ function liveProxyMime(video) {
   return 'video/mp4; codecs="avc1.640033"';
 }
 
-export default function Stage({ video, videoRef, widgets, store, storeVersion, offset, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, lt, setStatus, onOpenEditor, empty, range }) {
+export default function Stage({ video, videoRef, widgets, store, storeVersion, sync, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, lt, setStatus, onOpenEditor, empty, range }) {
   const gridSize = grid && grid.size > 1 ? grid.size : 1;
   // snap to grid unless disabled; holding Alt while dragging temporarily disables snapping
   const snap = (v, alt) => (grid && grid.snap && !alt ? Math.round(v / gridSize) * gridSize : Math.round(v));
@@ -97,7 +97,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, o
   }, []);
 
   const env = useMemo(() => ({ range, duration: video ? video.duration : 0 }), [range, video]);
-  const rendered = useMemo(() => widgets.map((w) => ({ w, out: renderWidget(w, store, time, offset, 'shadow', env) })), [widgets, store, time, offset, storeVersion, assetVersion, env]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rendered = useMemo(() => widgets.map((w) => ({ w, out: renderWidget(w, store, time, sync, 'shadow', env) })), [widgets, store, time, sync, storeVersion, assetVersion, env]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- drag / resize ----
   const dragRef = useRef(null);

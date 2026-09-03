@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { toTele, toVideo } from '../time.js';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { css as cssLang } from '@codemirror/lang-css';
@@ -21,7 +22,7 @@ function describe(el) {
  * the right. Hovering the preview shows the element under the cursor (selector for the CSS tab);
  * clicking copies it. Edits apply immediately; "Close" just closes.
  */
-export default function CodeEditorModal({ widget, updateWidget, onClose, store, time, offset, columnNames, ColumnsInput, env }) {
+export default function CodeEditorModal({ widget, updateWidget, onClose, store, time, sync, columnNames, ColumnsInput, env }) {
   const [previewTime, setPreviewTime] = useState(time);
   const [follow, setFollow] = useState(true);
   const [tab, setTab] = useState('code');
@@ -33,7 +34,7 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
     if (follow) setPreviewTime(time);
   }, [time, follow]);
 
-  const out = useMemo(() => renderWidget(widget, store, previewTime, offset, 'shadow', env), [widget, store, previewTime, offset, env]);
+  const out = useMemo(() => renderWidget(widget, store, previewTime, sync, 'shadow', env), [widget, store, previewTime, sync, env]);
   const cols = parseColumns(widget.columns);
   const missing = cols.filter((c) => !store.columns[c]);
   const duration = store.duration();
@@ -165,9 +166,9 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> follow video
               </label>
-              <input type="range" min={0} max={duration || 1} step={0.01} value={previewTime + offset} onChange={(e) => { setFollow(false); setPreviewTime(Number(e.target.value) - offset); }} className="flex-1" />
+              <input type="range" min={0} max={duration || 1} step={0.01} value={toTele(previewTime, sync)} onChange={(e) => { setFollow(false); setPreviewTime(toVideo(Number(e.target.value), sync)); }} className="flex-1" />
               <span className="mono w-20 text-right" style={{ color: 'var(--muted)' }}>
-                t = {(previewTime + offset).toFixed(2)} s
+                t = {toTele(previewTime, sync).toFixed(2)} s
               </span>
             </div>
             <div className="flex-1 overflow-y-auto px-3 pb-3">
@@ -180,7 +181,7 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
               )}
               {cols.length > 0 && (
                 <div className="mono text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                  {cols.map((c, i) => `[${i}] ${fmt(store.valueAt(c, previewTime + offset))}`).join('   ')}
+                  {cols.map((c, i) => `[${i}] ${fmt(store.valueAt(c, toTele(previewTime, sync)))}`).join('   ')}
                 </div>
               )}
               <div className="grid grid-cols-5 gap-2">

@@ -71,7 +71,12 @@ A tag with a suffix (`v0.4.0-beta.1`) is published as a pre-release.
    mounting does not matter), let it choose the window with the strongest motion or start
    it at the playhead, and apply the result if the two traces in the dialog line up
    (match close to 1). It needs unstabilised footage (RockSteady / HorizonSteady off) and
-   keeps the manual controls as they are – it only proposes a number.
+   keeps the manual controls as they are – it only proposes numbers.
+   *Drift* – camera and flight controller keep their own clocks and they run at slightly
+   different rates (0.5 ms per second was measured on a DJI O3 + H7 pair, i.e. 0.3 s over a
+   10-minute flight). The drift field in the sync bar is the correction in milliseconds of
+   telemetry per second of video; Auto sync measures it when it analyses two or more windows
+   spread over the video (the *Windows* setting).
    *Export range* – by default the whole video is exported; to export only a part, set the
    in/out points: `I` / `O` keys or "In = here" / "Out = here" at the playhead, drag the amber
    markers on the timeline, or type a timecode. The part outside the range is dimmed. While a
@@ -106,7 +111,7 @@ function (values, time, ctx) {
 | arg | meaning |
 |---|---|
 | `values` | array of the current values of the columns listed in the widget's *Columns* field, same order. Numeric columns are linearly interpolated. `undefined` outside telemetry range. |
-| `time` | telemetry time in integer milliseconds (video time + offset) |
+| `time` | telemetry time in integer milliseconds (video time × (1 + drift) + offset) |
 | `ctx.videoTime` | video time in seconds |
 | `ctx.width`, `ctx.height` | widget box size |
 | `ctx.columns` | column names |

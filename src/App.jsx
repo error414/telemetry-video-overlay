@@ -13,6 +13,7 @@ import ExportPanel, { EXPORT_MODES } from './components/ExportPanel.jsx';
 import CodeEditorModal from './components/CodeEditorModal.jsx';
 import AutoSyncDialog from './components/AutoSyncDialog.jsx';
 import { useConfirm } from './components/ConfirmDialog.jsx';
+import { toTele } from './time.js';
 
 const LIB_KEY = 'telemetry-overlay.widgetLibrary.v1';
 const PROJECT_KEY = 'telemetry-overlay.lastProject.v1';
@@ -102,6 +103,8 @@ export default function App() {
 
   const [video, setVideo] = useState(null); // probe info
   const [offset, setOffset] = useState(0); // seconds added to video time to get telemetry time
+  const [drift, setDrift] = useState(0); // ms of telemetry per second of video the two clocks drift apart (see time.js)
+  const sync = useMemo(() => ({ offset, drift }), [offset, drift]);
   const [range, setRange] = useState({ start: 0, end: null }); // exported part of the video in seconds; end null = to the end
   const [widgets, setWidgets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -376,7 +379,7 @@ export default function App() {
         info: video,
         widgets,
         store,
-        offset,
+        sync,
         quality: job.quality,
         encoder: job.encoder,
         overlayFps: job.overlayFps,
@@ -396,7 +399,7 @@ export default function App() {
     }
     // lt is declared further down (useMemo) — read at call time, so it must not be listed here
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, job.perWidget, job.pngScale, widgets, store, offset, range]);
+  }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, job.perWidget, job.pngScale, widgets, store, sync, range]);
   const cancelExport = useCallback(() => (cancelRef.current = true), []);
 
   // ---- Project save/load ----
@@ -410,6 +413,7 @@ export default function App() {
           layout,
           sources: store.sources.map((s) => ({ path: s.path, timeColumn: s.timeColumn, timeUnit: s.timeUnit })),
           offset,
+          drift,
           range,
           widgets,
         },
@@ -418,7 +422,7 @@ export default function App() {
       ),
     // storeVersion: store is a stable instance — source add/remove/edit only bumps the version,
     // and without it here the autosave effect below never sees those changes
-    [video, store, storeVersion, layout, offset, range, widgets]
+    [video, store, storeVersion, layout, offset, drift, range, widgets]
   );
 
   const saveProject = useCallback(async () => {
@@ -440,6 +444,7 @@ export default function App() {
         }
       }
       setOffset(j.offset || 0);
+      setDrift(typeof j.drift === 'number' && Number.isFinite(j.drift) ? j.drift : 0);
       const r = j.range || {};
       setRange({ start: typeof r.start === 'number' && r.start > 0 ? r.start : 0, end: typeof r.end === 'number' ? r.end : null });
       if (j.layout && j.layout.w) setLayout(j.layout);
@@ -579,7 +584,7 @@ export default function App() {
             widgets={widgets}
             store={store}
             storeVersion={storeVersion}
-            offset={offset}
+            sync={sync}
             time={time}
             setTime={setTime}
             range={range}
@@ -627,6 +632,8 @@ export default function App() {
             setTime={setTime}
             offset={offset}
             setOffset={setOffset}
+            drift={drift}
+            setDrift={setDrift}
             store={store}
             storeVersion={storeVersion}
             columnNames={columnNames}
@@ -691,7 +698,7 @@ export default function App() {
                 columnNames={columnNames}
                 store={store}
                 time={time}
-                offset={offset}
+                sync={sync}
                 env={widgetEnv}
                 openEditor={() => setEditorOpen(true)}
                 saveToLibrary={(w) => {
@@ -724,20 +731,25 @@ export default function App() {
             {store.sources.length} src
           </span>
         )}
-        <span className="readout" title="Telemetry time = video time + offset">
-          t <b>{(time + offset).toFixed(3)}</b> s
+        <span className="readout" title="Telemetry time = video time × (1 + drift) + offset">
+          t <b>{toTele(time, sync).toFixed(3)}</b> s
         </span>
         <span className="readout" title="Telemetry offset — adjust in the sync bar or with [ and ] keys">
           offset <b>{offset.toFixed(3)}</b> s
         </span>
+        {drift !== 0 && (
+          <span className="readout" title="Clock drift: milliseconds of telemetry gained per second of video">
+            drift <b>{drift.toFixed(2)}</b> ms/s
+          </span>
+        )}
       </footer>
 
       {editorOpen && selected && (
-        <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} offset={offset} columnNames={columnNames} ColumnsInput={ColumnsInput} env={widgetEnv} />
+        <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} sync={sync} columnNames={columnNames} ColumnsInput={ColumnsInput} env={widgetEnv} />
       )}
 
       {autoSyncOpen && video && (
-        <AutoSyncDialog video={video} store={store} storeVersion={storeVersion} columnNames={columnNames} offset={offset} setOffset={setOffset} time={time} onClose={() => setAutoSyncOpen(false)} setStatus={setStatus} />
+        <AutoSyncDialog video={video} store={store} storeVersion={storeVersion} columnNames={columnNames} sync={sync} setOffset={setOffset} setDrift={setDrift} time={time} onClose={() => setAutoSyncOpen(false)} setStatus={setStatus} />
       )}
       {confirmDialog}
       {playError && (

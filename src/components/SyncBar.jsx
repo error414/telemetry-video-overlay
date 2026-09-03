@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { fmtTime } from '../time.js';
+import { fmtTime, toTele, toVideo } from '../time.js';
 import TimeInput from './TimeInput.jsx';
 
 const EMPTY_RANGE = { start: 0, end: null };
 const HANDLE_HIT = 7; // px around an in/out marker that grabs it instead of scrubbing
 
-export default function SyncBar({ video, videoRef, time, setTime, offset, setOffset, store, storeVersion, columnNames, setStatus, disabled, seekLimit, range = EMPTY_RANGE, setRange, onAutoSync }) {
+export default function SyncBar({ video, videoRef, time, setTime, offset, setOffset, drift = 0, setDrift, store, storeVersion, columnNames, setStatus, disabled, seekLimit, range = EMPTY_RANGE, setRange, onAutoSync }) {
   const dur = video ? video.duration : 0;
   // while a live proxy is encoding, only the already-written part is seekable (and selectable for export)
   const limit = seekLimit != null ? Math.min(dur, seekLimit) : dur;
   const frame = 1 / (video && video.fps ? video.fps : 30);
+  const sync = { offset, drift };
   const [playing, setPlaying] = useState(false);
   const [graphCol, setGraphCol] = useState('');
   const canvasRef = useRef(null);
@@ -140,7 +141,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     g.clearRect(0, 0, W, H);
     const span = dur || store.duration() || 1;
     // the trace needs telemetry; the range markers and the playhead below are drawn even without it
-    const pts = graphCol && store.columns[graphCol] ? store.range(graphCol, offset, span + offset, Math.floor(W)) : [];
+    const pts = graphCol && store.columns[graphCol] ? store.range(graphCol, toTele(0, sync), toTele(span, sync), Math.floor(W)) : [];
     let min = Infinity;
     let max = -Infinity;
     for (const p of pts) if (typeof p.v === 'number') {
@@ -155,7 +156,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
       let first = true;
       for (const p of pts) {
         if (typeof p.v !== 'number') continue;
-        const x = ((p.t - offset) / span) * W;
+        const x = (toVideo(p.t, sync) / span) * W;
         const y = H - ((p.v - min) / (max - min)) * (H - 4) - 2;
         if (first) g.moveTo(x, y);
         else g.lineTo(x, y);
@@ -163,8 +164,8 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
       }
       g.stroke();
       // telemetry extent (for finding overlap when offset is way off)
-      const tStart = ((0 - offset) / span) * W;
-      const tEnd = ((store.duration() - offset) / span) * W;
+      const tStart = (toVideo(0, sync) / span) * W;
+      const tEnd = (toVideo(store.duration(), sync) / span) * W;
       g.fillStyle = 'rgba(79,195,199,.12)';
       g.fillRect(Math.max(0, tStart), 0, Math.min(W, tEnd) - Math.max(0, tStart), H);
     }
@@ -210,7 +211,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     g.moveTo(px, 0);
     g.lineTo(px, H);
     g.stroke();
-  }, [graphCol, offset, time, dur, limit, inT, outT, fullRange, store, storeVersion]);
+  }, [graphCol, offset, drift, time, dur, limit, inT, outT, fullRange, store, storeVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the timeline canvas is the scrubber: click or drag anywhere to seek, drag an in/out marker to move it
   const dragRef = useRef(null); // null | 'scrub' | 'in' | 'out'
@@ -254,6 +255,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
 
   const lockTitle = disabled ? 'Playback disabled until a preview proxy is created (Files tab)' : undefined;
   const stepOffset = (d) => setOffset((o) => +(o + d).toFixed(3));
+  const stepDrift = (d) => setDrift && setDrift((x) => +(x + d).toFixed(3));
 
   return (
     <div className="p-2 flex flex-col gap-2 bg-[var(--panel)] border-t border-[var(--border)]">
@@ -293,9 +295,9 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
         </div>
       </div>
 
-      <div className="flex items-center gap-3 text-xs">
+      <div className="flex items-center gap-3 text-xs flex-wrap">
         <span className="bar-label">Sync offset</span>
-        <div className="seg">
+        <div className="seg" style={{ flex: 'none' }}>
           {[-1, -0.1, -0.01].map((d) => (
             <button key={d} onClick={() => stepOffset(d)} title={`Shift telemetry ${d} s`}>
               {d}
@@ -311,15 +313,32 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
         <button className="btn btn-xs" title="Set offset so that telemetry starts at the current video frame" onClick={() => setOffset(+(-time).toFixed(3))}>
           Start = here
         </button>
-        <button className="btn btn-xs" onClick={onAutoSync} disabled={!video || !columnNames.length} title="Find the offset automatically: the camera rotation seen in a few seconds of footage is matched against the gyro log">
+        <span className="bar-label ml-1" title="Clock drift between camera and flight controller: milliseconds of telemetry gained per second of video (telemetry = video × (1 + drift/1000) + offset)">
+          Drift
+        </span>
+        <div className="seg" style={{ flex: 'none' }} title="ms of telemetry per second of video — 0.5 means the log runs ahead by half a millisecond every second">
+          {[-0.1, -0.01].map((d) => (
+            <button key={d} onClick={() => stepDrift(d)} title={`Drift ${d} ms/s`}>
+              {d}
+            </button>
+          ))}
+          <input type="number" step={0.01} value={drift} style={{ width: 72 }} onChange={(e) => setDrift && setDrift(Number(e.target.value) || 0)} title="Clock drift in ms/s (Auto sync measures it from several windows)" />
+          {[0.01, 0.1].map((d) => (
+            <button key={d} onClick={() => stepDrift(d)} title={`Drift +${d} ms/s`}>
+              +{d}
+            </button>
+          ))}
+        </div>
+        <button className="btn btn-xs" onClick={onAutoSync} disabled={!video || !columnNames.length} title="Find offset and drift automatically: the camera rotation seen in a few seconds of footage is matched against the gyro log">
           Auto sync…
         </button>
-        <span className="bar-label ml-2">Trace</span>
-        <input list="cols" className="input mono" style={{ width: 200, padding: '2px 8px', color: 'var(--tele)' }} value={graphCol} onChange={(e) => setGraphCol(e.target.value)} placeholder="column name" title="Telemetry column drawn on the timeline" />
-        <datalist id="cols">{columnNames.map((c) => <option key={c} value={c} />)}</datalist>
-        {limit < dur - 0.5 && !disabled && <span className="hint">encoded to {fmtTime(limit)}</span>}
-        {disabled && <span className="chip chip-warn">playback locked — create a proxy in Files</span>}
-        <span className="hint ml-auto" style={{ color: 'var(--faint)' }}>space · ←/→ frame · [ ] offset ±0.01 (shift ±1)</span>
+        {limit < dur - 0.5 && !disabled && <span className="hint" style={{ whiteSpace: 'nowrap' }}>encoded to {fmtTime(limit)}</span>}
+        {disabled && (
+          <span className="chip chip-warn" style={{ whiteSpace: 'nowrap' }}>
+            playback locked — create a proxy in Files
+          </span>
+        )}
+        <span className="hint ml-auto" style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>space · ←/→ · [ ] offset</span>
       </div>
 
       <div className="flex items-center gap-3 text-xs">
@@ -344,7 +363,9 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
           </button>
         )}
         {limit < dur - 0.5 && !rangeLocked && <span className="hint">range limited to the encoded part</span>}
-        <span className="hint ml-auto" style={{ color: 'var(--faint)' }}>I / O = in / out at playhead · drag the amber markers</span>
+        <span className="bar-label ml-auto">Trace</span>
+        <input list="cols" className="input mono" style={{ width: 200, padding: '2px 8px', color: 'var(--tele)' }} value={graphCol} onChange={(e) => setGraphCol(e.target.value)} placeholder="column name" title="Telemetry column drawn on the timeline" />
+        <datalist id="cols">{columnNames.map((c) => <option key={c} value={c} />)}</datalist>
       </div>
     </div>
   );
