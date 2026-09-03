@@ -264,7 +264,7 @@ export default function App() {
         type: 'file',
         video: { contentType: mime, width: info.width, height: info.height, framerate: info.fps, bitrate: Math.round(info.width * info.height * info.fps * 0.08) || 8_000_000 },
       });
-      const what = `${info.codec} ${info.width}×${info.height} @ ${Math.round(info.fps)} fps`;
+      const what = `${info.codec} ${info.width}×${info.height} @ ${info.fps.toFixed(2)} fps`;
       if (!cap.supported) showPlayError(`The player cannot decode this video (${what}) — create a preview proxy in the Files tab.`);
       else if (!cap.smooth) showPlayError(`This video (${what}) is likely too heavy for smooth playback on this machine — create a preview proxy in the Files tab.`, { block: false });
     } catch {

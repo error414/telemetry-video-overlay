@@ -27,7 +27,7 @@ export default function FilesPanel({ video, openVideo, removeVideo, layout, setL
         <header className="bay-head">
           <span className="bay-tick" />
           Video
-          <span className="bay-note">{video ? `${video.width}×${video.height} · ${video.fps.toFixed(0)} fps` : 'empty'}</span>
+          <span className="bay-note">{video ? `${video.width}×${video.height} · ${video.fps.toFixed(2)} fps` : 'empty'}</span>
         </header>
         <div className="bay-body">
           {video ? (
