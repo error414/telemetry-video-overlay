@@ -3,7 +3,9 @@ import { toTele } from '../time.js';
 import { parseColumns, renderWidget } from '../widgetRuntime.js';
 
 /** Comma-separated column list with autocomplete for the item under the caret. */
-export function ColumnsInput({ value, onChange, columnNames }) {
+/** Column name input with a suggestion list. `single` = one column (no comma-separated tokens). */
+export function ColumnsInput({ value, onChange, columnNames, single = false, disabled = false, placeholder, title, style, className = '' }) {
+  value = value || '';
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);
   const ref = useRef(null);
@@ -13,8 +15,8 @@ export function ColumnsInput({ value, onChange, columnNames }) {
   // split into "before", current token, "after" relative to the caret
   const before = value.slice(0, caret);
   const after = value.slice(caret);
-  const start = before.lastIndexOf(',') + 1;
-  const endRel = after.indexOf(',');
+  const start = single ? 0 : before.lastIndexOf(',') + 1;
+  const endRel = single ? -1 : after.indexOf(',');
   const end = endRel < 0 ? value.length : caret + endRel;
   const token = value.slice(start, end).trim().toLowerCase();
   const matches = token ? columnNames.filter((c) => c.toLowerCase().includes(token) && c.toLowerCase() !== token) : columnNames;
@@ -28,13 +30,13 @@ export function ColumnsInput({ value, onChange, columnNames }) {
   const pick = (name) => {
     const head = value.slice(0, start);
     const tail = value.slice(end);
-    const nv = (head ? head.replace(/\s*$/, '') + ' ' : '') + name + (tail.trim() ? ',' + tail : '');
+    const nv = single ? name : (head ? head.replace(/\s*$/, '') + ' ' : '') + name + (tail.trim() ? ',' + tail : '');
     onChange(nv);
     setOpen(false);
     requestAnimationFrame(() => {
       const el = ref.current;
       if (!el) return;
-      const pos = (head ? head.replace(/\s*$/, '').length + 1 : 0) + name.length;
+      const pos = single ? name.length : (head ? head.replace(/\s*$/, '').length + 1 : 0) + name.length;
       el.focus();
       el.setSelectionRange(pos, pos);
       setCaret(pos);
@@ -45,12 +47,15 @@ export function ColumnsInput({ value, onChange, columnNames }) {
   const maxH = Math.max(120, Math.min(260, spaceBelow));
 
   return (
-    <div className="relative">
+    <div className={'relative ' + className} style={style?.width != null ? { width: style.width } : undefined}>
       <input
         ref={ref}
         className="input mono"
+        style={style}
         value={value}
-        placeholder="GPS_speed (m/s), BaroAlt (cm)"
+        disabled={disabled}
+        title={title}
+        placeholder={placeholder ?? (single ? 'column name' : 'GPS_speed (m/s), BaroAlt (cm)')}
         onChange={(e) => {
           onChange(e.target.value);
           setCaret(e.target.selectionStart);

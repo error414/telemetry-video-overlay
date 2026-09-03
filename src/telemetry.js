@@ -138,7 +138,8 @@ export function buildSeries(parsed, timeColumn, timeUnit) {
   const tt = t.subarray(0, valid);
   const series = {};
   parsed.columns.forEach((col, ci) => {
-    if (ci === ti) return;
+    // The time column is kept as an ordinary series too (raw values, e.g. "time (us)"),
+    // so widgets can read it like any other column.
     // Fully numeric columns go into a Float64Array — cheap to structured-clone out
     // of the CSV worker; on the first non-numeric value fall back to a plain array.
     const f = new Float64Array(valid);

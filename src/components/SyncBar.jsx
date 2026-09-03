@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { fmtTime, toTele, toVideo } from '../time.js';
 import TimeInput from './TimeInput.jsx';
+import { ColumnsInput } from './WidgetsPanel.jsx';
 
 const EMPTY_RANGE = { start: 0, end: null };
 const HANDLE_HIT = 7; // px around an in/out marker that grabs it instead of scrubbing
@@ -364,8 +365,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
         )}
         {limit < dur - 0.5 && !rangeLocked && <span className="hint">range limited to the encoded part</span>}
         <span className="bar-label ml-auto">Trace</span>
-        <input list="cols" className="input mono" style={{ width: 200, padding: '2px 8px', color: 'var(--tele)' }} value={graphCol} onChange={(e) => setGraphCol(e.target.value)} placeholder="column name" title="Telemetry column drawn on the timeline" />
-        <datalist id="cols">{columnNames.map((c) => <option key={c} value={c} />)}</datalist>
+        <ColumnsInput single value={graphCol} onChange={setGraphCol} columnNames={columnNames} style={{ width: 200, padding: '2px 8px', '--input-color': 'var(--tele)' }} title="Telemetry column drawn on the timeline" />
       </div>
     </div>
   );

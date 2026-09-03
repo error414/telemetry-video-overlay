@@ -166,7 +166,8 @@ input[type='number'] {
   border-radius: var(--radius);
   border: 1px solid var(--border-strong);
   background: var(--bg);
-  color: var(--text);
+  --input-color: var(--text); /* override inline to recolour one input (e.g. teal for data) */
+  color: var(--input-color);
   font: 12.5px var(--font-ui);
 }
 .input:focus {
@@ -176,16 +177,6 @@ input[type='number'] {
 }
 .input.mono {
   font-family: var(--font-mono);
-}
-/* Chromium paints a picked <datalist> suggestion like a browser autofill (light background,
-   black text) — keep our own colours; the inset shadow covers the forced background */
-.input:-webkit-autofill,
-.input:-webkit-autofill:hover,
-.input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset;
-  -webkit-text-fill-color: currentColor;
-  caret-color: currentColor;
-  transition: background-color 999999s ease-out 0s;
 }
 select.input {
   cursor: pointer;

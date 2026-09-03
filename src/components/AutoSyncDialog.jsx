@@ -3,6 +3,7 @@ import { fmtTime, toVideo } from '../time.js';
 import { SYNC_METHODS } from '../sync/methods.js';
 import { rateMagnitude, activeWindows } from '../sync/gyroSignal.js';
 import { runSyncInWorker, cancelSync } from '../sync/syncClient.js';
+import { ColumnsInput } from './WidgetsPanel.jsx';
 
 const PREFS_KEY = 'telemetry-overlay.autoSync.v1';
 const ANALYSIS_WIDTH = 480; // frames are decoded at this width — plenty for global motion, cheap to track
@@ -400,19 +401,18 @@ export default function AutoSyncDialog({ video, store, storeVersion, columnNames
         <div className="bay-body flex flex-col gap-2">
           <div className="grid grid-cols-3 gap-2">
             {axes.map((a, i) => (
-              <input
+              <ColumnsInput
                 key={i}
-                list="autosync-cols"
-                className="input mono"
-                style={{ color: 'var(--tele)', padding: '3px 8px' }}
+                single
                 value={a}
+                onChange={(v) => setAxes((ax) => ax.map((x, k) => (k === i ? v : x)))}
+                columnNames={columnNames}
+                style={{ '--input-color': 'var(--tele)', padding: '3px 8px' }}
                 disabled={running}
                 placeholder={`axis ${i + 1}`}
-                onChange={(e) => setAxes((ax) => ax.map((x, k) => (k === i ? e.target.value : x)))}
               />
             ))}
           </div>
-          <datalist id="autosync-cols">{columnNames.map((c) => <option key={c} value={c} />)}</datalist>
           <div className="hint">Three angular-rate columns of the same sensor (INAV: gyroADC[0..2]). Only the magnitude of the rotation is compared, so the axis order and the camera mounting do not matter.</div>
           <div className="hint">
             Windows to analyse: {plan.length ? plan.map((p) => fmtTime(p[0].start)).join(' · ') : `${fmtTime(clampStart(time))} (playhead — no strong gyro motion lands inside the video with the current offset)`}
