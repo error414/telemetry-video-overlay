@@ -7,9 +7,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 "Blackbox overlay for INAV": an Electron + Vite + React (Tailwind v4) desktop app that overlays
 user-written HTML/JS widgets, driven by INAV blackbox CSV telemetry, onto a video and exports the
 result with the bundled ffmpeg. Overlay only: no video editing/trimming, no predefined widgets
-(only read-only examples), widgets are code-first. README.md is a short user-facing intro (purpose,
-workflow, AI disclaimer, screenshot); keep its Workflow section in step with UI changes. The
-widget API reference lives in the `widget` skill, not in README.
+(only read-only examples), widgets are code-first.
+
+### Documentation layout
+
+- `README.md`: short user-facing intro (purpose, 5-step workflow, links to the manuals, AI
+  disclaimer, screenshot, licence). Keep its Workflow section in step with UI changes; details
+  belong in `manual/`, not here.
+- `manual/*.md`: user manuals, one topic per file, written for pilots (not developers) and
+  referring to UI labels as they appear in the app (**Sync** drawer, **Start = here**, **Library**
+  tab, ...). Currently `widgets.md` (what a widget is, Library/Examples flow, `/widget` skill) and
+  `synchronisation.md` (offset/drift, manual sync, both auto sync methods). When a UI label,
+  button or dialog they mention changes, update the manual in the same commit; add a new file
+  for a new user-facing topic and link it from the README "Manuals" line.
+- `images/`: screenshots referenced by README and the manuals (`Screenshot_1.png` overview,
+  `_2` widget editor, `_3` sync bar / auto sync). Retake them when the UI they show changes.
+- `docs/`: developer notes (measured drifts, auto sync window options), not linked from README.
+- The widget API reference lives in the `widget` skill (`.claude/skills/widget/`) and in the
+  in-app **Widget API reference**, not in README or `manual/`.
 
 ### Why it exists and the workflow
 
