@@ -164,14 +164,32 @@ function CurvePlot({ curve, offset }) {
   return <canvas ref={ref} className="timeline" style={{ width: '100%', height: 48, display: 'block' }} />;
 }
 
-/** Shared modal frame (backdrop + panel). */
-function Frame({ width = 660, onBackdrop, children }) {
+/** Shared modal frame (backdrop + panel). Also used by the startup dialog. */
+export function Frame({ width = 660, onBackdrop, children }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(5,8,11,.72)' }} onMouseDown={(e) => e.target === e.currentTarget && onBackdrop && onBackdrop()}>
       <div role="dialog" aria-modal="true" className="rounded-lg p-5 flex flex-col gap-3" style={{ width: `min(92vw, ${width}px)`, maxHeight: '92vh', overflowY: 'auto', background: 'var(--panel)', border: '1px solid var(--border-strong)', boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}>
         {children}
       </div>
     </div>
+  );
+}
+
+/** One tall option in a "pick one" dialog: coloured label on top, explanation under it. */
+export function ChoiceButton({ label, hint, available = true, onClick, badge }) {
+  return (
+    <button
+      className="btn"
+      style={{ justifyContent: 'flex-start', alignItems: 'flex-start', flexDirection: 'column', gap: 2, padding: '10px 12px', textAlign: 'left', opacity: available ? 1 : 0.6 }}
+      onClick={onClick}
+      title={hint}
+    >
+      <span style={{ color: available ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>
+        {label}
+        {badge && <span className="chip ml-2">{badge}</span>}
+      </span>
+      <span className="hint" style={{ whiteSpace: 'normal' }}>{hint}</span>
+    </button>
   );
 }
 
@@ -385,19 +403,7 @@ export default function AutoSyncDialog({ video, store, storeVersion, columnNames
         <div className="hint">How should the telemetry be aligned with the video?</div>
         <div className="flex flex-col gap-2">
           {SYNC_METHODS.map((m) => (
-            <button
-              key={m.id}
-              className="btn"
-              style={{ justifyContent: 'flex-start', alignItems: 'flex-start', flexDirection: 'column', gap: 2, padding: '10px 12px', textAlign: 'left', opacity: m.available ? 1 : 0.6 }}
-              onClick={() => selectMethod(m.id)}
-              title={m.hint}
-            >
-              <span style={{ color: m.available ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>
-                {m.label}
-                {!m.available && <span className="chip ml-2">soon</span>}
-              </span>
-              <span className="hint" style={{ whiteSpace: 'normal' }}>{m.hint}</span>
-            </button>
+            <ChoiceButton key={m.id} label={m.label} hint={m.hint} available={m.available} badge={m.available ? null : 'soon'} onClick={() => selectMethod(m.id)} />
           ))}
         </div>
         <div className="flex gap-2 justify-end">

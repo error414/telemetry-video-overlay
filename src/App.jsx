@@ -12,6 +12,7 @@ import LibraryPanel from './components/LibraryPanel.jsx';
 import ExportPanel, { EXPORT_MODES } from './components/ExportPanel.jsx';
 import CodeEditorModal from './components/CodeEditorModal.jsx';
 import AutoSyncDialog from './components/AutoSyncDialog.jsx';
+import StartupDialog from './components/StartupDialog.jsx';
 import { useConfirm } from './components/ConfirmDialog.jsx';
 import { toTele } from './time.js';
 
@@ -483,12 +484,10 @@ export default function App() {
     }
   }, [loadProjectData]);
 
-  // autosave the current project in localStorage so a restart keeps the work
-  useEffect(() => {
-    const t = setTimeout(() => localStorage.setItem(PROJECT_KEY, projectJson()), 500);
-    return () => clearTimeout(t);
-  }, [projectJson]);
-  useEffect(() => {
+  // On launch the autosaved project (if there is one) is offered in a dialog: continue it or
+  // start empty. Until the user picks, the autosave below stays off — otherwise the fresh empty
+  // state would overwrite the stored project before the choice is made.
+  const [startup, setStartup] = useState(() => {
     try {
       const raw = localStorage.getItem(PROJECT_KEY);
       if (raw) {
@@ -498,7 +497,16 @@ export default function App() {
     } catch {
       /* ignore */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return null;
+  });
+  const continueSession = useCallback(() => {
+    const j = startup;
+    setStartup(null);
+    if (j) loadProjectData(j);
+  }, [startup, loadProjectData]);
+  const newSession = useCallback(() => {
+    localStorage.removeItem(PROJECT_KEY);
+    setStartup(null);
   }, []);
 
   // layout transform: reference resolution → current video resolution
@@ -516,6 +524,12 @@ export default function App() {
     setLayout({ w: video.width, h: video.height });
     setStatus(`Widget layout rebased to ${video.width}×${video.height}`);
   }, [video, lt]);
+  // autosave the current project in localStorage so a restart keeps the work
+  useEffect(() => {
+    if (startup) return undefined;
+    const t = setTimeout(() => localStorage.setItem(PROJECT_KEY, projectJson()), 500);
+    return () => clearTimeout(t);
+  }, [projectJson, startup]);
 
   const selected = useMemo(() => widgets.find((w) => w.id === selectedId) || null, [widgets, selectedId]);
   const columnNames = useMemo(() => store.columnNames(), [store, storeVersion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -608,7 +622,7 @@ export default function App() {
                   <span className="es-corner" />
                   <div className="es-title">No signal</div>
                   <div className="hint" style={{ textAlign: 'center', maxWidth: 340 }}>
-                    Open flight footage, then add a blackbox log or CSV telemetry. Your last project is restored automatically.
+                    Open flight footage, then add a blackbox log or CSV telemetry. The next launch offers to pick up where you left off.
                   </div>
                   <div className="flex gap-2 mt-2 flex-wrap justify-center">
                     <button className="btn btn-primary" onClick={openVideo}>
@@ -733,6 +747,7 @@ export default function App() {
         )}
         <span className="readout" title="Telemetry time = video time × (1 + drift) + offset">
           t <b>{toTele(time, sync).toFixed(3)}</b> s
+      {startup && <StartupDialog project={startup} onContinue={continueSession} onNew={newSession} />}
         </span>
         <span className="readout" title="Telemetry offset — adjust in the sync bar or with [ and ] keys">
           offset <b>{offset.toFixed(3)}</b> s
