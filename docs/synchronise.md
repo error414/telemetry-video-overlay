@@ -24,7 +24,7 @@ telemetry time = video time × (1 + drift / 1000) + offset
 ## 2. Auto sync — "Video motion × gyro"
 
 `Auto sync…` in the sync bar. The dialog first asks for the method (*Video motion × gyro*
-or *Gyroflow data* — the latter is reserved and does nothing yet, see `src/sync/methods.js`).
+or *Gyroflow project* — section 5; the registry is `src/sync/methods.js`).
 
 The video method (`src/sync/`):
 
@@ -115,8 +115,46 @@ refresh jitter.
 - Prototype outside the app: decode gray frames with ffmpeg and call `runVideoGyroSync`
   from `src/sync/autoSync.js` in Node (the modules have no DOM dependency).
 
-## 5. Next step — Gyroflow
+## 5. Auto sync — "Gyroflow project" (added 2026-09-04)
 
-`src/sync/methods.js` lists `gyroflow` as a method. The plan is to read Gyroflow's sync
-points (the same thing as this feature's per-window offsets) from a `.gyroflow` project and
-feed them into the same offset/drift fit, and later its stabilisation data.
+DJI O3/O4 air units (and GoPros, Insta360…) record their own IMU into the video file.
+Gyroflow reads it and, when the project is saved (*Export project* with the gyro data
+included — the default), keeps it inside the `.gyroflow` JSON as
+`gyro_source.file_metadata`: a **basE91** string of a **zlib**-compressed **CBOR**
+`FileMetadata` (Gyroflow ≥ 1.5, `util::compress_to_base91_cbor`; older/"thin" projects
+have a plain JSON object there without the samples). Of it the app uses
+
+- `quaternions` — `Map<timestamp_µs, [x, y, z, w]>`, the camera orientation on the video
+  clock (DJI O4P: 2001 Hz, 832 k entries over a 7-minute clip, first key −3.8 ms);
+- `raw_imu` — `[{timestamp_ms, gyro: [x, y, z] deg/s, …}]` when the source delivers rates
+  (empty for the DJI files); preferred when present;
+- `offsets` (top level) — Gyroflow's own sync points `{video_µs: offset_ms}` when the gyro
+  came from a separate file; applied as gyro time = video time + offset (empty for a
+  camera-embedded IMU, which is what this method is for).
+
+`src/sync/base91.js`, `cbor.js`, `gyroflow.js` do the decoding (~0.7 s for the 19 MB
+string, in the sync worker). |ω| of the camera = angle between consecutive quaternions
+÷ their spacing — independent of the axes and of which side the frame is on, so the DJI
+mounting is irrelevant just as with the blackbox gyro.
+
+From there the pipeline is the video method's without the optical flow (`runGyroflowSync`
+in `autoSync.js`): the camera |ω| is box-averaged to 10 ms samples, windows are picked
+where the *camera* moves the most (already in video time — no dependence on the current
+sync), each is cross-correlated against |gyro| over the whole log, and the same
+`fitDrift` gives offset + drift. Because a window costs ~0.1 s the method takes **ten
+10-second windows** (longer windows leave fewer competing peaks, more windows pin the
+drift line down). The `.gyroflow` next to the video (`<video>.gyroflow`, where Gyroflow
+saves it) is opened automatically; the dialog warns when the project belongs to another
+file or a video of a different length.
+
+Result on T1 (`t1/DJI_…_0018_D_joined.gyroflow` + LOG00011): 10 windows, matches
+0.961–0.993, runner-up peaks ≤ 0.77, **offset 1.009 s, drift +0.044 ms/s** — the same as
+the optical-flow result (1.012 s / +0.042 ms/s) in 1.9 s instead of ~40 s, and it works
+with stabilised footage too (the IMU is the camera's, not the picture's). The local
+offsets run 1.010 → 1.029 s over the 416 s clip, a straight line.
+
+Prototype outside the app: `loadGyroflow(text)` + `runGyroflowSync` from Node (both
+modules are DOM-free; `DecompressionStream` is global in Node ≥ 18).
+
+Not done: the stabilisation data (smoothed orientations for a horizon/stabilised overlay)
+— the same `file_metadata` would be the source, plus Gyroflow's smoothing parameters.

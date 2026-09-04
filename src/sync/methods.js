@@ -5,10 +5,6 @@
  * {offset0, drift} fit, so the dialog's result view and "apply" are shared. Adding
  * a method means: an entry here, a body/run branch in AutoSyncDialog.jsx and the
  * computation next to autoSync.js.
- *
- * 'gyroflow' is reserved: it will read the sync points (and later the stabilisation
- * data) from a Gyroflow project instead of analysing the footage here. Until that
- * exists it is listed but marked unavailable.
  */
 export const SYNC_METHODS = [
   {
@@ -19,8 +15,8 @@ export const SYNC_METHODS = [
   },
   {
     id: 'gyroflow',
-    label: 'Gyroflow data',
-    hint: 'Takes the sync points from a Gyroflow project of this video. Not implemented yet.',
-    available: false,
+    label: 'Gyroflow project',
+    hint: 'Reads the camera’s own gyro (DJI O3/O4, GoPro…) from a .gyroflow project saved for this video and matches it against the blackbox gyro. Exact and instant; works with stabilised footage too.',
+    available: true,
   },
 ];

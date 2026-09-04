@@ -13,9 +13,11 @@ export const toVideo = (teleSec, sync) => (teleSec - syncOffset(sync)) / syncSca
 /** Seconds → "m:ss.mmm" (used by the sync bar and the export panel). */
 export function fmtTime(s) {
   if (!Number.isFinite(s)) return '0:00.000';
-  const m = Math.floor(s / 60);
-  const sec = s - m * 60;
-  return m + ':' + sec.toFixed(3).padStart(6, '0');
+  const sign = s < 0 ? '-' : '';
+  const a = Math.abs(s);
+  const m = Math.floor(a / 60);
+  const sec = a - m * 60;
+  return sign + m + ':' + sec.toFixed(3).padStart(6, '0');
 }
 
 /** "m:ss.mmm", "ss.mmm" or plain seconds → seconds; NaN when the text is not a time. */

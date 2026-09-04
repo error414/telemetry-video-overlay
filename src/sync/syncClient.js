@@ -27,17 +27,23 @@ function get() {
 }
 
 /**
- * Run the video × gyro sync in the worker. `input` is what runVideoGyroSync takes
- * (frames: Uint8Array — its buffer is transferred, so it is unusable afterwards).
+ * Run one job in the worker: `type` selects the computation (see syncWorker.js),
+ * `input` is its argument object, `transfer` lists ArrayBuffers to hand over
+ * instead of copying (they are unusable on this side afterwards).
  */
-export function runSyncInWorker(input, onProgress) {
+export function runSyncJob(type, input, onProgress, transfer = []) {
   if (current) throw new Error('A sync analysis is already running');
   return new Promise((resolve, reject) => {
     const msgId = ++seq;
     current = { msgId, resolve, reject, onProgress };
-    const frames = input.frames.byteOffset === 0 && input.frames.byteLength === input.frames.buffer.byteLength ? input.frames : new Uint8Array(input.frames);
-    get().postMessage({ ...input, frames, msgId, type: 'run' }, [frames.buffer]);
+    get().postMessage({ ...input, msgId, type }, transfer);
   });
+}
+
+/** The video × gyro sync (frames: Uint8Array — its buffer is transferred). */
+export function runSyncInWorker(input, onProgress) {
+  const frames = input.frames.byteOffset === 0 && input.frames.byteLength === input.frames.buffer.byteLength ? input.frames : new Uint8Array(input.frames);
+  return runSyncJob('video', { ...input, frames }, onProgress, [frames.buffer]);
 }
 
 /** Abort the running analysis (the worker is thrown away; the next run starts a fresh one). */

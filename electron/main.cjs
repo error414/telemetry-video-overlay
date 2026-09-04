@@ -71,6 +71,11 @@ ipcMain.handle('dialog:openJson', async (_e, title) => {
   return r.canceled ? null : r.filePaths[0];
 });
 
+ipcMain.handle('dialog:openGyroflow', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Open Gyroflow project', properties: ['openFile'], filters: [{ name: 'Gyroflow project', extensions: ['gyroflow'] }, { name: 'All', extensions: ['*'] }] });
+  return r.canceled ? null : r.filePaths[0];
+});
+
 ipcMain.handle('dialog:saveJson', async (_e, title, defaultName) => {
   const r = await dialog.showSaveDialog(win, { title, defaultPath: defaultName, filters: [{ name: 'JSON', extensions: ['json'] }] });
   return r.canceled ? null : r.filePath;

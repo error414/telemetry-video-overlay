@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('api', {
   openVideo: () => ipcRenderer.invoke('dialog:openVideo'),
   openCsv: () => ipcRenderer.invoke('dialog:openCsv'),
   openJson: (title) => ipcRenderer.invoke('dialog:openJson', title),
+  openGyroflow: () => ipcRenderer.invoke('dialog:openGyroflow'),
   saveJson: (title, name) => ipcRenderer.invoke('dialog:saveJson', title, name),
   saveOutput: (name, ext) => ipcRenderer.invoke('dialog:saveOutput', name, ext),
   openDir: () => ipcRenderer.invoke('dialog:openDir'),

@@ -127,3 +127,21 @@ export function activeWindows(t, v, winLen, { count = 6, rate = 25 } = {}) {
   }
   return out;
 }
+
+/**
+ * Which windows to analyse. One slot = a list of candidate starts tried in order.
+ * The video (duration `dur`) is split into n equal parts and each part gets its
+ * strongest `attempts` candidates, so the windows are spread out (that is what makes
+ * the drift measurable); empty parts borrow the strongest unused candidates.
+ * `candidates` = activeWindows output in video seconds, best first.
+ */
+export function planWindows(candidates, n, dur, len, attempts = 2) {
+  if (!candidates.length) return [];
+  const bins = Array.from({ length: n }, () => []);
+  for (const c of candidates) bins[Math.max(0, Math.min(n - 1, Math.floor(((c.start + len / 2) / dur) * n)))].push(c);
+  const plan = bins.map((b) => b.slice(0, attempts));
+  const planned = new Set(plan.flat());
+  const spare = candidates.filter((c) => !planned.has(c));
+  for (const p of plan) if (!p.length && spare.length) p.push(spare.shift());
+  return plan.filter((p) => p.length);
+}

@@ -65,7 +65,11 @@ A tag with a suffix (`v0.4.0-beta.1`) is published as a pre-release.
    with the same moment in the video. "Telemetry start = here" sets the offset so the first
    telemetry sample is at the current frame.
    *Auto sync…* finds offset and drift automatically. It first asks for the method:
-   *Video motion × gyro* (available) or *Gyroflow data* (reserved, not implemented yet).
+   *Gyroflow project* or *Video motion × gyro*.
+   The Gyroflow method reads the camera's own gyro (DJI O3/O4, GoPro…) from a `.gyroflow`
+   project saved for this video (open the video in Gyroflow, *Export project*; the file next
+   to the video is picked up automatically), matches it against the blackbox gyro in ten
+   10-second windows and is done in about two seconds; stabilised footage is fine here.
    The video method decodes six 6-second windows of the original video spread over its
    length (each sixth at its strongest gyro motion), tracks the camera rotation in them
    (optical flow) and searches the whole gyro log for the place that rotates the same way.
