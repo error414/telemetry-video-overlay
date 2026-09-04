@@ -19,7 +19,9 @@ export function ColumnsInput({ value, onChange, columnNames, single = false, dis
   const endRel = single ? -1 : after.indexOf(',');
   const end = endRel < 0 ? value.length : caret + endRel;
   const token = value.slice(start, end).trim().toLowerCase();
-  const matches = token ? columnNames.filter((c) => c.toLowerCase().includes(token) && c.toLowerCase() !== token) : columnNames;
+  // a single-column field holding a valid name offers the whole list again (switching columns should not require clearing it first)
+  const exact = single && columnNames.some((c) => c.toLowerCase() === token);
+  const matches = token && !exact ? columnNames.filter((c) => c.toLowerCase().includes(token) && c.toLowerCase() !== token) : columnNames;
 
   useEffect(() => setHi(0), [token]);
   // the dropdown is position:fixed so scrolling containers cannot clip it
@@ -43,8 +45,11 @@ export function ColumnsInput({ value, onChange, columnNames, single = false, dis
     });
   };
 
+  // open downwards when there is room, otherwise flip above the input (the sync bar sits at the bottom edge)
   const spaceBelow = rect ? window.innerHeight - rect.bottom - 8 : 200;
-  const maxH = Math.max(120, Math.min(260, spaceBelow));
+  const spaceAbove = rect ? rect.top - 8 : 0;
+  const flip = spaceBelow < 120 && spaceAbove > spaceBelow;
+  const maxH = Math.max(80, Math.min(260, flip ? spaceAbove : spaceBelow));
 
   return (
     <div className={'relative ' + className} style={style?.width != null ? { width: style.width } : undefined}>
@@ -61,7 +66,10 @@ export function ColumnsInput({ value, onChange, columnNames, single = false, dis
           setCaret(e.target.selectionStart);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={(e) => {
+          if (single) e.target.select(); // typing replaces the current column
+          setOpen(true);
+        }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onSelect={(e) => setCaret(e.target.selectionStart)}
         onKeyDown={(e) => {
@@ -81,7 +89,7 @@ export function ColumnsInput({ value, onChange, columnNames, single = false, dis
       {open && matches.length > 0 && rect && (
         <div
           className="mono text-xs overflow-auto rounded"
-          style={{ position: 'fixed', zIndex: 100, left: rect.left, width: rect.width, top: rect.bottom + 2, maxHeight: maxH, background: 'var(--panel-2)', border: '1px solid var(--border-strong)', boxShadow: '0 12px 30px rgba(0,0,0,.5)' }}
+          style={{ position: 'fixed', zIndex: 100, left: rect.left, width: rect.width, ...(flip ? { bottom: window.innerHeight - rect.top + 2 } : { top: rect.bottom + 2 }), maxHeight: maxH, background: 'var(--panel-2)', border: '1px solid var(--border-strong)', boxShadow: '0 12px 30px rgba(0,0,0,.5)' }}
         >
           {matches.map((c, i) => (
             <div key={c} className="px-2 py-1 cursor-pointer whitespace-nowrap" style={{ background: i === hi ? 'var(--accent-soft)' : 'transparent', color: i === hi ? 'var(--accent)' : 'var(--text)' }} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setHi(i)} onClick={() => pick(c)}>

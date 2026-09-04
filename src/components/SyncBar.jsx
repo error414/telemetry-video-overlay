@@ -15,6 +15,16 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
   const [playing, setPlaying] = useState(false);
   const [graphCol, setGraphCol] = useState('');
   const canvasRef = useRef(null);
+  // bumped whenever the canvas changes size, so the sparkline effect below re-renders the bitmap at the
+  // new resolution (otherwise the browser just scales the stale bitmap and the graph goes blurry)
+  const [canvasSize, setCanvasSize] = useState(0);
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setCanvasSize((n) => n + 1));
+    ro.observe(c);
+    return () => ro.disconnect();
+  }, []);
 
   // export range in video seconds; end === null means "to the end of the video"
   const inT = Math.max(0, Math.min(dur, range.start || 0));
@@ -170,6 +180,13 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
       g.fillStyle = 'rgba(79,195,199,.12)';
       g.fillRect(Math.max(0, tStart), 0, Math.min(W, tEnd) - Math.max(0, tStart), H);
     }
+    // legend: which column the trace is (faint teal, clear of the in-flag in the corner)
+    if (graphCol) {
+      g.fillStyle = Number.isFinite(min) ? 'rgba(79,195,199,.7)' : 'rgba(79,195,199,.35)';
+      g.font = `500 ${10 * devicePixelRatio}px "IBM Plex Mono", ui-monospace, monospace`;
+      g.textBaseline = 'top';
+      g.fillText(graphCol, 11 * devicePixelRatio, 3 * devicePixelRatio);
+    }
     // grey out the part a live proxy has not encoded yet (not seekable)
     if (limit < span - 0.5) {
       const lx = (limit / span) * W;
@@ -212,7 +229,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     g.moveTo(px, 0);
     g.lineTo(px, H);
     g.stroke();
-  }, [graphCol, offset, drift, time, dur, limit, inT, outT, fullRange, store, storeVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [graphCol, offset, drift, time, dur, limit, inT, outT, fullRange, store, storeVersion, canvasSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the timeline canvas is the scrubber: click or drag anywhere to seek, drag an in/out marker to move it
   const dragRef = useRef(null); // null | 'scrub' | 'in' | 'out'
@@ -258,6 +275,32 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
   const stepOffset = (d) => setOffset((o) => +(o + d).toFixed(3));
   const stepDrift = (d) => setDrift && setDrift((x) => +(x + d).toFixed(3));
 
+  // the two drawers under the timeline are closed by default; opening one closes the other so that
+  // whoever is syncing never has to look at the export range and vice versa
+  const [drawer, setDrawer] = useState(null); // null | 'sync' | 'range'
+  const toggleDrawer = (k) => setDrawer((d) => (d === k ? null : k));
+
+  // trace column picker lives behind the gear in the graph corner
+  const [tracePickerOpen, setTracePickerOpen] = useState(false);
+  const tracePopRef = useRef(null);
+  useEffect(() => {
+    if (!tracePickerOpen) return;
+    const onDown = (e) => {
+      if (tracePopRef.current && !tracePopRef.current.contains(e.target)) setTracePickerOpen(false);
+    };
+    const onKey = (e) => e.key === 'Escape' && setTracePickerOpen(false);
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [tracePickerOpen]);
+
+  const sign = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n).toFixed(n === 0 ? 0 : 2);
+  const syncNote = `${sign(offset)} s` + (drift ? ` · ${sign(drift)} ms/s` : '');
+  const rangeNote = !dur ? '—' : fullRange ? 'whole video' : fmtTime(inT) + ' → ' + fmtTime(outT) + ' · ' + fmtTime(outT - inT);
+
   return (
     <div className="p-2 flex flex-col gap-2 bg-[var(--panel)] border-t border-[var(--border)]">
       <div className="flex items-center gap-3">
@@ -291,81 +334,134 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
           <span className="tc-main">{fmtTime(time)}</span>
           <span className="tc-sub">/ {fmtTime(dur)}</span>
         </div>
-        <div className="flex-1 min-w-0" style={{ height: 64 }} title="Teal trace = telemetry column over the video timeline (moves with offset). Click or drag to seek; drag the amber markers to set the export range. Align a visible event (throttle-up, launch) with the same moment in the video.">
-          <canvas ref={canvasRef} className="timeline" onPointerDown={onTimelineDown} onPointerMove={onTimelineMove} onPointerUp={onTimelineUp} onPointerCancel={onTimelineUp} />
+        <div className="graph-well flex-1 min-w-0" style={{ height: 64 }}>
+          <div className="flex-1 min-w-0 h-full" title="Teal trace = telemetry column over the video timeline (moves with offset). Click or drag to seek; drag the amber markers to set the export range.">
+            <canvas ref={canvasRef} className="timeline" onPointerDown={onTimelineDown} onPointerMove={onTimelineMove} onPointerUp={onTimelineUp} onPointerCancel={onTimelineUp} />
+          </div>
+          <div className="graph-rail" ref={tracePopRef}>
+            <button className={'gear' + (tracePickerOpen ? ' on' : '')} onClick={() => setTracePickerOpen((o) => !o)} aria-expanded={tracePickerOpen} aria-label="Trace column" title={'Trace column: ' + (graphCol || 'none')}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                <circle cx="8" cy="8" r="2.4" />
+                <path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4" />
+              </svg>
+            </button>
+            {tracePickerOpen && (
+              <div className="popover" role="dialog" aria-label="Trace column">
+                <div className="popover-head">
+                  <span className="bay-tick" style={{ background: 'var(--tele)' }} />
+                  Trace
+                  <span className="bay-note">{columnNames.length ? columnNames.length + ' columns' : 'no telemetry'}</span>
+                </div>
+                <ColumnsInput single value={graphCol} onChange={setGraphCol} columnNames={columnNames} style={{ width: '100%', padding: '3px 8px', '--input-color': 'var(--tele)' }} title="Telemetry column drawn on the timeline" />
+                <div className="hint" style={{ marginTop: 6 }}>
+                  Pick a column with a visible event — throttle, launch, a hard turn — and line it up with the same moment in the footage.
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 text-xs flex-wrap">
-        <span className="bar-label">Sync offset</span>
-        <div className="seg" style={{ flex: 'none' }}>
-          {[-1, -0.1, -0.01].map((d) => (
-            <button key={d} onClick={() => stepOffset(d)} title={`Shift telemetry ${d} s`}>
-              {d}
-            </button>
-          ))}
-          <input type="number" step={0.01} value={offset} onChange={(e) => setOffset(Number(e.target.value) || 0)} title="Telemetry offset in seconds (added to video time)" />
-          {[0.01, 0.1, 1].map((d) => (
-            <button key={d} onClick={() => stepOffset(d)} title={`Shift telemetry +${d} s`}>
-              +{d}
-            </button>
-          ))}
-        </div>
-        <button className="btn btn-xs" title="Set offset so that telemetry starts at the current video frame" onClick={() => setOffset(+(-time).toFixed(3))}>
-          Start = here
-        </button>
-        <span className="bar-label ml-1" title="Clock drift between camera and flight controller: milliseconds of telemetry gained per second of video (telemetry = video × (1 + drift/1000) + offset)">
-          Drift
-        </span>
-        <div className="seg" style={{ flex: 'none' }} title="ms of telemetry per second of video — 0.5 means the log runs ahead by half a millisecond every second">
-          {[-0.1, -0.01].map((d) => (
-            <button key={d} onClick={() => stepDrift(d)} title={`Drift ${d} ms/s`}>
-              {d}
-            </button>
-          ))}
-          <input type="number" step={0.01} value={drift} style={{ width: 72 }} onChange={(e) => setDrift && setDrift(Number(e.target.value) || 0)} title="Clock drift in ms/s (Auto sync measures it from several windows)" />
-          {[0.01, 0.1].map((d) => (
-            <button key={d} onClick={() => stepDrift(d)} title={`Drift +${d} ms/s`}>
-              +{d}
-            </button>
-          ))}
-        </div>
-        <button className="btn btn-xs" onClick={onAutoSync} disabled={!video || !columnNames.length} title="Find offset and drift automatically: the camera rotation seen in a few seconds of footage is matched against the gyro log">
-          Auto sync…
-        </button>
-        {limit < dur - 0.5 && !disabled && <span className="hint" style={{ whiteSpace: 'nowrap' }}>encoded to {fmtTime(limit)}</span>}
-        {disabled && (
-          <span className="chip chip-warn" style={{ whiteSpace: 'nowrap' }}>
-            playback locked — create a proxy in Files
-          </span>
-        )}
-        <span className="hint ml-auto" style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>space · ←/→ · [ ] offset</span>
-      </div>
-
-      <div className="flex items-center gap-3 text-xs">
-        <span className="bar-label">Export range</span>
-        <button className="btn btn-xs" onClick={() => setPoint('in', time)} disabled={rangeLocked} title="Export from the current frame (I)">
-          In = here
-        </button>
-        <TimeInput value={inT} onCommit={(t) => setPoint('in', t)} disabled={rangeLocked} title="Export start — m:ss.sss or seconds" />
-        <span className="hint">to</span>
-        <TimeInput value={outT} onCommit={(t) => setPoint('out', t)} disabled={rangeLocked} title="Export end — m:ss.sss or seconds" />
-        <button className="btn btn-xs" onClick={() => setPoint('out', time)} disabled={rangeLocked} title="Export up to the current frame (O)">
-          Out = here
-        </button>
-        {dur > 0 && (
-          <span className={'chip mono ' + (fullRange ? '' : 'chip-accent')} style={{ whiteSpace: 'nowrap' }} title="Length of the exported part">
-            {fullRange ? 'whole video' : fmtTime(outT - inT) + ' of ' + fmtTime(dur)}
-          </span>
-        )}
-        {!fullRange && (
-          <button className="btn btn-xs" onClick={resetRange} title="Export the whole video again">
-            Whole video
+      {/* rack strip: two drawers, headers side by side, at most one open */}
+      <div className="rack">
+        <div className="rack-heads">
+          <button className={'rack-tab rack-mixed' + (drawer === 'sync' ? ' open' : '')} onClick={() => toggleDrawer('sync')} aria-expanded={drawer === 'sync'}>
+            <span className="bay-tick" />
+            <svg className="rack-chev" width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+              <path d="M3 1.5l4 3.5-4 3.5z" />
+            </svg>
+            Sync
+            <span className="rack-note" title="Telemetry offset · clock drift">{syncNote}</span>
           </button>
+          <button className={'rack-tab rack-amber' + (drawer === 'range' ? ' open' : '')} onClick={() => toggleDrawer('range')} aria-expanded={drawer === 'range'}>
+            <span className="bay-tick" />
+            <svg className="rack-chev" width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+              <path d="M3 1.5l4 3.5-4 3.5z" />
+            </svg>
+            Export range
+            <span className={'rack-note' + (fullRange ? '' : ' lit')} title="Exported part of the video">{rangeNote}</span>
+          </button>
+          <div className="rack-tail">
+            {limit < dur - 0.5 && !disabled && <span className="hint" style={{ whiteSpace: 'nowrap' }}>encoded to {fmtTime(limit)}</span>}
+            {disabled && (
+              <span className="chip chip-warn" style={{ whiteSpace: 'nowrap' }}>
+                playback locked — create a proxy in Files
+              </span>
+            )}
+            <span className="hint rack-keys" style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>space · ←/→ · [ ] · I/O</span>
+          </div>
+        </div>
+
+        {drawer === 'sync' && (
+          <div className="rack-body flex items-center gap-3 text-xs flex-wrap">
+            <div className="flex items-center gap-3">
+              <span className="bar-label">Offset</span>
+              <div className="seg" style={{ flex: 'none' }}>
+                {[-1, -0.1, -0.01].map((d) => (
+                  <button key={d} onClick={() => stepOffset(d)} title={`Shift telemetry ${d} s`}>
+                    {d}
+                  </button>
+                ))}
+                <input type="number" step={0.01} value={offset} onChange={(e) => setOffset(Number(e.target.value) || 0)} title="Telemetry offset in seconds (added to video time)" />
+                {[0.01, 0.1, 1].map((d) => (
+                  <button key={d} onClick={() => stepOffset(d)} title={`Shift telemetry +${d} s`}>
+                    +{d}
+                  </button>
+                ))}
+              </div>
+              <button className="btn btn-xs" title="Set offset so that telemetry starts at the current video frame" onClick={() => setOffset(+(-time).toFixed(3))}>
+                Start = here
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="bar-label" title="Clock drift between camera and flight controller: milliseconds of telemetry gained per second of video (telemetry = video × (1 + drift/1000) + offset)">
+                Drift
+              </span>
+              <div className="seg" style={{ flex: 'none' }} title="ms of telemetry per second of video — 0.5 means the log runs ahead by half a millisecond every second">
+                {[-0.1, -0.01].map((d) => (
+                  <button key={d} onClick={() => stepDrift(d)} title={`Drift ${d} ms/s`}>
+                    {d}
+                  </button>
+                ))}
+                <input type="number" step={0.01} value={drift} style={{ width: 72 }} onChange={(e) => setDrift && setDrift(Number(e.target.value) || 0)} title="Clock drift in ms/s (Auto sync measures it from several windows)" />
+                {[0.01, 0.1].map((d) => (
+                  <button key={d} onClick={() => stepDrift(d)} title={`Drift +${d} ms/s`}>
+                    +{d}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button className="btn btn-xs btn-primary ml-auto" onClick={onAutoSync} disabled={!video || !columnNames.length} title="Find offset and drift automatically: the camera rotation seen in a few seconds of footage is matched against the gyro log">
+              Auto sync…
+            </button>
+          </div>
         )}
-        {limit < dur - 0.5 && !rangeLocked && <span className="hint">range limited to the encoded part</span>}
-        <span className="bar-label ml-auto">Trace</span>
-        <ColumnsInput single value={graphCol} onChange={setGraphCol} columnNames={columnNames} style={{ width: 200, padding: '2px 8px', '--input-color': 'var(--tele)' }} title="Telemetry column drawn on the timeline" />
+
+        {drawer === 'range' && (
+          <div className="rack-body flex items-center gap-3 text-xs flex-wrap">
+            <button className="btn btn-xs" onClick={() => setPoint('in', time)} disabled={rangeLocked} title="Export from the current frame (I)">
+              In = here
+            </button>
+            <TimeInput value={inT} onCommit={(t) => setPoint('in', t)} disabled={rangeLocked} title="Export start — m:ss.sss or seconds" />
+            <span className="hint">to</span>
+            <TimeInput value={outT} onCommit={(t) => setPoint('out', t)} disabled={rangeLocked} title="Export end — m:ss.sss or seconds" />
+            <button className="btn btn-xs" onClick={() => setPoint('out', time)} disabled={rangeLocked} title="Export up to the current frame (O)">
+              Out = here
+            </button>
+            {dur > 0 && (
+              <span className={'chip mono ' + (fullRange ? '' : 'chip-accent')} style={{ whiteSpace: 'nowrap' }} title="Length of the exported part">
+                {fullRange ? 'whole video' : fmtTime(outT - inT) + ' of ' + fmtTime(dur)}
+              </span>
+            )}
+            {!fullRange && (
+              <button className="btn btn-xs" onClick={resetRange} title="Export the whole video again">
+                Whole video
+              </button>
+            )}
+            {limit < dur - 0.5 && !rangeLocked && <span className="hint">range limited to the encoded part</span>}
+            <span className="hint ml-auto" style={{ color: 'var(--faint)' }}>drag the amber flags on the timeline</span>
+          </div>
+        )}
       </div>
     </div>
   );
