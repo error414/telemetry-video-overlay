@@ -22,7 +22,7 @@ function describe(el) {
  * the right. Hovering the preview shows the element under the cursor (selector for the CSS tab);
  * clicking copies it. Edits apply immediately; "Close" just closes.
  */
-export default function CodeEditorModal({ widget, updateWidget, onClose, store, time, sync, columnNames, ColumnsInput, env }) {
+export default function CodeEditorModal({ widget, updateWidget, onClose, store, time, sync, columnNames, ColumnsInput, env, title = 'Widget editor' }) {
   const [previewTime, setPreviewTime] = useState(time);
   const [follow, setFollow] = useState(true);
   const [tab, setTab] = useState('code');
@@ -77,7 +77,7 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(5,8,11,.72)' }} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="flex flex-col rounded-lg overflow-hidden" style={{ width: 'min(96vw, 1500px)', height: 'min(94vh, 960px)', background: 'var(--panel)', border: '1px solid var(--border-strong)', boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}>
         <header className="flex items-center gap-3 px-4 py-2" style={{ borderBottom: '1px solid var(--border)' }}>
-          <span className="font-semibold">Widget editor</span>
+          <span className="font-semibold">{title}</span>
           <input className="input" style={{ width: 260 }} value={widget.name} onChange={(e) => updateWidget(widget.id, { name: e.target.value })} />
           <span className="hint">Changes apply immediately · Esc closes</span>
           <button className="btn ml-auto" onClick={onClose}>

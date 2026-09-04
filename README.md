@@ -88,10 +88,18 @@ A tag with a suffix (`v0.4.0-beta.1`) is published as a pre-release.
    markers on the timeline, or type a timecode. The part outside the range is dimmed. While a
    proxy is still being encoded the points can only be placed inside the already encoded part
    (same limit as seeking). The range is saved with the project.
-5. **Library** – "Save to library" stores a widget inside the app; Import/Export as JSON.
+5. **Layouts** – "Save to layout" (Widgets tab) stores a complete copy of all widgets on
+   the video – positions, sizes, code, CSS – under a name inside the app. The Layouts tab
+   lists them: *Load* replaces the widgets on the video (rescaled to the current video size),
+   Import/Export share a layout as JSON. Saving under an existing name replaces that layout
+   after a confirmation.
+6. **Library** – "Save to library" stores a single widget inside the app (same-name entries
+   are replaced after a confirmation); own widgets can be filtered, edited in the full editor,
+   and imported/exported as JSON. The built-in examples sit in a collapsible section below –
+   read-only, always the current version, *Add* only.
    Projects (video path, CSV paths, offset, widgets) can be saved/opened too, and the last
    state is restored on restart.
-6. **Export**
+7. **Export**
    * *Video + overlay* – re-encodes with the same codec family (h264 → libx264, hevc → libx265),
      same resolution/fps, either at the source bitrate or CRF 17; audio and metadata copied.
    * *Overlay only · PNG sequence* – transparent 8-bit RGBA PNG per frame at the source frame
@@ -134,8 +142,8 @@ function (values, time, ctx) {
 
 The example widgets in the Library all start with a `SETTINGS` block (colors, units,
 sizes, arrow style, map style…). *Example: GPS map* shows a dimmed OSM/CARTO base map under
-the track with a heading arrow (columns: lat, lon, heading). *Restore examples* in the
-Library brings back the current versions.
+the track with a heading arrow (columns: lat, lon, heading). The examples are built in and
+always current; add one to the video, change it, and "Save to library" keeps your version.
 
 **Widget coordinates follow the video:** positions and sizes are stored in pixels of the current
 video. Loading a video with a different resolution rescales every widget (positions per axis, box

@@ -287,6 +287,12 @@ export async function renderFrameToCanvas(canvas, widgets, store, videoTime, syn
   return g.getImageData(0, 0, width, height).data.buffer;
 }
 
+/** Copy of a list sorted by name, alphabetically and case-insensitively (library, examples, layouts). */
+export const byName = (items, key = (x) => x.name) => items.slice().sort((a, b) => (key(a) || '').localeCompare(key(b) || '', undefined, { sensitivity: 'base', numeric: true }));
+
+/** Unique id for widgets, library entries and layouts. */
+export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
 export function newWidget(partial = {}) {
   // Always assign a fresh unique id (callers may pass id: undefined or a library id).
   return {
@@ -301,7 +307,7 @@ export function newWidget(partial = {}) {
     css: '',
     code: DEFAULT_CODE,
     ...partial,
-    id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
+    id: uid(),
   };
 }
 

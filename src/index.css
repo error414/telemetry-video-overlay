@@ -336,6 +336,37 @@ input[type='radio'] {
 .bay-body {
   padding: 10px;
 }
+/* collapsible bay: the head is a button, the body slides open/closed (grid-rows trick) */
+.bay-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+.bay-toggle:hover {
+  filter: brightness(1.2);
+}
+.bay-chev {
+  flex: none;
+  color: var(--faint);
+  transition: transform 0.15s;
+}
+.bay-toggle.open .bay-chev {
+  transform: rotate(90deg);
+}
+.bay-toggle:not(.open) {
+  border-bottom-color: transparent;
+}
+.bay-drawer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.2s ease;
+}
+.bay-drawer.open {
+  grid-template-rows: 1fr;
+}
+.bay-drawer > div {
+  min-height: 0;
+  overflow: hidden;
+}
 .chip {
   display: inline-flex;
   align-items: center;

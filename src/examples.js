@@ -1,9 +1,6 @@
-// Example widgets seeded into the library. Every example starts with a SETTINGS block –
-// change values there (colors, sizes, units, arrow style…). They can be deleted from the
-// Library tab and are refreshed automatically when EXAMPLES_VERSION changes.
-
-// Bump when examples change: the library's "Example:" entries are refreshed automatically.
-export const EXAMPLES_VERSION = 29;
+// Example widgets shown read-only in the Library tab (Examples section). Every example starts
+// with a SETTINGS block – change values there (colors, sizes, units, arrow style…) after adding
+// one to the video. They are read straight from this file, so they are always current.
 
 export const EXAMPLE_WIDGETS = [
   {

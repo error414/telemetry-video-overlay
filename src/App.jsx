@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TelemetryStore } from './telemetry.js';
 import { csvWorker } from './csvWorkerClient.js';
-import { newWidget, EMPTY_STAGE } from './widgetRuntime.js';
-import { EXAMPLE_WIDGETS, EXAMPLES_VERSION } from './examples.js';
+import { newWidget, EMPTY_STAGE, uid } from './widgetRuntime.js';
 import { runExport, freeFolder } from './export.js';
 import Stage from './components/Stage.jsx';
 import SyncBar from './components/SyncBar.jsx';
 import FilesPanel from './components/FilesPanel.jsx';
 import WidgetsPanel, { ColumnsInput } from './components/WidgetsPanel.jsx';
 import LibraryPanel from './components/LibraryPanel.jsx';
+import LayoutsPanel from './components/LayoutsPanel.jsx';
 import ExportPanel, { EXPORT_MODES } from './components/ExportPanel.jsx';
 import CodeEditorModal from './components/CodeEditorModal.jsx';
 import AutoSyncDialog from './components/AutoSyncDialog.jsx';
@@ -17,6 +17,7 @@ import { useConfirm } from './components/ConfirmDialog.jsx';
 import { toTele } from './time.js';
 
 const LIB_KEY = 'telemetry-overlay.widgetLibrary.v1';
+const LAYOUTS_KEY = 'telemetry-overlay.layouts.v1';
 const PROJECT_KEY = 'telemetry-overlay.lastProject.v1';
 const EXAMPLES_KEY = 'telemetry-overlay.examplesVersion';
 export const DEFAULT_BB_OPTIONS = {
@@ -32,8 +33,6 @@ export const DEFAULT_BB_OPTIONS = {
   index: '',
 };
 
-const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-
 // move/resize widgets from one video size to another: positions follow each axis, the box
 // (and with it the widget's content, which is sized from w/h) keeps its shape
 function rescaleWidgets(ws, from, to) {
@@ -43,28 +42,37 @@ function rescaleWidgets(ws, from, to) {
   const k = Math.min(sx, sy);
   return ws.map((w) => ({ ...w, x: Math.round(w.x * sx), y: Math.round(w.y * sy), w: Math.round(w.w * k), h: Math.round(w.h * k) }));
 }
-const freshExamples = () => EXAMPLE_WIDGETS.map((w) => ({ ...w, id: uid() }));
-
-function loadLibrary() {
-  let lib = null;
+function loadJsonArray(key) {
   try {
-    const raw = localStorage.getItem(LIB_KEY);
-    if (raw) lib = JSON.parse(raw);
+    const v = JSON.parse(localStorage.getItem(key) || 'null');
+    return Array.isArray(v) ? v : [];
   } catch {
-    /* ignore */
+    return [];
   }
-  if (!Array.isArray(lib)) lib = freshExamples();
-  // refresh the built-in examples when they changed in a new app version (user widgets are kept)
-  if (Number(localStorage.getItem(EXAMPLES_KEY) || 0) !== EXAMPLES_VERSION) {
-    lib = [...lib.filter((w) => !(w.name || '').startsWith('Example:')), ...freshExamples()];
-    localStorage.setItem(EXAMPLES_KEY, String(EXAMPLES_VERSION));
+}
+
+// The library holds only the user's own widgets. The built-in examples are shown straight from
+// examples.js (always current, cannot be deleted); older versions of the app seeded copies of
+// them into the stored library — those copies are dropped once here.
+function loadLibrary() {
+  let lib = loadJsonArray(LIB_KEY).filter((w) => w && typeof w.code === 'string');
+  if (localStorage.getItem(EXAMPLES_KEY) != null) {
+    lib = lib.filter((w) => !(w.name || '').startsWith('Example:'));
+    localStorage.removeItem(EXAMPLES_KEY);
   }
-  return lib;
+  return lib.map((w) => ({ ...w, id: w.id || uid() }));
+}
+
+function loadLayouts() {
+  return loadJsonArray(LAYOUTS_KEY)
+    .filter((l) => l && typeof l.name === 'string' && Array.isArray(l.widgets))
+    .map((l) => ({ ...l, id: l.id || uid(), layout: l.layout && l.layout.w ? l.layout : { w: 1920, h: 1080 } }));
 }
 
 const TABS = [
   ['files', 'Files'],
   ['widgets', 'Widgets'],
+  ['layouts', 'Layouts'],
   ['library', 'Library'],
   ['export', 'Export'],
 ];
@@ -82,6 +90,12 @@ const TAB_ICONS = {
       <rect x="9.25" y="1.75" width="5" height="5" />
       <rect x="1.75" y="9.25" width="5" height="5" />
       <rect x="9.25" y="9.25" width="5" height="5" />
+    </svg>
+  ),
+  layouts: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <rect x="1.75" y="1.75" width="12.5" height="12.5" rx="1" />
+      <path d="M1.75 6.25h12.5M6.25 6.25v8" />
     </svg>
   ),
   library: (
@@ -120,6 +134,9 @@ export default function App() {
   const [widgets, setWidgets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [library, setLibrary] = useState(loadLibrary);
+  const [libEditId, setLibEditId] = useState(null); // library widget open in the editor (Library tab → Edit)
+  const [layouts, setLayouts] = useState(loadLayouts);
+  const [layoutName, setLayoutName] = useState(''); // name in the Widgets tab "Save to layout" box (last saved / loaded layout)
   const [tab, setTab] = useState('files');
   const [status, setStatus] = useState('');
   // playback problems get a modal on top of the status line — the corner status is easy to miss
@@ -152,6 +169,7 @@ export default function App() {
   const [layout, setLayout] = useState(null);
 
   useEffect(() => localStorage.setItem(LIB_KEY, JSON.stringify(library)), [library]);
+  useEffect(() => localStorage.setItem(LAYOUTS_KEY, JSON.stringify(layouts)), [layouts]);
 
   // ---- CSV sources ----
   // Phase text shown while a blackbox log is being decoded / a CSV parsed; the
@@ -359,6 +377,50 @@ export default function App() {
     [widgets, confirm]
   );
 
+  // ---- Library & layouts ----
+  // names are unique in the library: saving a widget under a name that is already there replaces that entry
+  const saveToLibrary = useCallback(
+    async (w) => {
+      const name = (w.name || '').trim() || 'Widget';
+      const existing = library.find((x) => x.name.trim() === name);
+      if (existing && !(await confirm(`A widget named "${name}" is already in the library. Overwrite it?`, { title: 'Overwrite widget?' }))) return;
+      const copy = { ...w, name, visible: true, id: existing ? existing.id : uid() };
+      setLibrary((l) => (existing ? l.map((x) => (x.id === existing.id ? copy : x)) : [...l, copy]));
+      setStatus((existing ? 'Replaced "' : 'Saved "') + name + '" in the library');
+    },
+    [library, confirm]
+  );
+  const updateLibraryWidget = useCallback((id, patch) => setLibrary((l) => l.map((w) => (w.id === id ? { ...w, ...patch } : w))), []);
+  const libEdit = useMemo(() => (libEditId ? library.find((w) => w.id === libEditId) || null : null), [library, libEditId]);
+
+  // the size the widget coordinates are in right now (no video yet = the empty stage)
+  const stageSpace = layout && layout.w ? layout : EMPTY_STAGE;
+  const saveLayout = useCallback(
+    async (rawName) => {
+      const name = (rawName || '').trim();
+      if (!name || !widgets.length) return;
+      const existing = layouts.find((x) => x.name.trim() === name);
+      if (existing && !(await confirm(`A layout named "${name}" is already saved. Overwrite it?`, { title: 'Overwrite layout?' }))) return;
+      const entry = { id: existing ? existing.id : uid(), name, layout: { ...stageSpace }, widgets: widgets.map((w) => ({ ...w })), savedAt: Date.now() };
+      setLayouts((ls) => (existing ? ls.map((x) => (x.id === existing.id ? entry : x)) : [...ls, entry]));
+      setLayoutName(name);
+      setStatus((existing ? 'Replaced layout "' : 'Saved layout "') + name + '" (' + widgets.length + (widgets.length === 1 ? ' widget)' : ' widgets)'));
+    },
+    [widgets, layouts, stageSpace, confirm]
+  );
+  const applyLayout = useCallback(
+    async (entry) => {
+      if (widgets.length && !(await confirm(`Replace the ${widgets.length === 1 ? 'widget' : widgets.length + ' widgets'} on the video with layout "${entry.name}"?`, { title: 'Load layout?' }))) return;
+      const ws = rescaleWidgets(entry.widgets.map((w) => newWidget(w)), entry.layout, stageSpace);
+      setWidgets(ws);
+      setSelectedId(null);
+      setLayoutName(entry.name);
+      setTab('widgets');
+      setStatus('Loaded layout "' + entry.name + '" (' + ws.length + (ws.length === 1 ? ' widget)' : ' widgets)'));
+    },
+    [widgets.length, stageSpace, confirm]
+  );
+
   // ---- Export job (lives here so it survives tab switches) ----
   const [job, setJob] = useState({ mode: 'video', quality: 'bitrate', encoder: 'auto', overlayFps: 30, perWidget: false, pngScale: 1, running: false, progress: null, log: '', result: null, out: null, setup: null });
   const cancelRef = useRef(false);
@@ -424,13 +486,14 @@ export default function App() {
           drift,
           range,
           widgets,
+          layoutName,
         },
         null,
         2
       ),
     // storeVersion: store is a stable instance — source add/remove/edit only bumps the version,
     // and without it here the autosave effect below never sees those changes
-    [video, store, storeVersion, layout, offset, drift, range, widgets]
+    [video, store, storeVersion, layout, offset, drift, range, widgets, layoutName]
   );
 
   const saveProject = useCallback(async () => {
@@ -478,6 +541,7 @@ export default function App() {
       }
       setWidgets(ws);
       setLayout(space);
+      setLayoutName(typeof j.layoutName === 'string' ? j.layoutName : '');
     },
     [store, addCsvFiles, updateSource, probeVideo, warnIfUndecodable]
   );
@@ -700,13 +764,15 @@ export default function App() {
                 sync={sync}
                 env={widgetEnv}
                 openEditor={() => setEditorOpen(true)}
-                saveToLibrary={(w) => {
-                  setLibrary((l) => [...l, { ...w, id: uid() }]);
-                  setStatus('Saved "' + w.name + '" to the library');
-                }}
+                saveToLibrary={saveToLibrary}
+                layoutName={layoutName}
+                setLayoutName={setLayoutName}
+                saveLayout={saveLayout}
+                layoutsCount={layouts.length}
               />
             )}
-            {tab === 'library' && <LibraryPanel library={library} setLibrary={setLibrary} addWidget={addWidget} setStatus={setStatus} confirm={confirm} />}
+            {tab === 'layouts' && <LayoutsPanel layouts={layouts} setLayouts={setLayouts} applyLayout={applyLayout} setStatus={setStatus} confirm={confirm} />}
+            {tab === 'library' && <LibraryPanel library={library} setLibrary={setLibrary} addWidget={addWidget} editWidget={setLibEditId} setStatus={setStatus} confirm={confirm} />}
             {tab === 'export' && <ExportPanel video={video} widgets={widgets} job={job} setJobOption={setJobOption} startExport={startExport} cancelExport={cancelExport} range={range} />}
           </div>
         </aside>
@@ -746,6 +812,7 @@ export default function App() {
       {editorOpen && selected && (
         <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} sync={sync} columnNames={columnNames} ColumnsInput={ColumnsInput} env={widgetEnv} />
       )}
+      {libEdit && <CodeEditorModal widget={libEdit} updateWidget={updateLibraryWidget} onClose={() => setLibEditId(null)} store={store} time={time} sync={sync} columnNames={columnNames} ColumnsInput={ColumnsInput} env={widgetEnv} title="Library widget" />}
 
       {startup && <StartupDialog project={startup} onContinue={continueSession} onNew={newSession} />}
       {autoSyncOpen && video && (

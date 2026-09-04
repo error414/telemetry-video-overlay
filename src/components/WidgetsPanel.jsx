@@ -102,7 +102,7 @@ export function ColumnsInput({ value, onChange, columnNames, single = false, dis
   );
 }
 
-export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidget, updateWidget, removeWidget, setWidgets, columnNames, store, time, sync, saveToLibrary, openEditor, env }) {
+export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidget, updateWidget, removeWidget, setWidgets, columnNames, store, time, sync, saveToLibrary, openEditor, env, layoutName, setLayoutName, saveLayout, layoutsCount }) {
   const move = (id, dir) =>
     setWidgets((ws) => {
       const i = ws.findIndex((w) => w.id === id);
@@ -230,7 +230,7 @@ export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidg
               </details>
 
               <div className="flex gap-2 mt-3">
-                <button className="btn" onClick={() => saveToLibrary(selected)}>
+                <button className="btn" onClick={() => saveToLibrary(selected)} title="Store a copy of this widget in the Library (a library widget with the same name is replaced)">
                   Save to library
                 </button>
               </div>
@@ -238,6 +238,30 @@ export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidg
           </div>
         </section>
       )}
+
+      <section className="bay bay-amber">
+        <header className="bay-head">
+          <span className="bay-tick" />
+          Layout
+          <span className="bay-note">{layoutsCount ? layoutsCount + ' saved' : 'none saved'}</span>
+        </header>
+        <div className="bay-body">
+          <p className="hint mb-2">Store all widgets on the video — positions, sizes, code — under a name in the Layouts tab. A saved layout with the same name is replaced.</p>
+          <div className="flex gap-2">
+            <input
+              className="input flex-1"
+              value={layoutName}
+              onChange={(e) => setLayoutName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && widgets.length && layoutName.trim() && saveLayout(layoutName)}
+              placeholder="Layout name"
+              spellCheck={false}
+            />
+            <button className="btn" onClick={() => saveLayout(layoutName)} disabled={!widgets.length || !layoutName.trim()} title={widgets.length ? 'Save the widgets on the video as a layout' : 'No widgets on the video'}>
+              Save to layout
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
