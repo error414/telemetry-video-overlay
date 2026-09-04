@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TelemetryStore } from './telemetry.js';
 import { csvWorker } from './csvWorkerClient.js';
-import { newWidget } from './widgetRuntime.js';
+import { newWidget, EMPTY_STAGE } from './widgetRuntime.js';
 import { EXAMPLE_WIDGETS, EXAMPLES_VERSION } from './examples.js';
 import { runExport, freeFolder } from './export.js';
 import Stage from './components/Stage.jsx';
@@ -33,6 +33,16 @@ export const DEFAULT_BB_OPTIONS = {
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+// move/resize widgets from one video size to another: positions follow each axis, the box
+// (and with it the widget's content, which is sized from w/h) keeps its shape
+function rescaleWidgets(ws, from, to) {
+  if (!from || !to || !from.w || !from.h || (from.w === to.w && from.h === to.h)) return ws;
+  const sx = to.w / from.w;
+  const sy = to.h / from.h;
+  const k = Math.min(sx, sy);
+  return ws.map((w) => ({ ...w, x: Math.round(w.x * sx), y: Math.round(w.y * sy), w: Math.round(w.w * k), h: Math.round(w.h * k) }));
+}
 const freshExamples = () => EXAMPLE_WIDGETS.map((w) => ({ ...w, id: uid() }));
 
 function loadLibrary() {
@@ -137,7 +147,8 @@ export default function App() {
   useEffect(() => localStorage.setItem('telemetry-overlay.grid', JSON.stringify(grid)), [grid]);
   const videoRef = useRef(null);
   const [time, setTime] = useState(0);
-  // reference resolution the widget layout was designed for; widgets scale to other videos
+  // resolution the widget coordinates are in — always the size of the current video; when a
+  // video with a different size is loaded the widgets are rescaled to it (see rescaleWidgets)
   const [layout, setLayout] = useState(null);
 
   useEffect(() => localStorage.setItem(LIB_KEY, JSON.stringify(library)), [library]);
@@ -305,19 +316,18 @@ export default function App() {
       setVideo(info);
       setPlaybackBlocked(false);
       setRange({ start: 0, end: null }); // in/out points belong to the previous video
-      setLayout((l) => {
-        if (widgets.length === 0) return { w: info.width, h: info.height }; // empty project → this video is the reference
-        if (l && l.w) return l; // keep the existing reference
-        // widgets exist but their reference is unknown (older project) → assume 1080p, fixable in Files
-        setStatus('Widget layout reference unknown — assuming 1920×1080. Adjust it in the Files tab if widgets look wrong.');
-        return { w: 1920, h: 1080 };
-      });
+      // widgets follow the video size: rescale them from the size they are laid out in now
+      // (no size yet = they were placed on the empty stage)
+      const from = layout && layout.w ? layout : widgets.length ? EMPTY_STAGE : null;
+      const to = { w: info.width, h: info.height };
+      if (from) setWidgets((ws) => rescaleWidgets(ws, from, to));
+      setLayout(to);
       setStatus(`Video: ${info.width}x${info.height} @ ${info.fps.toFixed(3)} fps, ${info.codec}, ${info.duration.toFixed(1)} s`);
       warnIfUndecodable(info);
     } catch (e) {
       setStatus('Probe error: ' + e.message);
     }
-  }, [probeVideo, warnIfUndecodable, widgets.length]);
+  }, [probeVideo, warnIfUndecodable, widgets.length, layout]);
 
   // removes the video from the project only — the file (and any proxy) stays on disk
   const removeVideo = useCallback(async () => {
@@ -386,7 +396,6 @@ export default function App() {
         overlayFps: job.overlayFps,
         perWidget: job.perWidget,
         pngScale: job.pngScale,
-        lt,
         range,
         onStart: (setup) => setJob((j) => ({ ...j, setup })),
         onProgress: (p) => setJob((j) => ({ ...j, progress: p })),
@@ -398,8 +407,6 @@ export default function App() {
       setJob((j) => ({ ...j, running: false, result: 'error', log: j.log + '\n' + e.message }));
       setStatus('Export failed — see the Export tab');
     }
-    // lt is declared further down (useMemo) — read at call time, so it must not be listed here
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, job.perWidget, job.pngScale, widgets, store, sync, range]);
   const cancelExport = useCallback(() => (cancelRef.current = true), []);
 
@@ -448,27 +455,29 @@ export default function App() {
       setDrift(typeof j.drift === 'number' && Number.isFinite(j.drift) ? j.drift : 0);
       const r = j.range || {};
       setRange({ start: typeof r.start === 'number' && r.start > 0 ? r.start : 0, end: typeof r.end === 'number' ? r.end : null });
-      if (j.layout && j.layout.w) setLayout(j.layout);
       const seen = new Set();
-      setWidgets(
-        (j.widgets || []).map((w) => {
-          const id = w.id && !seen.has(w.id) ? w.id : uid();
-          seen.add(id);
-          return { ...w, id };
-        })
-      );
+      let ws = (j.widgets || []).map((w) => {
+        const id = w.id && !seen.has(w.id) ? w.id : uid();
+        seen.add(id);
+        return { ...w, id };
+      });
+      // size the stored coordinates are in; older projects without it were designed on 1080p
+      let space = j.layout && j.layout.w ? j.layout : ws.length ? { w: 1920, h: 1080 } : null;
       if (j.video) {
         try {
           const info = await probeVideo(j.video);
           setVideo(info);
           setPlaybackBlocked(false);
-          // no reference stored (older project): widgets present → assume 1080p, else this video
-          if (!j.layout || !j.layout.w) setLayout((j.widgets || []).length ? { w: 1920, h: 1080 } : { w: info.width, h: info.height });
+          const to = { w: info.width, h: info.height };
+          if (space) ws = rescaleWidgets(ws, space, to);
+          space = to;
           warnIfUndecodable(info);
         } catch {
           setStatus('Video from project not found: ' + j.video);
         }
       }
+      setWidgets(ws);
+      setLayout(space);
     },
     [store, addCsvFiles, updateSource, probeVideo, warnIfUndecodable]
   );
@@ -492,7 +501,7 @@ export default function App() {
       const raw = localStorage.getItem(PROJECT_KEY);
       if (raw) {
         const j = JSON.parse(raw);
-        if (j.video || (j.sources && j.sources.length) || (j.widgets && j.widgets.length)) loadProjectData(j);
+        if (j.video || (j.sources && j.sources.length) || (j.widgets && j.widgets.length)) return j;
       }
     } catch {
       /* ignore */
@@ -509,21 +518,6 @@ export default function App() {
     setStartup(null);
   }, []);
 
-  // layout transform: reference resolution → current video resolution
-  const lt = useMemo(() => {
-    if (!video || !layout || !layout.w || (layout.w === video.width && layout.h === video.height)) return { sx: 1, sy: 1, k: 1 };
-    const sx = video.width / layout.w;
-    const sy = video.height / layout.h;
-    return { sx, sy, k: Math.min(sx, sy) };
-  }, [video, layout]);
-
-  // bake current scaling into widget coordinates and make this video the new reference
-  const rebaseLayout = useCallback(() => {
-    if (!video) return;
-    setWidgets((ws) => ws.map((w) => ({ ...w, x: Math.round(w.x * lt.sx), y: Math.round(w.y * lt.sy), w: Math.round(w.w * lt.k), h: Math.round(w.h * lt.k) })));
-    setLayout({ w: video.width, h: video.height });
-    setStatus(`Widget layout rebased to ${video.width}×${video.height}`);
-  }, [video, lt]);
   // autosave the current project in localStorage so a restart keeps the work
   useEffect(() => {
     if (startup) return undefined;
@@ -581,11 +575,6 @@ export default function App() {
               px
             </label>
             <span className="ml-auto" />
-            {video && lt.k !== 1 && (
-              <span className="chip chip-warn" title="Widgets were designed for a different resolution — see Widget layout reference in Files">
-                layout ×{lt.k.toFixed(2)}
-              </span>
-            )}
             {video && (video.proxy || video.liveProxy) && (
               <span className="chip chip-tele" title="The preview plays a re-encoded proxy; export always uses the original file">
                 proxy preview
@@ -607,7 +596,7 @@ export default function App() {
             updateWidget={updateWidget}
             editMode={editMode}
             grid={grid}
-            lt={lt}
+            layout={layout}
             setStatus={showPlayError}
             onOpenEditor={(id) => {
               setSelectedId(id);
@@ -680,10 +669,6 @@ export default function App() {
                 video={video}
                 openVideo={openVideo}
                 removeVideo={removeVideo}
-                layout={layout}
-                setLayout={setLayout}
-                lt={lt}
-                rebaseLayout={rebaseLayout}
                 makeProxy={makeProxy}
                 proxyProgress={proxyProgress}
                 cancelProxy={() => window.api.cancelProxy()}
@@ -747,7 +732,6 @@ export default function App() {
         )}
         <span className="readout" title="Telemetry time = video time × (1 + drift) + offset">
           t <b>{toTele(time, sync).toFixed(3)}</b> s
-      {startup && <StartupDialog project={startup} onContinue={continueSession} onNew={newSession} />}
         </span>
         <span className="readout" title="Telemetry offset — adjust in the sync bar or with [ and ] keys">
           offset <b>{offset.toFixed(3)}</b> s
@@ -763,6 +747,7 @@ export default function App() {
         <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} sync={sync} columnNames={columnNames} ColumnsInput={ColumnsInput} env={widgetEnv} />
       )}
 
+      {startup && <StartupDialog project={startup} onContinue={continueSession} onNew={newSession} />}
       {autoSyncOpen && video && (
         <AutoSyncDialog video={video} store={store} storeVersion={storeVersion} columnNames={columnNames} sync={sync} setOffset={setOffset} setDrift={setDrift} time={time} onClose={() => setAutoSyncOpen(false)} setStatus={setStatus} />
       )}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { renderWidget, widgetBoxStyle, widgetDomId } from '../widgetRuntime.js';
+import { renderWidget, widgetBoxStyle, widgetDomId, EMPTY_STAGE } from '../widgetRuntime.js';
 import { startLiveProxy } from '../liveProxy.js';
 import ShadowHtml from './ShadowHtml.jsx';
 
@@ -16,14 +16,15 @@ function liveProxyMime(video) {
   return 'video/mp4; codecs="avc1.640033"';
 }
 
-export default function Stage({ video, videoRef, widgets, store, storeVersion, sync, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, lt, setStatus, onOpenEditor, empty, range }) {
+export default function Stage({ video, videoRef, widgets, store, storeVersion, sync, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, layout, setStatus, onOpenEditor, empty, range }) {
   const gridSize = grid && grid.size > 1 ? grid.size : 1;
   // snap to grid unless disabled; holding Alt while dragging temporarily disables snapping
   const snap = (v, alt) => (grid && grid.snap && !alt ? Math.round(v / gridSize) * gridSize : Math.round(v));
   const wrapRef = useRef(null);
   const [scale, setScale] = useState(1);
-  const vw = video ? video.width : 1280;
-  const vh = video ? video.height : 720;
+  // without a video the stage keeps the size the widgets are laid out in (last video), else EMPTY_STAGE
+  const vw = video ? video.width : layout && layout.w ? layout.w : EMPTY_STAGE.w;
+  const vh = video ? video.height : layout && layout.h ? layout.h : EMPTY_STAGE.h;
 
   // fit video into the available area
   useEffect(() => {
@@ -110,11 +111,11 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, s
     const move = (ev) => {
       const d = dragRef.current;
       if (!d) return;
-      // screen px → video px (stage scale) → layout units (lt)
+      // screen px → video px (stage scale)
       const dx = (ev.clientX - d.sx) / scale;
       const dy = (ev.clientY - d.sy) / scale;
-      if (d.mode === 'move') updateWidget(d.id, { x: snap(d.x + dx / lt.sx, ev.altKey), y: snap(d.y + dy / lt.sy, ev.altKey) });
-      else updateWidget(d.id, { w: Math.max(gridSize, snap(d.w + dx / lt.k, ev.altKey)), h: Math.max(gridSize, snap(d.h + dy / lt.k, ev.altKey)) });
+      if (d.mode === 'move') updateWidget(d.id, { x: snap(d.x + dx, ev.altKey), y: snap(d.y + dy, ev.altKey) });
+      else updateWidget(d.id, { w: Math.max(gridSize, snap(d.w + dx, ev.altKey)), h: Math.max(gridSize, snap(d.h + dy, ev.altKey)) });
     };
     const up = () => {
       dragRef.current = null;
@@ -172,7 +173,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, s
                 inset: 0,
                 pointerEvents: 'none',
                 backgroundImage: 'linear-gradient(to right, rgba(242,169,59,.15) 1px, transparent 1px), linear-gradient(to bottom, rgba(242,169,59,.15) 1px, transparent 1px)',
-                backgroundSize: `${gridSize * lt.sx}px ${gridSize * lt.sy}px`,
+                backgroundSize: `${gridSize}px ${gridSize}px`,
               }}
             />
           )}
@@ -182,7 +183,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, s
                 key={w.id}
                 id={widgetDomId(w)}
                 style={{
-                  ...styleObj(widgetBoxStyle(w, '', lt)),
+                  ...styleObj(widgetBoxStyle(w)),
                   outline: editMode ? (selectedId === w.id ? '2px solid #f2a93b' : '1px dashed rgba(255,255,255,.35)') : 'none',
                   cursor: editMode ? 'move' : 'default',
                 }}

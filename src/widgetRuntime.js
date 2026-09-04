@@ -233,11 +233,14 @@ export function toXhtml(html) {
 }
 
 /**
- * lt = layout transform {sx, sy, k}: widgets are designed for a reference resolution; on a video
- * with a different size positions scale by sx/sy and the whole box (content, fonts included)
- * by k. Identity when the video matches the reference.
+ * lt = layout transform {sx, sy, k}: widget coordinates are in video pixels; the export can render
+ * at another scale (PNG scale), where positions scale by sx/sy and the whole box (content, fonts
+ * included) by k. Identity otherwise.
  */
 export const IDENTITY_LT = { sx: 1, sy: 1, k: 1 };
+
+/** Size of the stage while no video is loaded — widgets placed there are laid out in this space. */
+export const EMPTY_STAGE = { w: 1280, h: 720 };
 
 export function widgetBoxStyle(w, extra = '', lt = IDENTITY_LT) {
   const scale = lt.k !== 1 ? 'transform:scale(' + lt.k + ');transform-origin:0 0;' : '';
