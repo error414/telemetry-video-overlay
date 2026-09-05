@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { EXAMPLE_WIDGETS } from '../examples.js';
-import { byName, uid } from '../widgetRuntime.js';
+import { byName, uid, cleanWidget } from '../widgetRuntime.js';
 
 const EXAMPLES_OPEN_KEY = 'telemetry-overlay.library.examplesOpen';
 
@@ -25,7 +25,7 @@ function OwnItem({ w, addWidget, editWidget, exportOne, removeOne }) {
       <button className="btn btn-xs btn-primary" onClick={() => addWidget({ ...w, id: undefined })}>
         Add
       </button>
-      <button className="btn btn-xs" onClick={() => editWidget(w.id)} title="Edit this library widget (code, CSS, columns, size)">
+      <button className="btn btn-xs" onClick={() => editWidget(w.id)} title="Edit this library widget (code, settings, columns, size)">
         Edit
       </button>
       <button className="btn btn-xs btn-icon" onClick={() => exportOne(w)} title="Export this widget">
@@ -95,7 +95,7 @@ export default function LibraryPanel({ library, setLibrary, addWidget, editWidge
         const next = l.slice();
         for (const w of items) {
           const name = (w.name || 'Imported widget').trim();
-          const copy = { ...w, name, visible: true };
+          const copy = cleanWidget({ ...w, name, visible: true });
           const i = next.findIndex((x) => x.name.trim() === name);
           if (i >= 0) next[i] = { ...copy, id: next[i].id };
           else next.push({ ...copy, id: uid() });
@@ -157,7 +157,7 @@ export default function LibraryPanel({ library, setLibrary, addWidget, editWidge
         <div className={'bay-drawer' + (examplesOpen ? ' open' : '')}>
           <div>
             <div className="bay-body">
-              <p className="hint mb-2">Built-in, always current. Each starts with a SETTINGS block — colors, units, sizes. Add one to the video, then "Edit code"; "Save to library" keeps your version.</p>
+              <p className="hint mb-2">Built-in, always current. Each has settings (colors, units, sizes) you change in the Widgets tab after adding one to the video; "Edit code" opens its code and the settings definition, "Save to library" keeps your version.</p>
               <div className="flex flex-col gap-1.5">
                 {examples.map((w) => (
                   <ExampleItem key={w.name} w={w} addWidget={addWidget} />

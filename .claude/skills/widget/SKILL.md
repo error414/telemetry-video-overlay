@@ -11,39 +11,80 @@ exist if you ever need to go deeper, but a widget built purely from this file is
 
 ## The contract
 
-A widget is **one JavaScript function stored as a string**. The app compiles it with `new Function`
-and calls it for **every rendered frame** (live preview and export, often 60–120 fps). It must
-return an HTML string; that string is placed inside an absolutely-positioned box.
+A widget is **one JavaScript function stored as a string** plus a **settings definition**. The
+app compiles the function with `new Function` and calls it for **every rendered frame** (live
+preview and export, often 60–120 fps). It must return an HTML string; that string is placed
+inside an absolutely-positioned box.
 
 ```js
-function (values, time, ctx) {
+function (settings, time, ctx) {
   // ---------- SETTINGS ----------
-  var COLOR = '#ffffff';   // text color
+  var COLOR = settings.color.value;   // text color
   // -------------------------------
-  return '<div style="color:' + COLOR + '">' + ctx.fmt(values[0], 1) + '</div>';
+  return '<div style="color:' + COLOR + '">' + ctx.fmt(ctx.values[0], 1) + '</div>';
 }
 ```
 
-Arrow functions and bare bodies (using `values`/`time`/`ctx`) also compile, but the
-`function (values, time, ctx) { … }` form is the house style.
+Arrow functions and bare bodies (using `settings`/`time`/`ctx`) also compile, but the
+`function (settings, time, ctx) { … }` form is the house style.
+
+**Every widget you write comes as two pieces: the code and its settings definition.** The
+definition is a JSON array; the app renders a form from it (Widgets tab and editor) so the pilot
+changes colours, units, sizes and modes without touching the code, and hands the values to the
+function as `settings`:
+
+```json
+[
+  { "group": { "name": "Sticks", "items": [
+    { "name": "Mode",       "type": "select", "values": { "1": "Mode 1", "2": "Mode 2" }, "default": 2,
+      "description": "Mode 2: left stick = throttle/yaw, right = pitch/roll" },
+    { "name": "Min",        "type": "int",    "default": -500, "description": "stick range (INAV rcCommand is -500..500)" },
+    { "name": "Multiplier", "type": "number", "default": 3.6, "step": 0.1 }
+  ] } },
+  { "group": { "name": "Labels", "items": [
+    { "name": "Labels",     "type": "bool",   "default": true },
+    { "name": "Label font", "type": "text",   "default": "Arial", "description": "label font family" },
+    { "name": "Color",      "type": "color_picker", "default": "#ffffff", "description": "text color" }
+  ] } }
+]
+```
+
+**Groups:** `{ "group": { "name": "…", "items": [ …settings… ] } }` makes a collapsible section of
+the form (all collapsed by default, so the form stays short). **Put every setting of a widget into
+a group** — 3–5 groups by topic (`Data`, `Axis`, `Look`, `Labels`, `Box`, …), the most important
+group first; a few settings at the top level (outside any group) are allowed only when the widget
+has fewer than ~6 settings in total. Keys are unique across the whole definition.
+
+| field | meaning |
+|---|---|
+| `name` | label in the form. The **key** the code uses is the name in snake_case: `Mode` → `settings.mode.value`, `Label font` → `settings.label_font.value` (an explicit `"key"` overrides) |
+| `type` | `text` (input) · `int` (whole number) · `number` (decimal) · `color_picker` (any CSS colour; the picker writes `rgba(r,g,b,a)`, alpha included) · `bool` (checkbox) · `select` |
+| `default` | **required in practice** — the value until the pilot changes it (the form starts from it; the definition is the single source of defaults) |
+| `description` | one line of help shown under the field — the same text as the SETTINGS-line comment |
+| `values` | `select` only: `{ "value": "label", … }` or `["a", "b"]`. Object keys are strings; when `default` is a number the numeric keys come back as numbers (`MODE === 2` works) |
+| `min`, `max`, `step` | `int`/`number` only, optional |
+
+`settings.<key>` is `{ value, name, type, description }` (+ `label`, `options` for selects).
+A key the code reads but the definition lacks throws at render time (the test runner catches it).
 
 Widget record (what the library / project JSON stores):
 
 | field | meaning |
 |---|---|
 | `name` | display name; built-in examples are prefixed `Example: ` |
-| `columns` | comma-separated CSV header names → `values[0], values[1], …` |
+| `columns` | comma-separated CSV header names → `ctx.values[0], ctx.values[1], …` |
 | `x, y, w, h` | box in **layout-reference pixels** (usually 1920×1080; the whole layout auto-scales to other video resolutions) |
-| `opacity` | 0–1, applied to the whole box (house default 0.9–0.95) |
+| `settings` | the settings definition **as a string** (JSON text; a JS array literal with comments also parses) |
+| `config` | `{key: value}` of settings the pilot changed; absent = definition default. Leave it out / `{}` in new widgets |
 | `code` | the function source |
-| `css` | optional per-widget stylesheet — selectors are auto-scoped to this widget's box; `:root`/`:host` = the box. Users restyle widgets here, so give your elements stable `id`/`class` hooks |
 
 ## Runtime API
 
 | | |
 |---|---|
-| `values[i]` | current value of column *i* — numeric columns are **linearly interpolated** between samples; `undefined` outside the telemetry time range |
+| `settings` | the settings object described above: `settings.<key>.value` |
 | `time` | telemetry time, integer **milliseconds** (video time + sync offset) |
+| `ctx.values[i]` | current value of column *i* — numeric columns are **linearly interpolated** between samples; `undefined` outside the telemetry time range |
 | `ctx.videoTime` | video time in seconds |
 | `ctx.width`, `ctx.height` | current box size in px — size **everything** from these, never hard-code |
 | `ctx.columns` | the column names array (parsed from `columns`) |
@@ -65,7 +106,7 @@ Export renders the returned HTML through an SVG `<foreignObject>` into a canvas:
 
 1. **Return a string.** No DOM access, no `document`/`window`, no timers, no event handlers,
    no `<script>` — only the returned markup exists. The function must be deterministic in
-   `(values, time, ctx)` so seeking and export give identical frames (no `Math.random()` per
+   `(settings, time, ctx)` so seeking and export give identical frames (no `Math.random()` per
    frame, no `Date.now()`; a random id generated **once** into `ctx.state` is fine).
 2. **No external resources.** No web fonts, no `<link>`, no `<img src="https://…">`. Remote
    images only via `ctx.image(url)`. Fonts: system families only (`Arial`, `Helvetica`,
@@ -77,7 +118,8 @@ Export renders the returned HTML through an SVG `<foreignObject>` into a canvas:
    `<defs>` ids (`linearGradient`, `clipPath`, filters) collide across widgets. Generate a
    unique id once: `var uid = ctx.state.uid || (ctx.state.uid = 'u' + Math.random().toString(36).slice(2, 8));`
 5. **Never throw.** Guard `typeof v === 'number'` before math. Outside the telemetry range all
-   `values` are `undefined` — return a sensible placeholder (`'--'`, empty graph), not an error.
+   `ctx.values` are `undefined` — return a sensible placeholder (`'--'`, empty graph), not an error.
+   Read every setting **only** through keys that exist in the definition (a typo throws).
 6. **Be fast.** Runs at video fps. Anything O(flight length) — projections, smoothing over
    `ctx.all`, path strings for the whole flight — belongs in `ctx.state`, computed once.
 
@@ -102,39 +144,46 @@ Widgets float over drone video: sky one second, dark forest the next. The house 
   `fill-opacity` ~0.15, or a top/bottom `linearGradient`).
 - **Structure lines:** grid `rgba(255,255,255,.15–.2)`, line charts ~2px stroke,
   `stroke-linejoin="round"`.
-- **Layout:** whole-widget `opacity` 0.9–0.95; keep ~40px from frame edges at 1920×1080;
+- **Layout:** translucency comes from the colours themselves (rgba backgrounds), there is no
+  whole-widget opacity; keep ~40px from frame edges at 1920×1080;
   typical sizes — value box 320×110, bar 300×40, graph 400–520×140–160, map 300×300,
   compass 220×60. Inner padding ≥ 6px (scaled); leave headroom above the tallest text so
   ascenders aren't clipped: `var top = Math.max(6 * scale, fsz * 0.6);`.
 - **Inline SVG is the tool of choice** for gauges, graphs, tapes, roses, maps. Give the root
   `<svg>` numeric `width`/`height` (= `ctx.width`/`ctx.height`), not percentages. Remember SVG
   text/shapes use `fill`/`stroke` (not `color`/`background`) and move with `transform`, not
-  margins. Don't put a `transform` **attribute** on elements users may nudge from the CSS tab
-  (CSS transform replaces the attribute) — wrap them in a `<g>` instead.
-- **CSS hooks:** give every meaningful element a stable `id`/`class` (`class="label"`,
-  `id="box-left"`) and end the code with a one-line comment listing them, e.g.
-  `// CSS hooks: #gauge (box), .fill, .text`. The editor shows `tag#id.class` on hover.
+  margins.
+- **Looks come from settings, not from editing code:** every colour, size, unit, label and mode a
+  pilot might want to change is a setting (`color_picker` for colours — the pilot gets a picker
+  with transparency). Hard-code only what is structural.
 
-ES5 style (`var`, string concatenation) is the house style — non-programmers edit the SETTINGS
+ES5 style (`var`, string concatenation) is the house style — non-programmers read the SETTINGS
 block, keep the rest readable too. Modern syntax compiles but don't use backtick templates with
 `${}` inside single-quoted strings the user may paste into JSON.
 
 ## SETTINGS block conventions
 
 - First thing in the function, delimited by `// ---------- SETTINGS ----------` / `// ---`.
-- `UPPER_CASE` names, one per line, each with a short comment listing allowed values.
-- Typical knobs: `LABEL`, `UNIT`, `MULTIPLIER` (unit conversion: m/s→km/h = 3.6, cm→m = 0.01),
-  `DIGITS`, colors, `BG`, `RADIUS`, `FONT`, `FONT_SIZE`, `SMOOTH_MS`, `MIN`/`MAX` with `null`
-  meaning "from `ctx.stats`", style enums (`'arrow' | 'plane' | 'dot'`), unit enums
-  (`'deg' | 'decideg' | 'rad'` — INAV attitude comes in decidegrees).
-- Sizes in SETTINGS are "at the default WxH" — note it in the comment
-  (`// at the default 400x150 size; scales with the widget`).
-- Scaling mode when relevant: `SCALE = 'flight' | 'window' | 'fixed'` — default `'flight'`
+- One `var UPPER_CASE = settings.snake_case.value;  // comment` line per setting, in the order
+  of the definition (group by group); the comment repeats the definition's `description`
+  (allowed values, units). Aligned columns. Structural constants that are not settings (a tile URL table, a
+  thresholds array) may sit in the block as plain literals.
+- Typical knobs: `LABEL`, `UNIT`, `MULTIPLIER` (unit conversion: m/s→km/h = 3.6, cm→m = 0.01;
+  type `number`), `DIGITS` (`int`, min 0), colours (`color_picker`), `BG` named `Background`,
+  `RADIUS`, `FONT` (`text`), `FONT_SIZE`, `SMOOTH_MS`, style enums (`select`:
+  `'arrow' | 'plane' | 'dot'`), unit enums (`select` `'deg' | 'decideg' | 'rad'` — INAV
+  attitude comes in decidegrees).
+- "Auto or fixed" knobs (`MIN`/`MAX` where `null` used to mean "from `ctx.stats`"): a `bool`
+  (`Auto range` / `Fixed axis`) plus `int` fields, combined in the block:
+  `var MIN = settings.auto_range.value ? null : settings.min.value;`
+- Sizes in SETTINGS are "at the default WxH" — say so in the description
+  (`at the default 400x150 size; scales with the widget`).
+- Scaling mode when relevant: `Scale` select `flight | window | fixed` — default `flight`
   (axes from `ctx.stats`, no jumping).
-- Whole-flight / history widgets (profiles, tracks, scrolling graphs): `CLIP_TO_RANGE = false`
-  — when `true` and `ctx.exportRange` is set, show only data inside the export range (and
-  scale axes / fit the map to that part). Name it exactly `CLIP_TO_RANGE` — the test runner
-  recognises it and runs the widget in both modes.
+- Whole-flight / history widgets (profiles, tracks, scrolling graphs): a `bool` named exactly
+  `Clip to range` (key `clip_to_range`, default `false`) — when on and `ctx.exportRange` is
+  set, show only data inside the export range (and scale axes / fit the map to that part). The
+  test runner recognises the key and runs the widget in both modes.
 
 ## Sizing, smoothing, caching (include in every widget)
 
@@ -148,7 +197,7 @@ block, keep the rest readable too. Modern syntax compiles but don't use backtick
   **smoothed** curve, not the raw sample. For headings/angles use the circular mean snippet
   (the 359→0 wrap breaks plain averaging).
 - **Cache in `ctx.state`, keyed by everything the cache depends on.** `ctx.state` survives code
-  edits, so a cache checked only against the column ignores settings changes until restart:
+  and settings edits, so a cache checked only against the column ignores settings changes until restart:
 
   ```js
   var s = ctx.state, key = col + '|' + MAX_POINTS + '|' + SMOOTH_MS + '|' + ctx.dataVersion;
@@ -165,31 +214,58 @@ block, keep the rest readable too. Modern syntax compiles but don't use backtick
 ## Reference template — a complete, correct widget
 
 Use this as the skeleton for any "value + label" widget; it demonstrates every convention
-(SETTINGS, scale, guards, panel, hierarchy, shadows, CSS hooks):
+(settings definition + SETTINGS block, scale, guards, panel, hierarchy, shadows):
+
+Settings definition:
+
+```json
+[
+  { "group": { "name": "Value", "items": [
+    { "name": "Label", "type": "text", "default": "SPEED", "description": "small caption above the value ('' = none)" },
+    { "name": "Unit", "type": "text", "default": "km/h", "description": "unit text after the value" },
+    { "name": "Multiplier", "type": "number", "default": 3.6, "step": 0.1, "description": "value * multiplier (m/s -> km/h = 3.6; 1 = as is)" },
+    { "name": "Digits", "type": "int", "default": 0, "min": 0, "max": 6, "description": "decimal places" },
+    { "name": "Show max", "type": "bool", "default": false, "description": "show whole-flight maximum under the value" }
+  ] } },
+  { "group": { "name": "Text", "items": [
+    { "name": "Color", "type": "color_picker", "default": "#ffffff", "description": "value color" },
+    { "name": "Label color", "type": "color_picker", "default": "rgba(255,255,255,.75)" },
+    { "name": "Font", "type": "text", "default": "Arial, sans-serif", "description": "font family" },
+    { "name": "Size", "type": "int", "default": 64, "min": 8, "description": "value font size at the default 320x110 size; scales with the widget" },
+    { "name": "Shadow", "type": "text", "default": "0 0 8px rgba(0,0,0,.9)", "description": "CSS text shadow ('' = none)" },
+    { "name": "Align", "type": "select", "values": ["left", "center", "right"], "default": "left" }
+  ] } },
+  { "group": { "name": "Box", "items": [
+    { "name": "Background", "type": "color_picker", "default": "rgba(0,0,0,0)", "description": "box background; alpha 0 = no box" },
+    { "name": "Radius", "type": "int", "default": 8, "min": 0, "description": "corner radius at the default size; scales with the widget" }
+  ] } }
+]
+```
+
+Code:
 
 ```js
-function (values, time, ctx) {
+function (settings, time, ctx) {
   // ---------- SETTINGS ----------
-  var LABEL      = 'SPEED';      // small caption above the value ('' = none)
-  var UNIT       = 'km/h';       // unit text after the value
-  var MULTIPLIER = 3.6;          // value * MULTIPLIER (m/s -> km/h = 3.6; 1 = as is)
-  var DIGITS     = 0;            // decimal places
-  var COLOR      = '#ffffff';    // value color
-  var LABEL_COLOR= 'rgba(255,255,255,.75)';
-  var FONT       = 'Arial, sans-serif';
-  var SIZE       = 64;           // value font size at the default 320x110 size; scales with the widget
-  var SHADOW     = '0 0 8px rgba(0,0,0,.9)';  // text shadow ('' = none)
-  var BG         = 'transparent';// box background, e.g. 'rgba(0,0,0,.4)'
-  var RADIUS     = 8;            // corner radius at the default size; scales with the widget
-  var ALIGN      = 'left';       // 'left' | 'center' | 'right'
-  var SHOW_MAX   = false;        // show whole-flight maximum under the value
+  var LABEL       = settings.label.value;        // small caption above the value ('' = none)
+  var UNIT        = settings.unit.value;         // unit text after the value
+  var MULTIPLIER  = settings.multiplier.value;   // value * multiplier (m/s -> km/h = 3.6; 1 = as is)
+  var DIGITS      = settings.digits.value;       // decimal places
+  var SHOW_MAX    = settings.show_max.value;     // show whole-flight maximum under the value
+  var COLOR       = settings.color.value;        // value color
+  var LABEL_COLOR = settings.label_color.value;
+  var FONT        = settings.font.value;         // font family
+  var SIZE        = settings.size.value;         // value font size at the default 320x110 size; scales with the widget
+  var SHADOW      = settings.shadow.value;       // CSS text shadow ('' = none)
+  var ALIGN       = settings.align.value;        // 'left' | 'center' | 'right'
+  var BG          = settings.background.value;   // box background; alpha 0 = no box
+  var RADIUS      = settings.radius.value;       // corner radius at the default size; scales with the widget
   // -------------------------------
   var scale = Math.min(ctx.width / 320, ctx.height / 110);
   var fs = SIZE * scale;
-  var v = values[0];
+  var v = ctx.values[0];
   var txt = (typeof v === 'number') ? (v * MULTIPLIER).toFixed(DIGITS) : '--';
   var st = SHOW_MAX ? ctx.stats(ctx.columns[0]) : null;
-  // CSS hooks: #bignum (box), .label, .value, .unit, .max
   return '<div id="bignum" class="box" style="width:100%;height:100%;box-sizing:border-box;padding:'
     + (4 * scale).toFixed(1) + 'px ' + (10 * scale).toFixed(1) + 'px;background:' + BG
     + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px;font-family:' + FONT + ';color:' + COLOR
@@ -204,8 +280,8 @@ function (values, time, ctx) {
 }
 ```
 
-The built-in examples (Library tab / `src/examples.js`) cover more shapes if the user asks to
-mimic one: bar gauge (gradient fill, `GRADIENT_SPAN`), line graph (scrolling window),
+The built-in examples (Library tab / `src/examples.js`, each with its `settings` definition)
+cover more shapes if the user asks to mimic one: bar gauge (gradient fill, `GRADIENT_SPAN`), line graph (scrolling window),
 flight graph & altitude profile (whole flight + current-time marker), RC sticks (two SVG boxes
 + trail), GPS map (Web-Mercator tiles via `ctx.image`), compass (tape/rose).
 
@@ -373,23 +449,29 @@ Columns field with autocomplete.
 
 ## Where to put the widget
 
-- **One-off for the user:** give them the code block to paste into *Edit code*, or write an
+- **One-off for the user:** give them two blocks — the code (paste into *Edit code* → **Code**
+  tab) and the settings definition (paste into the **Settings definition** tab) — or write an
   importable JSON file (Library → Import…):
-  `{"app":"telemetry-overlay","type":"widgets","version":1,"widgets":[{name, columns, w, h, opacity, code}]}`
+  `{"app":"telemetry-overlay","type":"widgets","version":1,"widgets":[{name, columns, w, h, settings, code}]}`
+  where `settings` is the definition **as a JSON string** (`JSON.stringify` of the array).
 - **Built-in example:** add an entry to `EXAMPLE_WIDGETS` in `src/examples.js` (name prefixed
-  `Example: `) **and bump `EXAMPLES_VERSION`** — the library refreshes example entries on next
-  start. Widgets already placed on a video are independent copies and are not updated.
+  `Example: `, `settings: defs([...])` with the array literal — `defs` serialises it). Examples
+  are read straight from that file; widgets already placed on a video are independent copies and
+  are not updated.
 
 ## Verify before handing over (always)
 
-Run the smoke test in this skill folder — it executes widgets in Node with synthetic telemetry
-and a fake `ctx`, at several times **including out-of-range** and at two widget sizes, and fails
-on exceptions, non-string/empty output, or http URLs in the output:
+Run the smoke test in this skill folder — it executes widgets in Node with synthetic telemetry,
+a fake `ctx` and the `settings` built from the definition defaults (plus `clip_to_range` on),
+at several times **including out-of-range** and at two widget sizes, and fails on exceptions,
+non-string/empty output, http URLs in the output, a definition that does not parse, or a
+`settings.<key>` in the code that the definition lacks:
 
 ```
 node .claude/skills/widget/test-widgets.mjs                                # all src/examples.js entries
 node .claude/skills/widget/test-widgets.mjs my.json                        # widgets from an export/import JSON
-node .claude/skills/widget/test-widgets.mjs my.js --columns "BaroAlt (m)"  # one bare function in a .js file
+node .claude/skills/widget/test-widgets.mjs my.js --columns "BaroAlt (m)" --settings my.settings.json
+                                                                           # one bare function + its definition
 ```
 
 The test cannot judge looks — after it passes, mentally check the output HTML for: text shadow

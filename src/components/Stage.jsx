@@ -98,7 +98,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, s
   }, []);
 
   const env = useMemo(() => ({ range, duration: video ? video.duration : 0 }), [range, video]);
-  const rendered = useMemo(() => widgets.map((w) => ({ w, out: renderWidget(w, store, time, sync, 'shadow', env) })), [widgets, store, time, sync, storeVersion, assetVersion, env]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rendered = useMemo(() => widgets.map((w) => ({ w, out: renderWidget(w, store, time, sync, env) })), [widgets, store, time, sync, storeVersion, assetVersion, env]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- drag / resize ----
   const dragRef = useRef(null);

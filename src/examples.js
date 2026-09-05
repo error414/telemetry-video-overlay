@@ -1,6 +1,8 @@
 // Example widgets shown read-only in the Library tab (Examples section). Every example starts
-// with a SETTINGS block – change values there (colors, sizes, units, arrow style…) after adding
-// one to the video. They are read straight from this file, so they are always current.
+// with a SETTINGS block whose values come from the widget's settings (the `settings` definition
+// below, editable in the editor's "Settings definition" tab; the app renders a form from it).
+// They are read straight from this file, so they are always current.
+import { defsToSource as defs } from './widgetSettings.js';
 
 export const EXAMPLE_WIDGETS = [
   {
@@ -8,27 +10,48 @@ export const EXAMPLE_WIDGETS = [
     columns: 'GPS_speed (m/s)',
     w: 320,
     h: 110,
-    opacity: 1,
-    code: `function (values, time, ctx) {
+    settings: defs([
+      { group: { name: 'Value', items: [
+        { name: 'Label', type: 'text', default: 'SPEED', description: "small caption above the value ('' = none)" },
+        { name: 'Unit', type: 'text', default: 'km/h', description: 'unit text after the value' },
+        { name: 'Multiplier', type: 'number', default: 3.6, step: 0.1, description: 'value * MULTIPLIER (m/s -> km/h = 3.6; 1 = as is)' },
+        { name: 'Digits', type: 'int', default: 0, min: 0, max: 6, description: 'decimal places' },
+        { name: 'Show max', type: 'bool', default: false, description: 'show whole-flight maximum under the value' },
+        { name: 'Smoothing ms', type: 'int', default: 300, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
+      ] } },
+      { group: { name: 'Text', items: [
+        { name: 'Color', type: 'color_picker', default: '#ffffff', description: 'text color' },
+        { name: 'Label color', type: 'color_picker', default: 'rgba(255,255,255,.75)' },
+        { name: 'Font', type: 'text', default: 'Arial, sans-serif', description: 'font family' },
+        { name: 'Size', type: 'int', default: 64, min: 8, description: 'value font size at the default 320x110 size; scales with the widget' },
+        { name: 'Shadow', type: 'text', default: '0 0 8px rgba(0,0,0,.9)', description: "CSS text shadow ('' = none)" },
+        { name: 'Align', type: 'select', default: 'left', values: ['left', 'center', 'right'], description: "'left' | 'center' | 'right'" },
+      ] } },
+      { group: { name: 'Box', items: [
+        { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.25)', description: 'box background; alpha 0 = no box' },
+        { name: 'Radius', type: 'int', default: 8, min: 0, description: 'box corner radius at the default size; scales with the widget' },
+      ] } },
+    ]),
+    code: `function (settings, time, ctx) {
   // ---------- SETTINGS ----------
-  var LABEL      = 'SPEED';      // small caption above the value ('' = none)
-  var UNIT       = 'km/h';       // unit text after the value
-  var MULTIPLIER = 3.6;          // value * MULTIPLIER (m/s -> km/h = 3.6; 1 = as is)
-  var DIGITS     = 0;            // decimal places
-  var COLOR      = '#ffffff';    // text color
-  var LABEL_COLOR= 'rgba(255,255,255,.75)';
-  var FONT       = 'Arial, sans-serif';
-  var SIZE       = 64;           // value font size at the default 320x110 size; scales with the widget
-  var SHADOW     = '0 0 8px rgba(0,0,0,.9)';  // text shadow ('' = none)
-  var BG         = 'rgba(0,0,0,.25)';  // box background color + transparency (last number: 0 = invisible, 1 = solid; 'transparent' = none)
-  var RADIUS     = 8;            // box corner radius at the default size; scales with the widget
-  var ALIGN      = 'left';       // 'left' | 'center' | 'right'
-  var SHOW_MAX   = false;        // show whole-flight maximum under the value
-  var SMOOTH_MS  = 300;          // moving-average window (ms) that filters out quick small jumps of the value (0 = off)
+  var LABEL       = settings.label.value;        // small caption above the value ('' = none)
+  var UNIT        = settings.unit.value;         // unit text after the value
+  var MULTIPLIER  = settings.multiplier.value;   // value * MULTIPLIER (m/s -> km/h = 3.6; 1 = as is)
+  var DIGITS      = settings.digits.value;       // decimal places
+  var COLOR       = settings.color.value;        // text color
+  var LABEL_COLOR = settings.label_color.value;
+  var FONT        = settings.font.value;
+  var SIZE        = settings.size.value;         // value font size at the default 320x110 size; scales with the widget
+  var SHADOW      = settings.shadow.value;       // text shadow ('' = none)
+  var BG          = settings.background.value;   // box background color + transparency (last number: 0 = invisible, 1 = solid; 'transparent' = none)
+  var RADIUS      = settings.radius.value;       // box corner radius at the default size; scales with the widget
+  var ALIGN       = settings.align.value;        // 'left' | 'center' | 'right'
+  var SHOW_MAX    = settings.show_max.value;     // show whole-flight maximum under the value
+  var SMOOTH_MS   = settings.smoothing_ms.value; // moving-average window (ms) that filters out quick small jumps of the value (0 = off)
   // -------------------------------
   var scale = Math.min(ctx.width / 320, ctx.height / 110);  // all sizes scale with the widget (settings are for the default 320x110)
   var fs = SIZE * scale, radius = RADIUS * scale;
-  var v = values[0];
+  var v = ctx.values[0];
   if (SMOOTH_MS > 0 && typeof v === 'number') {
     // centered moving average: quick small spikes disappear without visible lag
     var pts = ctx.range(ctx.columns[0], time - SMOOTH_MS / 2, time + SMOOTH_MS / 2, 50), sum = 0, n = 0, i;
@@ -37,7 +60,6 @@ export const EXAMPLE_WIDGETS = [
   }
   var txt = (typeof v === 'number') ? (v * MULTIPLIER).toFixed(DIGITS) : '--';
   var st = SHOW_MAX ? ctx.stats(ctx.columns[0]) : null;
-  // CSS hooks: #bignum (box), .label, .value, .unit, .max
   return '<div id="bignum" class="box" style="width:100%;height:100%;box-sizing:border-box;padding:' + (4 * scale).toFixed(1) + 'px ' + (10 * scale).toFixed(1) + 'px;background:' + BG
     + ';border-radius:' + radius.toFixed(1) + 'px;font-family:' + FONT + ';color:' + COLOR + ';text-shadow:' + SHADOW + ';text-align:' + ALIGN + '">'
     + (LABEL ? '<div class="label" style="font-size:' + (fs * 0.28).toFixed(1) + 'px;color:' + LABEL_COLOR + ';letter-spacing:' + (2 * scale).toFixed(1) + 'px">' + LABEL + '</div>' : '')
@@ -52,33 +74,60 @@ export const EXAMPLE_WIDGETS = [
     columns: 'rcCommand[3]',
     w: 300,
     h: 40,
-    opacity: 0.9,
-    code: `function (values, time, ctx) {
+    settings: defs([
+      { group: { name: 'Range', items: [
+        { name: 'Auto range', type: 'bool', default: false, description: '0 % / 100 % = whole-flight minimum / maximum instead of Min / Max' },
+        { name: 'Min', type: 'int', default: 1000, description: 'value that maps to 0 %' },
+        { name: 'Max', type: 'int', default: 2000, description: 'value that maps to 100 %' },
+        { name: 'Show value', type: 'select', default: 'percent', values: ['percent', 'raw', 'none'], description: 'text after the label' },
+        { name: 'Digits', type: 'int', default: 0, min: 0, max: 6 },
+        { name: 'Smoothing ms', type: 'int', default: 300, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
+      ] } },
+      { group: { name: 'Bar', items: [
+        { name: 'Bar color', type: 'text', default: 'linear-gradient(90deg,#3f3,#ff3,#f33)', description: 'CSS color or gradient of the fill (for vertical direction use 0deg)' },
+        { name: 'Gradient span', type: 'select', default: 'gauge', values: { gauge: 'gauge (the fill reveals the gradient)', fill: 'fill (gradient squeezed into the filled part)' }, description: "'gauge' = gradient spans the whole gauge and the fill just reveals it; 'fill' = gradient squeezes into the filled part" },
+        { name: 'Direction', type: 'select', default: 'horizontal', values: ['horizontal', 'vertical'], description: "'horizontal' | 'vertical'" },
+      ] } },
+      { group: { name: 'Text', items: [
+        { name: 'Label', type: 'text', default: 'THR', description: "label text ('' = none)" },
+        { name: 'Text color', type: 'color_picker', default: '#fff' },
+        { name: 'Font', type: 'text', default: 'Arial', description: 'font family' },
+        { name: 'Font size', type: 'int', default: 18, min: 6, description: 'text size at the default 300x40 size; scales with the widget' },
+        { name: 'Font bold', type: 'bool', default: true },
+      ] } },
+      { group: { name: 'Box', items: [
+        { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.5)' },
+        { name: 'Border color', type: 'color_picker', default: '#fff' },
+        { name: 'Border width', type: 'int', default: 2, min: 0, description: 'at the default 300x40 size; scales with the widget' },
+        { name: 'Radius', type: 'int', default: 6, min: 0, description: 'corner radius at the default size; scales with the widget' },
+      ] } },
+    ]),
+    code: `function (settings, time, ctx) {
   // ---------- SETTINGS ----------
-  var LABEL      = 'THR';        // label text ('' = none)
-  var MIN        = 1000;         // value that maps to 0 %   (null = whole-flight minimum)
-  var MAX        = 2000;         // value that maps to 100 % (null = whole-flight maximum)
-  var SHOW_VALUE = 'percent';    // 'percent' | 'raw' | 'none'
-  var DIGITS     = 0;
-  var SMOOTH_MS  = 300;          // moving-average window (ms) that filters out quick small spikes (0 = off)
-  var BAR_COLOR  = 'linear-gradient(90deg,#3f3,#ff3,#f33)'; // css color or gradient (for vertical direction use 0deg)
-  var GRADIENT_SPAN = 'gauge';   // 'gauge' = gradient spans the whole gauge and the fill just reveals it; 'fill' = gradient squeezes into the filled part
-  var BG         = 'rgba(0,0,0,.5)';
-  var BORDER_COLOR = '#fff';
-  var BORDER_WIDTH = 2;          // at the default 300x40 size; scales with the widget
-  var RADIUS     = 6;            // corner radius at the default size; scales with the widget
-  var TEXT_COLOR = '#fff';
-  var FONT       = 'Arial';      // font family
-  var FONT_SIZE  = 18;           // text size at the default 300x40 size; scales with the widget
-  var FONT_BOLD  = true;
-  var DIRECTION  = 'horizontal'; // 'horizontal' | 'vertical'
+  var LABEL         = settings.label.value;                                  // label text ('' = none)
+  var MIN           = settings.auto_range.value ? null : settings.min.value; // value that maps to 0 %   (null = whole-flight minimum)
+  var MAX           = settings.auto_range.value ? null : settings.max.value; // value that maps to 100 % (null = whole-flight maximum)
+  var SHOW_VALUE    = settings.show_value.value;                             // 'percent' | 'raw' | 'none'
+  var DIGITS        = settings.digits.value;
+  var SMOOTH_MS     = settings.smoothing_ms.value;                           // moving-average window (ms) that filters out quick small spikes (0 = off)
+  var BAR_COLOR     = settings.bar_color.value;                              // css color or gradient (for vertical direction use 0deg)
+  var GRADIENT_SPAN = settings.gradient_span.value;                          // 'gauge' = gradient spans the whole gauge and the fill just reveals it; 'fill' = gradient squeezes into the filled part
+  var BG            = settings.background.value;
+  var BORDER_COLOR  = settings.border_color.value;
+  var BORDER_WIDTH  = settings.border_width.value;                           // at the default 300x40 size; scales with the widget
+  var RADIUS        = settings.radius.value;                                 // corner radius at the default size; scales with the widget
+  var TEXT_COLOR    = settings.text_color.value;
+  var FONT          = settings.font.value;                                   // font family
+  var FONT_SIZE     = settings.font_size.value;                              // text size at the default 300x40 size; scales with the widget
+  var FONT_BOLD     = settings.font_bold.value;
+  var DIRECTION     = settings.direction.value;                              // 'horizontal' | 'vertical'
   // -------------------------------
   var scale = Math.min(ctx.width, ctx.height) / 40;  // sizes scale with the bar thickness (settings are for the default 300x40)
   var st = (MIN === null || MAX === null) ? ctx.stats(ctx.columns[0]) : null;
   if (MIN === null) MIN = st ? st.min : 0;
   if (MAX === null) MAX = st ? st.max : 1;
   if (MAX === MIN) MAX = MIN + 1;
-  var v = values[0];
+  var v = ctx.values[0];
   if (SMOOTH_MS > 0 && typeof v === 'number') {
     // centered moving average: quick small spikes disappear without visible lag
     var pts = ctx.range(ctx.columns[0], time - SMOOTH_MS / 2, time + SMOOTH_MS / 2, 50), sum = 0, n = 0, i;
@@ -97,7 +146,6 @@ export const EXAMPLE_WIDGETS = [
       ? ';background-size:100% ' + (100 / p).toFixed(2) + '%;background-position:left bottom'
       : ';background-size:' + (100 / p).toFixed(2) + '% 100%;background-position:left top';
   }
-  // CSS hooks: #gauge (box), .fill, .text
   return '<div id="gauge" class="box" style="position:relative;width:100%;height:100%;box-sizing:border-box;background:' + BG + ';border:' + (BORDER_WIDTH * scale).toFixed(1) + 'px solid ' + BORDER_COLOR + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px;overflow:hidden">'
     + '<div class="fill" style="' + fill + '"></div>'
     + '<div class="text" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:' + TEXT_COLOR + ';font:' + (FONT_BOLD ? 'bold ' : '') + (FONT_SIZE * scale).toFixed(1) + 'px ' + FONT + ';text-shadow:0 0 4px #000">' + text + '</div>'
@@ -109,29 +157,55 @@ export const EXAMPLE_WIDGETS = [
     columns: 'BaroAlt (m)',
     w: 400,
     h: 150,
-    opacity: 0.9,
-    code: `function (values, time, ctx) {
+    settings: defs([
+      { group: { name: 'Data', items: [
+        { name: 'Window ms', type: 'int', default: 20000, min: 500, description: 'how much history to show (ms)' },
+        { name: 'Clip to range', type: 'bool', default: false, description: 'draw nothing outside the export range (sync bar in/out points)' },
+        { name: 'Smoothing ms', type: 'int', default: 300, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
+        { name: 'Label', type: 'text', default: 'ALT', description: "label ('' = column name)" },
+        { name: 'Multiplier', type: 'number', default: 1, step: 0.1, description: 'value scaling (cm -> m = 0.01)' },
+        { name: 'Digits', type: 'int', default: 1, min: 0, max: 6 },
+        { name: 'Unit', type: 'text', default: 'm' },
+      ] } },
+      { group: { name: 'Axis', items: [
+        { name: 'Scale', type: 'select', default: 'flight', values: { flight: 'flight (fixed axis from whole-flight min/max)', window: 'window (autoscale to the visible history)', fixed: 'fixed (Min / Max)' }, description: 'vertical axis scaling' },
+        { name: 'Min', type: 'int', default: 0, description: "axis minimum when Scale = 'fixed'" },
+        { name: 'Max', type: 'int', default: 100, description: "axis maximum when Scale = 'fixed'" },
+        { name: 'Show grid', type: 'bool', default: true },
+      ] } },
+      { group: { name: 'Line', items: [
+        { name: 'Line color', type: 'color_picker', default: '#00ff00', description: 'line color below the first threshold (thresholds are set in the code)' },
+        { name: 'Line width', type: 'number', default: 2, min: 0, step: 0.5, description: 'at the default 400x150 size; scales with the widget' },
+        { name: 'Fill alpha', type: 'number', default: 0.15, min: 0, max: 1, step: 0.05, description: 'opacity of the area under the line (0 = no area)' },
+      ] } },
+      { group: { name: 'Text & box', items: [
+        { name: 'Text color', type: 'color_picker', default: '#fff' },
+        { name: 'Font size', type: 'int', default: 14, min: 6, description: 'text size at the default 400x150 size; scales with the widget' },
+        { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.4)' },
+        { name: 'Radius', type: 'int', default: 8, min: 0, description: 'corner radius at the default size; scales with the widget' },
+      ] } },
+    ]),
+    code: `function (settings, time, ctx) {
   // ---------- SETTINGS ----------
-  var WINDOW_MS  = 20000;        // how much history to show (ms)
-  var CLIP_TO_RANGE = false;     // true = draw nothing outside the export range (sync bar in/out points)
-  var SMOOTH_MS  = 300;          // moving-average window (ms) smoothing the line and the value (0 = off)
-  var LABEL      = 'ALT';        // label ('' = column name)
-  var MULTIPLIER = 1;            // value scaling (cm -> m = 0.01)
-  var DIGITS     = 1;
-  var UNIT       = 'm';
-  var LINE_COLOR = '#00ff00';    // line color below the first threshold
-  var LINE_WIDTH = 2;            // at the default 400x150 size; scales with the widget
+  var WINDOW_MS     = settings.window_ms.value;     // how much history to show (ms)
+  var CLIP_TO_RANGE = settings.clip_to_range.value; // true = draw nothing outside the export range (sync bar in/out points)
+  var SMOOTH_MS     = settings.smoothing_ms.value;  // moving-average window (ms) smoothing the line and the value (0 = off)
+  var LABEL         = settings.label.value;         // label ('' = column name)
+  var MULTIPLIER    = settings.multiplier.value;    // value scaling (cm -> m = 0.01)
+  var DIGITS        = settings.digits.value;
+  var UNIT          = settings.unit.value;
+  var LINE_COLOR    = settings.line_color.value;    // line color below the first threshold
+  var LINE_WIDTH    = settings.line_width.value;    // at the default 400x150 size; scales with the widget
   var THRESHOLDS = [[100, '#4da6ff'], [200, '#ff4040']]; // [value, color] pairs (in display units, after MULTIPLIER), ascending; colors the line and the value; [] = off
-  var FILL_ALPHA = 0.15;         // opacity of the area under the line (the area follows the line color; 0 = no area)
-  var BG         = 'rgba(0,0,0,.4)';
-  var RADIUS     = 8;            // corner radius at the default size; scales with the widget
-  var TEXT_COLOR = '#fff';
-  var FONT_SIZE  = 14;           // text size at the default 400x150 size; scales with the widget
-  var SCALE      = 'flight';     // 'flight' = fixed axis from whole-flight min/max (no jumping),
-                                 // 'window' = autoscale to visible history, 'fixed' = use MIN/MAX
-  var MIN        = 0;            // used when SCALE = 'fixed'
-  var MAX        = 100;
-  var SHOW_GRID  = true;
+  var FILL_ALPHA    = settings.fill_alpha.value;    // opacity of the area under the line (the area follows the line color; 0 = no area)
+  var BG            = settings.background.value;
+  var RADIUS        = settings.radius.value;        // corner radius at the default size; scales with the widget
+  var TEXT_COLOR    = settings.text_color.value;
+  var FONT_SIZE     = settings.font_size.value;     // text size at the default 400x150 size; scales with the widget
+  var SCALE         = settings.scale.value;         // 'flight' = fixed axis from whole-flight min/max (no jumping),
+  var MIN           = settings.min.value;           // used when SCALE = 'fixed'
+  var MAX           = settings.max.value;
+  var SHOW_GRID     = settings.show_grid.value;
   // -------------------------------
   var scale = Math.min(ctx.width / 400, ctx.height / 150);  // sizes scale with the widget (settings are for the default 400x150)
   var fsz = FONT_SIZE * scale, lw = LINE_WIDTH * scale;
@@ -151,7 +225,7 @@ export const EXAMPLE_WIDGETS = [
     pts = ctx.range(ctx.columns[0], time - WINDOW_MS, time, 300);
     // range ends at the last sample <= time; add the interpolated current value so the
     // right end reaches the window edge instead of jumping when a new sample arrives
-    if (typeof values[0] === 'number' && (!pts.length || pts[pts.length - 1].t < time)) pts.push({ t: time, v: values[0] });
+    if (typeof ctx.values[0] === 'number' && (!pts.length || pts[pts.length - 1].t < time)) pts.push({ t: time, v: ctx.values[0] });
   }
   // pts overhang the window (a sample before the start, the current value / smoothing tail
   // at the end); replace the overhang with points interpolated exactly at the window edges,
@@ -207,11 +281,10 @@ export const EXAMPLE_WIDGETS = [
     area += '<polygon class="area" points="' + s.p[0].split(',')[0] + ',' + H + ' ' + s.p.join(' ') + ' ' + s.p[s.p.length - 1].split(',')[0] + ',' + H + '" fill="' + s.c + '" fill-opacity="' + FILL_ALPHA + '"/>';
   });
   var line = segs.map(function (s) { return '<polyline class="line" points="' + s.p.join(' ') + '" fill="none" stroke="' + s.c + '" stroke-width="' + lw.toFixed(2) + '" stroke-linejoin="round"/>'; }).join('');
-  var v = values[0];
+  var v = ctx.values[0];
   if (SMOOTH_MS > 0 && typeof v === 'number' && typeof smoothedNow === 'number') v = smoothedNow;  // show the smoothed value too
   var vcol = (typeof v === 'number') ? colFor(v * MULTIPLIER) : TEXT_COLOR;
   var txt = (LABEL || ctx.columns[0]) + ': <tspan class="value" fill="' + vcol + '">' + (typeof v === 'number' ? (v * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT : '--') + '</tspan>';
-  // CSS hooks: #graph (svg), .grid, .area, .line, .label, .value
   return '<svg id="graph" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px">' + grid + area + line
     + '<text class="label" x="' + (8 * scale).toFixed(1) + '" y="' + (fsz + 4 * scale).toFixed(1) + '" fill="' + TEXT_COLOR + '" font-family="Arial" font-size="' + fsz.toFixed(1) + '" style="text-shadow:0 0 4px #000">' + txt + '</text></svg>';
 }`,
@@ -221,38 +294,77 @@ export const EXAMPLE_WIDGETS = [
     columns: 'GPS_speed (km/h)',
     w: 520,
     h: 160,
-    opacity: 0.95,
-    code: `function (values, time, ctx) {
+    settings: defs([
+      { group: { name: 'Data', items: [
+        { name: 'Unit', type: 'text', default: 'km/h' },
+        { name: 'Multiplier', type: 'number', default: 1, step: 0.1, description: 'value scaling (3.6 = m/s -> km/h, 0.01 = cm -> m)' },
+        { name: 'Digits', type: 'int', default: 1, min: 0, max: 6 },
+        { name: 'Max points', type: 'int', default: 600, min: 50, description: 'curve resolution' },
+        { name: 'Smoothing ms', type: 'int', default: 1000, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
+        { name: 'Clip to range', type: 'bool', default: false, description: 'show only the export range (sync bar in/out points) instead of the whole flight' },
+      ] } },
+      { group: { name: 'Axis', items: [
+        { name: 'Baseline', type: 'select', default: 'zero', values: { zero: 'zero (axis starts at 0)', min: 'min (axis starts at the flight minimum)' }, description: "'zero' = axis starts at 0, 'min' = at flight minimum" },
+        { name: 'Fixed axis', type: 'bool', default: false, description: 'use Min / Max for the axis instead of the flight' },
+        { name: 'Min', type: 'int', default: 0, description: 'axis minimum when Fixed axis is on' },
+        { name: 'Max', type: 'int', default: 100, description: 'axis maximum when Fixed axis is on' },
+        { name: 'Grid lines', type: 'int', default: 4, min: 0, max: 20, description: 'horizontal grid lines (0 = none)' },
+        { name: 'Grid color', type: 'color_picker', default: 'rgba(255,255,255,.6)' },
+        { name: 'Axis labels', type: 'bool', default: true, description: 'numbers on the left' },
+      ] } },
+      { group: { name: 'Curve', items: [
+        { name: 'Fill color', type: 'color_picker', default: 'rgba(80,160,255,.85)' },
+        { name: 'Line color', type: 'color_picker', default: 'rgba(255,255,255,.9)' },
+        { name: 'Line width', type: 'number', default: 1, min: 0, step: 0.5, description: 'at the default 520x160 size; scales with the widget (like all sizes below)' },
+      ] } },
+      { group: { name: 'Marker', items: [
+        { name: 'Marker color', type: 'color_picker', default: '#e03030', description: 'vertical bar at current time' },
+        { name: 'Marker width', type: 'int', default: 4, min: 0 },
+        { name: 'Dot', type: 'bool', default: true, description: 'dot on the curve at current time' },
+        { name: 'Dot color', type: 'color_picker', default: '#ffffff' },
+        { name: 'Dot size', type: 'int', default: 5, min: 0 },
+      ] } },
+      { group: { name: 'Text & box', items: [
+        { name: 'Title', type: 'text', default: 'Speed vs Time', description: "caption under the chart ('' = none)" },
+        { name: 'Text color', type: 'color_picker', default: '#ffffff' },
+        { name: 'Font', type: 'text', default: 'Arial' },
+        { name: 'Font size', type: 'int', default: 13, min: 6, description: 'axis / title text size' },
+        { name: 'Value size', type: 'int', default: 22, min: 6, description: 'current value label size' },
+        { name: 'Shadow', type: 'bool', default: true, description: 'text shadow for readability over video' },
+        { name: 'Background', type: 'color_picker', default: 'transparent', description: 'box background; alpha 0 = none' },
+      ] } },
+    ]),
+    code: `function (settings, time, ctx) {
   // Whole-flight area chart with a marker at the current time (like "Speed vs Time").
   // Use an altitude column for an altitude profile.
   // ---------- SETTINGS ----------
-  var TITLE       = 'Speed vs Time';  // caption under the chart ('' = none)
-  var UNIT        = 'km/h';
-  var MULTIPLIER  = 1;               // value scaling (3.6 = m/s -> km/h, 0.01 = cm -> m)
-  var DIGITS      = 1;
-  var FILL_COLOR  = 'rgba(80,160,255,.85)';
-  var LINE_COLOR  = 'rgba(255,255,255,.9)';
-  var LINE_WIDTH  = 1;               // at the default 520x160 size; scales with the widget (like all sizes below)
-  var MARKER_COLOR= '#e03030';       // vertical bar at current time
-  var MARKER_WIDTH= 4;
-  var DOT         = true;            // dot on the curve at current time
-  var DOT_COLOR   = '#ffffff';
-  var DOT_SIZE    = 5;
-  var TEXT_COLOR  = '#ffffff';
-  var FONT        = 'Arial';
-  var FONT_SIZE   = 13;              // axis / title text size
-  var VALUE_SIZE  = 22;              // current value label size
-  var GRID_LINES  = 4;               // horizontal grid lines (0 = none)
-  var GRID_COLOR  = 'rgba(255,255,255,.6)';
-  var AXIS_LABELS = true;            // numbers on the left
-  var BASELINE    = 'zero';          // 'zero' = axis starts at 0, 'min' = at flight minimum
-  var MIN         = null;            // fixed axis min/max (null = from the flight)
-  var MAX         = null;
-  var BG          = 'transparent';   // e.g. 'rgba(0,0,0,.35)'
-  var SHADOW      = true;            // text shadow for readability over video
-  var MAX_POINTS  = 600;             // curve resolution
-  var SMOOTH_MS   = 1000;            // moving-average window (ms) smoothing the curve and the value (0 = off)
-  var CLIP_TO_RANGE = false;         // true = the chart spans only the export range (sync bar in/out points) instead of the whole flight
+  var TITLE         = settings.title.value;                                  // caption under the chart ('' = none)
+  var UNIT          = settings.unit.value;
+  var MULTIPLIER    = settings.multiplier.value;                             // value scaling (3.6 = m/s -> km/h, 0.01 = cm -> m)
+  var DIGITS        = settings.digits.value;
+  var FILL_COLOR    = settings.fill_color.value;
+  var LINE_COLOR    = settings.line_color.value;
+  var LINE_WIDTH    = settings.line_width.value;                             // at the default 520x160 size; scales with the widget (like all sizes below)
+  var MARKER_COLOR  = settings.marker_color.value;                           // vertical bar at current time
+  var MARKER_WIDTH  = settings.marker_width.value;
+  var DOT           = settings.dot.value;                                    // dot on the curve at current time
+  var DOT_COLOR     = settings.dot_color.value;
+  var DOT_SIZE      = settings.dot_size.value;
+  var TEXT_COLOR    = settings.text_color.value;
+  var FONT          = settings.font.value;
+  var FONT_SIZE     = settings.font_size.value;                              // axis / title text size
+  var VALUE_SIZE    = settings.value_size.value;                             // current value label size
+  var GRID_LINES    = settings.grid_lines.value;                             // horizontal grid lines (0 = none)
+  var GRID_COLOR    = settings.grid_color.value;
+  var AXIS_LABELS   = settings.axis_labels.value;                            // numbers on the left
+  var BASELINE      = settings.baseline.value;                               // 'zero' = axis starts at 0, 'min' = at flight minimum
+  var MIN           = settings.fixed_axis.value ? settings.min.value : null; // fixed axis min/max (null = from the flight)
+  var MAX           = settings.fixed_axis.value ? settings.max.value : null;
+  var BG            = settings.background.value;                             // e.g. 'rgba(0,0,0,.35)'
+  var SHADOW        = settings.shadow.value;                                 // text shadow for readability over video
+  var MAX_POINTS    = settings.max_points.value;                             // curve resolution
+  var SMOOTH_MS     = settings.smoothing_ms.value;                           // moving-average window (ms) smoothing the curve and the value (0 = off)
+  var CLIP_TO_RANGE = settings.clip_to_range.value;                          // true = the chart spans only the export range (sync bar in/out points) instead of the whole flight
   // -------------------------------
   var col = ctx.columns[0], W = ctx.width, H = ctx.height, s = ctx.state;
   var scale = Math.min(W / 520, H / 160);  // sizes scale with the widget (settings are for the default 520x160)
@@ -308,7 +420,7 @@ export const EXAMPLE_WIDGETS = [
     if (AXIS_LABELS) svg += '<text class="axis" x="' + (left - 6 * scale).toFixed(1) + '" y="' + (y + fsz * 0.35).toFixed(1) + '" text-anchor="end" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + fsz.toFixed(1) + '" font-weight="bold" style="' + sh + '">' + val.toFixed(DIGITS) + '</text>';
   }
   svg += '<path class="area" d="' + area + '" fill="' + FILL_COLOR + '"/><path class="line" d="' + d + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="' + lw.toFixed(2) + '"/>';
-  var v = values[0], inRange = time >= t0 && time <= t1;
+  var v = ctx.values[0], inRange = time >= t0 && time <= t1;
   if (SMOOTH_MS > 0 && inRange && pts.length > 1) {
     // dot and value label follow the smoothed curve
     var a = 0, b = pts.length - 1, m;
@@ -325,7 +437,6 @@ export const EXAMPLE_WIDGETS = [
     svg += '<text class="value" x="' + lx.toFixed(1) + '" y="' + Math.max(top + vsz, my - 6 * scale).toFixed(1) + '" text-anchor="' + anchor + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + vsz.toFixed(1) + '" font-weight="bold" style="' + sh + '">' + label + '</text>';
   }
   if (TITLE) svg += '<text class="title" x="' + (left + cw / 2).toFixed(1) + '" y="' + (H - 4 * scale).toFixed(1) + '" text-anchor="middle" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + fsz.toFixed(1) + '" font-weight="bold" style="' + sh + '">' + TITLE + '</text>';
-  // CSS hooks: #flightgraph (svg), .grid, .axis, .area, .line, .marker, .dot, .value, .title
   return '<svg id="flightgraph" width="' + W + '" height="' + H + '" style="background:' + BG + '">' + svg + '</svg>';
 }`,
   },
@@ -334,29 +445,57 @@ export const EXAMPLE_WIDGETS = [
     columns: 'BaroAlt (m)',
     w: 520,
     h: 140,
-    opacity: 0.95,
-    code: `function (values, time, ctx) {
+    settings: defs([
+      { group: { name: 'Data', items: [
+        { name: 'Multiplier', type: 'number', default: 1, step: 0.1, description: 'value scaling (0.01 = cm -> m)' },
+        { name: 'Unit', type: 'text', default: 'm' },
+        { name: 'Digits', type: 'int', default: 0, min: 0, max: 6 },
+        { name: 'Max points', type: 'int', default: 600, min: 50 },
+        { name: 'Smoothing ms', type: 'int', default: 1000, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
+        { name: 'Clip to range', type: 'bool', default: false, description: 'show only the export range (sync bar in/out points) instead of the whole flight' },
+      ] } },
+      { group: { name: 'Profile', items: [
+        { name: 'Fill top', type: 'color_picker', default: 'rgba(120,200,120,.9)', description: 'gradient top color' },
+        { name: 'Fill bottom', type: 'color_picker', default: 'rgba(40,90,40,.6)', description: 'gradient bottom color' },
+        { name: 'Line color', type: 'color_picker', default: '#ffffff' },
+        { name: 'Line width', type: 'number', default: 1.5, min: 0, step: 0.5, description: 'at the default 520x140 size; scales with the widget (like all sizes below)' },
+      ] } },
+      { group: { name: 'Marker', items: [
+        { name: 'Dot color', type: 'color_picker', default: '#ff3030' },
+        { name: 'Dot size', type: 'int', default: 6, min: 0 },
+      ] } },
+      { group: { name: 'Text & box', items: [
+        { name: 'Label', type: 'text', default: 'ALT', description: "caption in the top-left corner ('' = none)" },
+        { name: 'Text color', type: 'color_picker', default: '#ffffff' },
+        { name: 'Font', type: 'text', default: 'Arial' },
+        { name: 'Font size', type: 'int', default: 14, min: 6 },
+        { name: 'Show minmax', type: 'bool', default: true, description: 'print flight min/max in the corner' },
+        { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.35)' },
+        { name: 'Radius', type: 'int', default: 8, min: 0 },
+      ] } },
+    ]),
+    code: `function (settings, time, ctx) {
   // Altitude over the whole flight with a dot moving along the profile.
   // ---------- SETTINGS ----------
-  var MULTIPLIER  = 1;               // value scaling (0.01 = cm -> m)
-  var UNIT        = 'm';
-  var DIGITS      = 0;
-  var LABEL       = 'ALT';           // caption in the top-left corner ('' = none)
-  var FILL_TOP    = 'rgba(120,200,120,.9)';   // gradient top color
-  var FILL_BOTTOM = 'rgba(40,90,40,.6)';      // gradient bottom color
-  var LINE_COLOR  = '#ffffff';
-  var LINE_WIDTH  = 1.5;             // at the default 520x140 size; scales with the widget (like all sizes below)
-  var DOT_COLOR   = '#ff3030';
-  var DOT_SIZE    = 6;
-  var TEXT_COLOR  = '#ffffff';
-  var FONT        = 'Arial';
-  var FONT_SIZE   = 14;
-  var SHOW_MINMAX = true;            // print flight min/max in the corner
-  var BG          = 'rgba(0,0,0,.35)';
-  var RADIUS      = 8;
-  var MAX_POINTS  = 600;
-  var SMOOTH_MS   = 1000;            // moving-average window (ms) smoothing the profile and the value (0 = off)
-  var CLIP_TO_RANGE = false;         // true = the profile spans only the export range (sync bar in/out points) instead of the whole flight
+  var MULTIPLIER    = settings.multiplier.value;    // value scaling (0.01 = cm -> m)
+  var UNIT          = settings.unit.value;
+  var DIGITS        = settings.digits.value;
+  var LABEL         = settings.label.value;         // caption in the top-left corner ('' = none)
+  var FILL_TOP      = settings.fill_top.value;      // gradient top color
+  var FILL_BOTTOM   = settings.fill_bottom.value;   // gradient bottom color
+  var LINE_COLOR    = settings.line_color.value;
+  var LINE_WIDTH    = settings.line_width.value;    // at the default 520x140 size; scales with the widget (like all sizes below)
+  var DOT_COLOR     = settings.dot_color.value;
+  var DOT_SIZE      = settings.dot_size.value;
+  var TEXT_COLOR    = settings.text_color.value;
+  var FONT          = settings.font.value;
+  var FONT_SIZE     = settings.font_size.value;
+  var SHOW_MINMAX   = settings.show_minmax.value;   // print flight min/max in the corner
+  var BG            = settings.background.value;
+  var RADIUS        = settings.radius.value;
+  var MAX_POINTS    = settings.max_points.value;
+  var SMOOTH_MS     = settings.smoothing_ms.value;  // moving-average window (ms) smoothing the profile and the value (0 = off)
+  var CLIP_TO_RANGE = settings.clip_to_range.value; // true = the profile spans only the export range (sync bar in/out points) instead of the whole flight
   // -------------------------------
   var col = ctx.columns[0], W = ctx.width, H = ctx.height, s = ctx.state;
   var scale = Math.min(W / 520, H / 140);  // sizes scale with the widget (settings are for the default 520x140)
@@ -403,7 +542,7 @@ export const EXAMPLE_WIDGETS = [
   var id = 'g' + Math.abs(W * 31 + H);
   var svg = '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + FILL_TOP + '"/><stop offset="1" stop-color="' + FILL_BOTTOM + '"/></linearGradient></defs>';
   svg += '<path class="area" d="' + area + '" fill="url(#' + id + ')"/><path class="line" d="' + d + '" fill="none" stroke="' + LINE_COLOR + '" stroke-width="' + (LINE_WIDTH * scale).toFixed(2) + '"/>';
-  var v = values[0], sh = 'text-shadow:0 0 3px #000;';
+  var v = ctx.values[0], sh = 'text-shadow:0 0 3px #000;';
   if (SMOOTH_MS > 0 && time >= t0 && time <= t1 && pts.length > 1) {
     // dot and value label follow the smoothed profile
     var a = 0, b = pts.length - 1, m;
@@ -419,7 +558,6 @@ export const EXAMPLE_WIDGETS = [
   }
   if (LABEL) svg += '<text class="label" x="' + pad.toFixed(1) + '" y="' + (fsz + 2 * scale).toFixed(1) + '" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + fsz.toFixed(1) + '" font-weight="bold" style="' + sh + '">' + LABEL + '</text>';
   if (SHOW_MINMAX) svg += '<text class="minmax" x="' + (W - pad).toFixed(1) + '" y="' + (fsz + 2 * scale).toFixed(1) + '" text-anchor="end" fill="' + TEXT_COLOR + '" font-family="' + FONT + '" font-size="' + fsz.toFixed(1) + '" style="' + sh + '">min ' + (min * MULTIPLIER).toFixed(DIGITS) + ' / max ' + (max * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</text>';
-  // CSS hooks: #profile (svg), .area, .line, .dot, .value, .label, .minmax
   return '<svg id="profile" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px">' + svg + '</svg>';
 }`,
   },
@@ -428,37 +566,68 @@ export const EXAMPLE_WIDGETS = [
     columns: 'rcCommand[0], rcCommand[1], rcCommand[2], rcCommand[3]',
     w: 260,
     h: 130,
-    opacity: 0.9,
-    code: `function (values, time, ctx) {
+    settings: defs([
+      { group: { name: 'Sticks', items: [
+        { name: 'Mode', type: 'select', default: 2, values: { '1': 'Mode 1 (left stick = pitch/yaw, right = throttle/roll)', '2': 'Mode 2 (left stick = throttle/yaw, right = pitch/roll)' }, description: 'transmitter mode' },
+        { name: 'Min', type: 'int', default: -500, description: 'stick range minimum for roll/pitch/yaw (INAV rcCommand is -500..500)' },
+        { name: 'Max', type: 'int', default: 500, description: 'stick range maximum for roll/pitch/yaw' },
+        { name: 'Center', type: 'int', default: 0, description: 'center value for roll/pitch/yaw' },
+        { name: 'Throttle min', type: 'int', default: 1000, description: 'throttle range minimum (1000..2000)' },
+        { name: 'Throttle max', type: 'int', default: 2000, description: 'throttle range maximum' },
+        { name: 'Invert pitch', type: 'bool', default: false, description: 'flip pitch direction if needed' },
+        { name: 'Invert roll', type: 'bool', default: false },
+        { name: 'Invert yaw', type: 'bool', default: false },
+      ] } },
+      { group: { name: 'Look', items: [
+        { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.45)' },
+        { name: 'Border', type: 'color_picker', default: 'rgba(255,255,255,.6)' },
+        { name: 'Grid', type: 'color_picker', default: 'rgba(255,255,255,.2)' },
+        { name: 'Stick color', type: 'color_picker', default: '#f2a93b' },
+        { name: 'Stick size', type: 'int', default: 9, min: 1, description: 'at the default 260x130 size; scales with the widget' },
+        { name: 'Radius', type: 'int', default: 8, min: 0, description: 'corner radius at the default size; scales with the widget' },
+        { name: 'Gap', type: 'int', default: 10, min: 0, description: 'gap between the two boxes at the default size; scales with the widget' },
+      ] } },
+      { group: { name: 'Trail', items: [
+        { name: 'Trail', type: 'bool', default: true, description: 'short trail of the stick movement' },
+        { name: 'Trail ms', type: 'int', default: 600, min: 0, description: 'trail length in ms' },
+        { name: 'Trail color', type: 'color_picker', default: 'rgba(242,169,59,.5)' },
+      ] } },
+      { group: { name: 'Labels', items: [
+        { name: 'Labels', type: 'bool', default: true, description: 'T/Y/P/R labels' },
+        { name: 'Label color', type: 'color_picker', default: 'rgba(255,255,255,.7)' },
+        { name: 'Label size', type: 'int', default: 10, min: 4, description: 'label font size at the default 260x130 size; scales with the widget' },
+        { name: 'Label font', type: 'text', default: 'Arial', description: 'label font family' },
+        { name: 'Label bold', type: 'bool', default: false },
+      ] } },
+    ]),
+    code: `function (settings, time, ctx) {
   // Transmitter sticks: columns = roll, pitch, yaw, throttle (INAV rcCommand[0..3]).
   // ---------- SETTINGS ----------
-  var MODE        = 2;               // 1 or 2 (Mode 2: left stick = throttle/yaw, right = pitch/roll)
-  var MIN         = -500;            // stick range for roll/pitch/yaw (INAV rcCommand is -500..500)
-  var MAX         = 500;
-  var CENTER      = 0;               // center value for roll/pitch/yaw
-  var THR_MIN     = 1000;            // throttle range (1000..2000)
-  var THR_MAX     = 2000;
-  var INVERT_PITCH= false;           // flip pitch direction if needed
-  var INVERT_ROLL = false;
-  var INVERT_YAW  = false;
-  var BG          = 'rgba(0,0,0,.45)';
-  var BORDER      = 'rgba(255,255,255,.6)';
-  var GRID        = 'rgba(255,255,255,.2)';
-  var STICK_COLOR = '#f2a93b';
-  var STICK_SIZE  = 9;               // at the default 260x130 size; scales with the widget
-  var TRAIL       = true;            // short trail of the stick movement
-  var TRAIL_MS    = 600;
-  var TRAIL_COLOR = 'rgba(242,169,59,.5)';
-  var LABELS      = true;            // T/Y/P/R labels
-  var LABEL_COLOR = 'rgba(255,255,255,.7)';
-  var LABEL_SIZE  = 10;              // label font size at the default 260x130 size; scales with the widget
-  var LABEL_FONT  = 'Arial';         // label font family
-  var LABEL_BOLD  = false;
-  var RADIUS      = 8;               // corner radius at the default size; scales with the widget
-  var GAP         = 10;              // gap between the two boxes at the default size; scales with the widget
+  var MODE         = settings.mode.value;         // 1 or 2 (Mode 2: left stick = throttle/yaw, right = pitch/roll)
+  var MIN          = settings.min.value;          // stick range for roll/pitch/yaw (INAV rcCommand is -500..500)
+  var MAX          = settings.max.value;
+  var CENTER       = settings.center.value;       // center value for roll/pitch/yaw
+  var THR_MIN      = settings.throttle_min.value; // throttle range (1000..2000)
+  var THR_MAX      = settings.throttle_max.value;
+  var INVERT_PITCH = settings.invert_pitch.value; // flip pitch direction if needed
+  var INVERT_ROLL  = settings.invert_roll.value;
+  var INVERT_YAW   = settings.invert_yaw.value;
+  var BG           = settings.background.value;
+  var BORDER       = settings.border.value;
+  var GRID         = settings.grid.value;
+  var STICK_COLOR  = settings.stick_color.value;
+  var STICK_SIZE   = settings.stick_size.value;   // at the default 260x130 size; scales with the widget
+  var TRAIL        = settings.trail.value;        // short trail of the stick movement
+  var TRAIL_MS     = settings.trail_ms.value;
+  var TRAIL_COLOR  = settings.trail_color.value;
+  var LABELS       = settings.labels.value;       // T/Y/P/R labels
+  var LABEL_COLOR  = settings.label_color.value;
+  var LABEL_SIZE   = settings.label_size.value;   // label font size at the default 260x130 size; scales with the widget
+  var LABEL_FONT   = settings.label_font.value;   // label font family
+  var LABEL_BOLD   = settings.label_bold.value;
+  var RADIUS       = settings.radius.value;       // corner radius at the default size; scales with the widget
+  var GAP          = settings.gap.value;          // gap between the two boxes at the default size; scales with the widget
   // -------------------------------
-  // Elements carry ids/classes so the widget's CSS tab can restyle them:
-  //   #box-left / #box-right (rect.box), .grid, .trail, .stick, .label
   var W = ctx.width, H = ctx.height;
   var scale = Math.min(H, W / 2) / 125;  // all sizes scale with the widget (settings are for the default 260x130)
   var gap = GAP * scale, stickR = STICK_SIZE * scale, labelSize = LABEL_SIZE * scale, radius = RADIUS * scale;
@@ -467,7 +636,7 @@ export const EXAMPLE_WIDGETS = [
   var size = Math.min(H, (W - gap) / 2), pad = stickR + 2 * scale;
   var x0 = (W - (2 * size + gap)) / 2, y0 = (H - size) / 2;
   function norm(v, lo, hi) { v = typeof v === 'number' ? v : (lo + hi) / 2; return Math.max(0, Math.min(1, (v - lo) / (hi - lo))); }
-  var roll = norm(values[0], MIN, MAX), pitch = norm(values[1], MIN, MAX), yaw = norm(values[2], MIN, MAX), thr = norm(values[3], THR_MIN, THR_MAX);
+  var roll = norm(ctx.values[0], MIN, MAX), pitch = norm(ctx.values[1], MIN, MAX), yaw = norm(ctx.values[2], MIN, MAX), thr = norm(ctx.values[3], THR_MIN, THR_MAX);
   if (INVERT_ROLL) roll = 1 - roll; if (INVERT_PITCH) pitch = 1 - pitch; if (INVERT_YAW) yaw = 1 - yaw;
   // Mode 2: left = (yaw, throttle), right = (roll, pitch). Mode 1 swaps throttle/pitch.
   var left  = MODE === 1 ? [yaw, pitch] : [yaw, thr];
@@ -504,33 +673,66 @@ export const EXAMPLE_WIDGETS = [
     columns: 'GPS_coord[0], GPS_coord[1], heading',
     w: 300,
     h: 300,
-    opacity: 0.9,
-    code: `function (values, time, ctx) {
+    settings: defs([
+      { group: { name: 'Map', items: [
+        { name: 'Map style', type: 'select', default: 'osm', values: { osm: 'OpenStreetMap', 'carto-dark': 'CARTO dark', 'carto-light': 'CARTO light', none: 'no map' }, description: 'tile provider (CARTO may show "API key required" tiles for some networks)' },
+        { name: 'Map opacity', type: 'number', default: 0.55, min: 0, max: 1, step: 0.05, description: 'map tile opacity – keep low to be unobtrusive' },
+        { name: 'Map grayscale', type: 'bool', default: true, description: 'desaturate the map' },
+        { name: 'Mode', type: 'select', default: 'follow', values: { fit: 'fit (whole flight fits the box)', follow: 'follow (follow the aircraft at Zoom)' }, description: "'fit' = whole flight fits the box, 'follow' = follow aircraft at ZOOM" },
+        { name: 'Zoom', type: 'int', default: 17, min: 1, max: 19, description: "zoom for 'follow' mode" },
+        { name: 'Rotate map', type: 'bool', default: false, description: "'follow' mode: rotate the map so heading points up" },
+        { name: 'Padding', type: 'int', default: 10, min: 0, description: "px kept free around the track in 'fit' mode" },
+        { name: 'Show attribution', type: 'bool', default: true, description: 'tile providers require attribution' },
+        { name: 'Clip to range', type: 'bool', default: false, description: 'show only the export range (sync bar in/out points) instead of the whole flight' },
+      ] } },
+      { group: { name: 'Track', items: [
+        { name: 'Track color', type: 'color_picker', default: 'rgba(255,255,255,.9)' },
+        { name: 'Track width', type: 'number', default: 2, min: 0, step: 0.5 },
+        { name: 'Trail color', type: 'color_picker', default: '#00ffff', description: "already-flown part of the track ('' = same as the track)" },
+        { name: 'Trail width', type: 'number', default: 3, min: 0, step: 0.5 },
+        { name: 'Smoothing ms', type: 'int', default: 500, min: 0, description: 'smoothing window in ms for position & heading (0 = off)' },
+      ] } },
+      { group: { name: 'Aircraft', items: [
+        { name: 'Arrow style', type: 'select', default: 'dot', values: ['arrow', 'plane', 'chevron', 'dot'], description: "'arrow' | 'plane' | 'chevron' | 'dot'" },
+        { name: 'Arrow size', type: 'int', default: 25, min: 2 },
+        { name: 'Arrow color', type: 'color_picker', default: '#ff3030' },
+        { name: 'Arrow stroke', type: 'color_picker', default: '#ffffff' },
+        { name: 'Heading unit', type: 'select', default: 'deg', values: ['deg', 'decideg', 'rad'], description: "unit of the heading column ('decideg' = value / 10, INAV attitude[2])" },
+        { name: 'Heading offset', type: 'int', default: -90, description: 'degrees added if the arrow points the wrong way' },
+      ] } },
+      { group: { name: 'Box', items: [
+        { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.45)' },
+        { name: 'Radius', type: 'int', default: 10, min: 0 },
+        { name: 'Border width', type: 'int', default: 1, min: 0 },
+        { name: 'Border color', type: 'color_picker', default: 'rgba(255,255,255,.4)' },
+      ] } },
+    ]),
+    code: `function (settings, time, ctx) {
   // ---------- SETTINGS ----------
   // columns: 0 = latitude, 1 = longitude, 2 = heading (optional)
-  var MAP_STYLE   = 'osm';          // 'osm' | 'carto-dark' | 'carto-light' | 'none'  (CARTO may show "API key required" tiles for some networks)
-  var MAP_OPACITY = 0.55;           // map tile opacity (0..1) – keep low to be unobtrusive
-  var MAP_GRAY    = true;           // desaturate the map
-  var MODE        = 'follow';       // 'fit' = whole flight fits the box, 'follow' = follow aircraft at ZOOM
-  var ZOOM        = 17;             // zoom for 'follow' mode (max 19)
-  var ROTATE_MAP  = false;          // 'follow' mode: rotate the map so heading points up
-  var SMOOTH_MS   = 500;            // smoothing window in ms for position & heading (0 = off)
-  var BG          = 'rgba(0,0,0,.45)';
-  var RADIUS      = 10;
-  var BORDER      = '1px solid rgba(255,255,255,.4)';
-  var PADDING     = 10;             // px kept free around the track in 'fit' mode
-  var TRACK_COLOR = 'rgba(255,255,255,.9)';
-  var TRACK_WIDTH = 2;
-  var TRAIL_COLOR = '#00ffff';      // already-flown part of the track ('' = same as TRACK_COLOR)
-  var TRAIL_WIDTH = 3;
-  var ARROW_STYLE = 'dot';          // 'arrow' | 'plane' | 'chevron' | 'dot'
-  var ARROW_SIZE  = 25;
-  var ARROW_COLOR = '#ff3030';
-  var ARROW_STROKE= '#ffffff';
-  var HEADING_UNIT= 'deg';          // 'deg' | 'decideg' (value/10) | 'rad'
-  var HEADING_OFFSET = -90;         // add degrees if the arrow points the wrong way
-  var SHOW_ATTRIBUTION = true;      // tile providers require attribution
-  var CLIP_TO_RANGE = false;        // true = only the part of the track inside the export range (sync bar in/out points) is drawn and fitted
+  var MAP_STYLE        = settings.map_style.value;                                                // 'osm' | 'carto-dark' | 'carto-light' | 'none'  (CARTO may show "API key required" tiles for some networks)
+  var MAP_OPACITY      = settings.map_opacity.value;                                              // map tile opacity (0..1) – keep low to be unobtrusive
+  var MAP_GRAY         = settings.map_grayscale.value;                                            // desaturate the map
+  var MODE             = settings.mode.value;                                                     // 'fit' = whole flight fits the box, 'follow' = follow aircraft at ZOOM
+  var ZOOM             = settings.zoom.value;                                                     // zoom for 'follow' mode (max 19)
+  var ROTATE_MAP       = settings.rotate_map.value;                                               // 'follow' mode: rotate the map so heading points up
+  var SMOOTH_MS        = settings.smoothing_ms.value;                                             // smoothing window in ms for position & heading (0 = off)
+  var BG               = settings.background.value;
+  var RADIUS           = settings.radius.value;
+  var BORDER           = settings.border_width.value + 'px solid ' + settings.border_color.value;
+  var PADDING          = settings.padding.value;                                                  // px kept free around the track in 'fit' mode
+  var TRACK_COLOR      = settings.track_color.value;
+  var TRACK_WIDTH      = settings.track_width.value;
+  var TRAIL_COLOR      = settings.trail_color.value;                                              // already-flown part of the track ('' = same as TRACK_COLOR)
+  var TRAIL_WIDTH      = settings.trail_width.value;
+  var ARROW_STYLE      = settings.arrow_style.value;                                              // 'arrow' | 'plane' | 'chevron' | 'dot'
+  var ARROW_SIZE       = settings.arrow_size.value;
+  var ARROW_COLOR      = settings.arrow_color.value;
+  var ARROW_STROKE     = settings.arrow_stroke.value;
+  var HEADING_UNIT     = settings.heading_unit.value;                                             // 'deg' | 'decideg' (value/10) | 'rad'
+  var HEADING_OFFSET   = settings.heading_offset.value;                                           // add degrees if the arrow points the wrong way
+  var SHOW_ATTRIBUTION = settings.show_attribution.value;                                         // tile providers require attribution
+  var CLIP_TO_RANGE    = settings.clip_to_range.value;                                            // true = only the part of the track inside the export range (sync bar in/out points) is drawn and fitted
   // -------------------------------
   var TILES = {
     'osm':         ['https://tile.openstreetmap.org/{z}/{x}/{y}.png', '© OpenStreetMap'],
@@ -570,7 +772,7 @@ export const EXAMPLE_WIDGETS = [
     }
   }
   if (!s.path.length) return '<div style="width:100%;height:100%;background:' + BG + ';border-radius:' + RADIUS + 'px;color:#fff;font:12px Arial;display:flex;align-items:center;justify-content:center">no GPS data' + (er ? ' in the export range' : '') + '</div>';
-  var lat0 = values[0], lon0 = values[1], hasPos = typeof lat0 === 'number' && typeof lon0 === 'number' && !(Math.abs(lat0) < 0.001 && Math.abs(lon0) < 0.001);
+  var lat0 = ctx.values[0], lon0 = ctx.values[1], hasPos = typeof lat0 === 'number' && typeof lon0 === 'number' && !(Math.abs(lat0) < 0.001 && Math.abs(lon0) < 0.001);
   function idxAt(t) { var a = 0, b = s.path.length - 1, m; while (a < b) { m = (a + b) >> 1; if (s.path[m].t < t) a = m + 1; else b = m; } return a; }
   function smoothPos(t, la0, lo0) { // triangular-weighted average of track samples around t (deterministic, so seeking/export stay consistent)
     var half = SMOOTH_MS, p = s.path, sum = 0, la = 0, lo = 0, i, w;
@@ -590,7 +792,7 @@ export const EXAMPLE_WIDGETS = [
   else { var a1 = px(s.maxLat, s.minLon, zoom), b1 = px(s.minLat, s.maxLon, zoom); c = [(a1[0] + b1[0]) / 2, (a1[1] + b1[1]) / 2]; }
   var ox = c[0] - W / 2, oy = c[1] - H / 2;
   // heading
-  var hd = values[2];
+  var hd = ctx.values[2];
   function toDeg(v) { return HEADING_UNIT === 'decideg' ? v / 10 : HEADING_UNIT === 'rad' ? v * 180 / Math.PI : v; }
   if (typeof hd === 'number') {
     hd = toDeg(hd);
@@ -655,7 +857,6 @@ export const EXAMPLE_WIDGETS = [
   }
   var attr = (SHOW_ATTRIBUTION && MAP_STYLE !== 'none' && TILES[MAP_STYLE]) ? '<div class="attribution" style="position:absolute;right:4px;bottom:2px;font:9px Arial;color:rgba(255,255,255,.7);text-shadow:0 0 2px #000">' + TILES[MAP_STYLE][1] + '</div>' : '';
   var tr = rot ? 'transform:rotate(' + rot + 'deg);transform-origin:' + (W / 2) + 'px ' + (H / 2) + 'px;' : '';
-  // CSS hooks: #map (box), .tiles, .tile, .status, svg.overlay, .track, .trail, .arrow, .attribution
   return '<div id="map" class="box" style="position:relative;width:100%;height:100%;overflow:hidden;box-sizing:border-box;background:' + BG + ';border-radius:' + RADIUS + 'px;border:' + BORDER + '">'
     + '<div class="tiles" style="position:absolute;inset:0;opacity:' + MAP_OPACITY + ';' + tr + '">' + tiles + '</div>'
     + '<svg class="overlay" width="' + W + '" height="' + H + '" style="position:absolute;left:0;top:0;' + tr + '">' + svg + '</svg>' + attr + '</div>';
@@ -666,20 +867,34 @@ export const EXAMPLE_WIDGETS = [
     columns: 'heading',
     w: 220,
     h: 60,
-    opacity: 0.9,
-    code: `function (values, time, ctx) {
+    settings: defs([
+      { group: { name: 'Heading', items: [
+        { name: 'Heading unit', type: 'select', default: 'deg', values: ['deg', 'decideg', 'rad'], description: "unit of the heading column ('decideg' = value / 10, INAV attitude[2])" },
+        { name: 'Heading offset', type: 'int', default: -90, description: 'degrees added if the compass points the wrong way' },
+        { name: 'Style', type: 'select', default: 'tape', values: { tape: 'tape (sliding ribbon)', rose: 'rose (rotating rose)' }, description: "'tape' (sliding ribbon) | 'rose' (rotating rose)" },
+        { name: 'Degrees per px', type: 'number', default: 1, min: 0.1, step: 0.1, description: 'tape: degrees per pixel at the default size (smaller = wider view)' },
+      ] } },
+      { group: { name: 'Look', items: [
+        { name: 'Color', type: 'color_picker', default: '#fff' },
+        { name: 'Accent', type: 'color_picker', default: '#ff3030', description: 'needle / center mark' },
+        { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.45)' },
+        { name: 'Radius', type: 'int', default: 8, min: 0, description: 'at the default 220x60 size; scales with the widget (like all sizes below)' },
+        { name: 'Font size', type: 'int', default: 14, min: 6 },
+      ] } },
+    ]),
+    code: `function (settings, time, ctx) {
   // ---------- SETTINGS ----------
-  var HEADING_UNIT = 'deg';        // 'deg' | 'decideg' | 'rad'
-  var HEADING_OFFSET = -90;        // add degrees if the compass points the wrong way
-  var STYLE        = 'tape';       // 'tape' (sliding ribbon) | 'rose' (rotating rose)
-  var COLOR        = '#fff';
-  var ACCENT       = '#ff3030';    // needle / center mark
-  var BG           = 'rgba(0,0,0,.45)';
-  var RADIUS       = 8;            // at the default 220x60 size; scales with the widget (like all sizes below)
-  var FONT_SIZE    = 14;
-  var DEG_PER_PX   = 1;            // tape: degrees per pixel at the default size (smaller = wider view)
+  var HEADING_UNIT   = settings.heading_unit.value;   // 'deg' | 'decideg' | 'rad'
+  var HEADING_OFFSET = settings.heading_offset.value; // add degrees if the compass points the wrong way
+  var STYLE          = settings.style.value;          // 'tape' (sliding ribbon) | 'rose' (rotating rose)
+  var COLOR          = settings.color.value;
+  var ACCENT         = settings.accent.value;         // needle / center mark
+  var BG             = settings.background.value;
+  var RADIUS         = settings.radius.value;         // at the default 220x60 size; scales with the widget (like all sizes below)
+  var FONT_SIZE      = settings.font_size.value;
+  var DEG_PER_PX     = settings.degrees_per_px.value; // tape: degrees per pixel at the default size (smaller = wider view)
   // -------------------------------
-  var hd = values[0]; if (typeof hd !== 'number') hd = 0;
+  var hd = ctx.values[0]; if (typeof hd !== 'number') hd = 0;
   if (HEADING_UNIT === 'decideg') hd /= 10; else if (HEADING_UNIT === 'rad') hd = hd * 180 / Math.PI;
   hd = ((hd + HEADING_OFFSET) % 360 + 360) % 360;
   var W = ctx.width, H = ctx.height, names = { 0: 'N', 90: 'E', 180: 'S', 270: 'W', 45: 'NE', 135: 'SE', 225: 'SW', 315: 'NW' };
@@ -708,7 +923,6 @@ export const EXAMPLE_WIDGETS = [
     svg += '<path class="needle" d="M' + mid + ',' + (H - 2 * scale).toFixed(1) + ' l' + (-6 * scale).toFixed(1) + ',' + (-8 * scale).toFixed(1) + ' l' + (12 * scale).toFixed(1) + ',0 z" fill="' + ACCENT + '"/>';
     svg += '<rect class="heading-bg" x="' + (mid - 22 * scale).toFixed(1) + '" y="' + (2 * scale).toFixed(1) + '" width="' + (44 * scale).toFixed(1) + '" height="' + (fsz + 6 * scale).toFixed(1) + '" rx="' + (3 * scale).toFixed(1) + '" fill="' + ACCENT + '"/><text class="heading" x="' + mid + '" y="' + (fsz + 3 * scale).toFixed(1) + '" text-anchor="middle" fill="#fff" font-family="Arial" font-size="' + fsz.toFixed(1) + '" font-weight="bold">' + hd.toFixed(0) + '°</text>';
   }
-  // CSS hooks: #compass (svg), .rose, .tick, .tick-major, .tick-label, .needle, .heading, .heading-bg
   return '<svg id="compass" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px">' + svg + '</svg>';
 }`,
   },
@@ -717,30 +931,50 @@ export const EXAMPLE_WIDGETS = [
     columns: 'heading',
     w: 280,
     h: 170,
-    opacity: 0.92,
-    code: `function (values, time, ctx) {
+    settings: defs([
+      { group: { name: 'Heading', items: [
+        { name: 'Heading unit', type: 'select', default: 'deg', values: ['deg', 'decideg', 'rad'], description: "unit of the heading column ('decideg' = value / 10, INAV attitude[2])" },
+        { name: 'Heading offset', type: 'int', default: -90, description: 'degrees added if the ring points the wrong way' },
+        { name: 'Invert', type: 'bool', default: false, description: 'flip rotation direction if the ring turns the wrong way' },
+        { name: 'Smoothing ms', type: 'int', default: 300, min: 0, description: 'heading smoothing window (ms, 0 = off; wrap-safe)' },
+      ] } },
+      { group: { name: 'View', items: [
+        { name: 'Tilt degrees', type: 'int', default: 30, min: 10, max: 80, description: 'camera angle above the ring plane (10 = flat/edge-on, 80 = top-down)' },
+        { name: 'Depth', type: 'number', default: 3.2, min: 1.5, max: 10, step: 0.1, description: 'perspective strength (2 = strong, 6 = almost none)' },
+        { name: 'Show readout', type: 'bool', default: true, description: 'big degrees + cardinal in the middle' },
+      ] } },
+      { group: { name: 'Look', items: [
+        { name: 'Color', type: 'color_picker', default: '#ffffff', description: 'ticks / labels / rim' },
+        { name: 'North color', type: 'color_picker', default: '#ff5050', description: 'N label' },
+        { name: 'Accent', type: 'color_picker', default: '#ff3030', description: 'fixed front marker' },
+        { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.4)' },
+        { name: 'Radius', type: 'int', default: 8, min: 0, description: 'panel corner radius at the default 280x170 size; scales' },
+        { name: 'Font size', type: 'int', default: 15, min: 6, description: 'cardinal letters at the default size; scales with the widget' },
+      ] } },
+    ]),
+    code: `function (settings, time, ctx) {
   // 3D compass: a perspective compass ring lying flat, rotating under a fixed marker (column = heading).
   // ---------- SETTINGS ----------
-  var HEADING_UNIT = 'deg';        // 'deg' | 'decideg' (value/10) | 'rad'
-  var HEADING_OFFSET = -90;        // add degrees if the ring points the wrong way
-  var INVERT       = false;        // flip rotation direction if the ring turns the wrong way
-  var SMOOTH_MS    = 300;          // heading smoothing window (ms, 0 = off; wrap-safe)
-  var TILT_DEG     = 30;           // camera angle above the ring plane (10 = flat/edge-on, 80 = top-down)
-  var DEPTH        = 3.2;          // perspective strength (2 = strong, 6 = almost none)
-  var COLOR        = '#ffffff';    // ticks / labels / rim
-  var NORTH_COLOR  = '#ff5050';    // N label
-  var ACCENT       = '#ff3030';    // fixed front marker
-  var BG           = 'rgba(0,0,0,.4)';
-  var RADIUS       = 8;            // panel corner radius at the default 280x170 size; scales
-  var FONT_SIZE    = 15;           // cardinal letters at the default size; scales with the widget
-  var SHOW_READOUT = true;         // big degrees + cardinal in the middle
+  var HEADING_UNIT   = settings.heading_unit.value;   // 'deg' | 'decideg' (value/10) | 'rad'
+  var HEADING_OFFSET = settings.heading_offset.value; // add degrees if the ring points the wrong way
+  var INVERT         = settings.invert.value;         // flip rotation direction if the ring turns the wrong way
+  var SMOOTH_MS      = settings.smoothing_ms.value;   // heading smoothing window (ms, 0 = off; wrap-safe)
+  var TILT_DEG       = settings.tilt_degrees.value;   // camera angle above the ring plane (10 = flat/edge-on, 80 = top-down)
+  var DEPTH          = settings.depth.value;          // perspective strength (2 = strong, 6 = almost none)
+  var COLOR          = settings.color.value;          // ticks / labels / rim
+  var NORTH_COLOR    = settings.north_color.value;    // N label
+  var ACCENT         = settings.accent.value;         // fixed front marker
+  var BG             = settings.background.value;
+  var RADIUS         = settings.radius.value;         // panel corner radius at the default 280x170 size; scales
+  var FONT_SIZE      = settings.font_size.value;      // cardinal letters at the default size; scales with the widget
+  var SHOW_READOUT   = settings.show_readout.value;   // big degrees + cardinal in the middle
   // -------------------------------
   var W = ctx.width, H = ctx.height, scale = Math.min(W / 280, H / 170);
   var fsz = FONT_SIZE * scale, lw = Math.max(1, 1.5 * scale);
   var names = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
   function toDeg(v) { return HEADING_UNIT === 'decideg' ? v / 10 : HEADING_UNIT === 'rad' ? v * 180 / Math.PI : v; }
   // heading with triangular-weighted circular mean (the 359->0 wrap breaks plain averaging)
-  var hv = values[0], hasData = typeof hv === 'number', hd = hasData ? toDeg(hv) : 0;
+  var hv = ctx.values[0], hasData = typeof hv === 'number', hd = hasData ? toDeg(hv) : 0;
   if (hasData && SMOOTH_MS > 0) {
     var sam = ctx.range(ctx.columns[0], time - SMOOTH_MS, time + SMOOTH_MS, 120) || [], sx = 0, sy = 0, ws = 0, k;
     for (k = 0; k < sam.length; k++) {
@@ -802,7 +1036,6 @@ export const EXAMPLE_WIDGETS = [
       + '<text class="readout-cardinal" x="' + cx.toFixed(1) + '" y="' + (cy + fsz * 1.5).toFixed(1) + '" text-anchor="middle" fill="rgba(255,255,255,.75)"'
       + ' font-family="Arial" font-size="' + (fsz * 0.85).toFixed(1) + '" style="text-shadow:0 0 3px #000">' + card2 + '</text>';
   }
-  // CSS hooks: #compass3d (svg), .band, .rim, .tick, .tick-major, .cardinal, .north, .marker, .readout, .readout-cardinal
   return '<svg id="compass3d" width="' + W + '" height="' + H + '" style="background:' + BG + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px">' + svg + '</svg>';
 }`,
   },
@@ -811,28 +1044,53 @@ export const EXAMPLE_WIDGETS = [
     columns: 'attitude[0], attitude[1]',
     w: 240,
     h: 240,
-    opacity: 0.95,
-    code: `function (values, time, ctx) {
+    settings: defs([
+      { group: { name: 'Angles', items: [
+        { name: 'Angle unit', type: 'select', default: 'decideg', values: ['deg', 'decideg', 'rad'], description: "unit of the roll/pitch columns ('decideg' = value / 10, INAV attitude[])" },
+        { name: 'Invert roll', type: 'bool', default: false, description: 'flip roll if the horizon tilts the wrong way' },
+        { name: 'Invert pitch', type: 'bool', default: false, description: 'flip pitch direction' },
+        { name: 'Smoothing ms', type: 'int', default: 200, min: 0, description: 'smoothing window for roll & pitch (ms, 0 = off)' },
+      ] } },
+      { group: { name: 'Ladder', items: [
+        { name: 'Degrees per px', type: 'number', default: 0.45, min: 0.05, step: 0.05, description: 'pitch ladder density (deg per pixel at the default 240x240 size)' },
+        { name: 'Ladder step', type: 'int', default: 10, min: 5, max: 90, description: 'degrees between numbered ladder lines' },
+        { name: 'Line color', type: 'color_picker', default: '#ffffff', description: 'horizon + ladder lines' },
+        { name: 'Font size', type: 'int', default: 11, min: 6, description: 'ladder / readout text at the default size; scales' },
+        { name: 'Show values', type: 'bool', default: true, description: 'numeric roll/pitch readout at the bottom' },
+      ] } },
+      { group: { name: 'Colors', items: [
+        { name: 'Sky top', type: 'color_picker', default: '#2f6fb2', description: 'sky gradient top' },
+        { name: 'Sky horizon', type: 'color_picker', default: '#7db4e0', description: 'sky at the horizon' },
+        { name: 'Ground horizon', type: 'color_picker', default: '#9a6b3f', description: 'ground at the horizon' },
+        { name: 'Ground bottom', type: 'color_picker', default: '#5d3f22', description: 'ground gradient bottom' },
+        { name: 'Pointer color', type: 'color_picker', default: '#ff3030', description: 'roll pointer triangle' },
+        { name: 'Wings color', type: 'color_picker', default: '#f2a93b', description: 'fixed aircraft symbol' },
+        { name: 'Ring color', type: 'color_picker', default: 'rgba(255,255,255,.55)', description: 'outer ring' },
+        { name: 'Ring width', type: 'int', default: 2, min: 0, description: 'at the default 240x240 size; scales with the widget' },
+        { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.35)', description: 'disc behind the instrument' },
+      ] } },
+    ]),
+    code: `function (settings, time, ctx) {
   // Artificial horizon: columns = roll, pitch (INAV attitude[0], attitude[1] in decidegrees).
   // ---------- SETTINGS ----------
-  var ANGLE_UNIT    = 'decideg';   // 'deg' | 'decideg' (value/10) | 'rad'
-  var INVERT_ROLL   = false;       // flip roll if the horizon tilts the wrong way
-  var INVERT_PITCH  = false;       // flip pitch direction
-  var SMOOTH_MS     = 200;         // smoothing window for roll & pitch (ms, 0 = off)
-  var DEG_PER_PX    = 0.45;        // pitch ladder density (deg per pixel at the default 240x240 size)
-  var LADDER_STEP   = 10;          // degrees between numbered ladder lines
-  var SKY_TOP       = '#2f6fb2';   // sky gradient top
-  var SKY_HORIZON   = '#7db4e0';   // sky at the horizon
-  var GROUND_HORIZON= '#9a6b3f';   // ground at the horizon
-  var GROUND_BOTTOM = '#5d3f22';   // ground gradient bottom
-  var LINE_COLOR    = '#ffffff';   // horizon + ladder lines
-  var POINTER_COLOR = '#ff3030';   // roll pointer triangle
-  var WINGS_COLOR   = '#f2a93b';   // fixed aircraft symbol
-  var RING_COLOR    = 'rgba(255,255,255,.55)'; // outer ring
-  var RING_WIDTH    = 2;           // at the default 240x240 size; scales with the widget
-  var BG            = 'rgba(0,0,0,.35)';       // disc behind the instrument
-  var FONT_SIZE     = 11;          // ladder / readout text at the default size; scales
-  var SHOW_VALUES   = true;        // numeric roll/pitch readout at the bottom
+  var ANGLE_UNIT     = settings.angle_unit.value;     // 'deg' | 'decideg' (value/10) | 'rad'
+  var INVERT_ROLL    = settings.invert_roll.value;    // flip roll if the horizon tilts the wrong way
+  var INVERT_PITCH   = settings.invert_pitch.value;   // flip pitch direction
+  var SMOOTH_MS      = settings.smoothing_ms.value;   // smoothing window for roll & pitch (ms, 0 = off)
+  var DEG_PER_PX     = settings.degrees_per_px.value; // pitch ladder density (deg per pixel at the default 240x240 size)
+  var LADDER_STEP    = settings.ladder_step.value;    // degrees between numbered ladder lines
+  var SKY_TOP        = settings.sky_top.value;        // sky gradient top
+  var SKY_HORIZON    = settings.sky_horizon.value;    // sky at the horizon
+  var GROUND_HORIZON = settings.ground_horizon.value; // ground at the horizon
+  var GROUND_BOTTOM  = settings.ground_bottom.value;  // ground gradient bottom
+  var LINE_COLOR     = settings.line_color.value;     // horizon + ladder lines
+  var POINTER_COLOR  = settings.pointer_color.value;  // roll pointer triangle
+  var WINGS_COLOR    = settings.wings_color.value;    // fixed aircraft symbol
+  var RING_COLOR     = settings.ring_color.value;     // outer ring
+  var RING_WIDTH     = settings.ring_width.value;     // at the default 240x240 size; scales with the widget
+  var BG             = settings.background.value;     // disc behind the instrument
+  var FONT_SIZE      = settings.font_size.value;      // ladder / readout text at the default size; scales
+  var SHOW_VALUES    = settings.show_values.value;    // numeric roll/pitch readout at the bottom
   // -------------------------------
   var W = ctx.width, H = ctx.height, size = Math.min(W, H), scale = size / 240;
   var cx = W / 2, cy = H / 2, rw = RING_WIDTH * scale, r = size / 2 - 2 * rw;
@@ -852,7 +1110,7 @@ export const EXAMPLE_WIDGETS = [
     }
     return ws ? Math.atan2(sy, sx) * 180 / Math.PI : toDeg(v);
   }
-  var hasData = typeof values[0] === 'number' || typeof values[1] === 'number';
+  var hasData = typeof ctx.values[0] === 'number' || typeof ctx.values[1] === 'number';
   var roll = angleAt(ctx.columns[0]), pitch = angleAt(ctx.columns[1]);
   if (INVERT_ROLL) roll = -roll;
   if (INVERT_PITCH) pitch = -pitch;
@@ -905,7 +1163,6 @@ export const EXAMPLE_WIDGETS = [
     var txt = hasData ? 'R ' + roll.toFixed(0) + '\\u00B0 P ' + pitch.toFixed(0) + '\\u00B0' : '--';
     svg += '<text class="readout" x="' + cx + '" y="' + (cy + r * 0.82 + fsz * 0.35).toFixed(1) + '" text-anchor="middle" fill="#fff" font-family="Arial" font-size="' + fsz.toFixed(1) + '" font-weight="bold" style="text-shadow:0 0 3px #000,0 0 3px #000">' + txt + '</text>';
   }
-  // CSS hooks: #horizon (svg), .bg, .ball, .sky, .ground, .horizon-line, .ladder, .ladder-label, .roll-tick, .roll-pointer, .wings, .wings-outline, .wings-dot, .ring, .readout
   return '<svg id="horizon" width="' + W + '" height="' + H + '">' + svg + '</svg>';
 }`,
   },

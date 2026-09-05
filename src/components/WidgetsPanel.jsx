@@ -1,6 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toTele } from '../time.js';
 import { parseColumns, renderWidget } from '../widgetRuntime.js';
+import { parseSettings } from '../widgetSettings.js';
+import SettingsForm from './SettingsForm.jsx';
 
 /** Comma-separated column list with autocomplete for the item under the caret. */
 /** Column name input with a suggestion list. `single` = one column (no comma-separated tokens). */
@@ -115,7 +117,14 @@ export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidg
 
   const cols = selected ? parseColumns(selected.columns) : [];
   const missing = cols.filter((c) => !store.columns[c]);
-  const out = selected ? renderWidget(selected, store, time, sync, 'id', env) : null;
+  const out = selected ? renderWidget(selected, store, time, sync, env) : null;
+  const sdef = selected ? parseSettings(selected.settings) : null;
+  const setConfig = (key, value) => {
+    const config = { ...(selected.config || {}) };
+    if (value === undefined) delete config[key];
+    else config[key] = value;
+    updateWidget(selected.id, { config });
+  };
 
   return (
     <div>
@@ -169,7 +178,7 @@ export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidg
                 </button>
               </div>
 
-              <label className="label">Columns → values[0], values[1], …</label>
+              <label className="label">Columns → ctx.values[0], ctx.values[1], …</label>
               <ColumnsInput value={selected.columns} onChange={(v) => updateWidget(selected.id, { columns: v })} columnNames={columnNames} />
               {missing.length > 0 && (
                 <div className="text-xs mt-1" style={{ color: 'var(--warn)' }}>
@@ -191,43 +200,13 @@ export default function WidgetsPanel({ widgets, selected, setSelectedId, addWidg
                 ))}
               </div>
 
-              <label className="label">
-                Opacity <span className="mono" style={{ color: 'var(--text)' }}>{selected.opacity}</span>
-              </label>
-              <input type="range" min={0} max={1} step={0.01} value={selected.opacity} onChange={(e) => updateWidget(selected.id, { opacity: Number(e.target.value) })} />
-
-              <label className="label">Code</label>
-              <textarea
-                className="input mono text-xs h-56 whitespace-pre"
-                spellCheck={false}
-                value={selected.code}
-                onChange={(e) => updateWidget(selected.id, { code: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Tab') {
-                    e.preventDefault();
-                    const t = e.target;
-                    const s = t.selectionStart;
-                    const v = t.value.slice(0, s) + '  ' + t.value.slice(t.selectionEnd);
-                    updateWidget(selected.id, { code: v });
-                    requestAnimationFrame(() => t.setSelectionRange(s + 2, s + 2));
-                  }
-                }}
-              />
+              <label className="label">Settings</label>
+              <SettingsForm key={selected.id} defs={sdef.defs} sections={sdef.sections} error={sdef.error} config={selected.config} onChange={setConfig} onReset={() => updateWidget(selected.id, { config: {} })} />
               {out && out.error && (
-                <pre className="text-xs whitespace-pre-wrap mt-1" style={{ color: 'var(--bad)' }}>
+                <pre className="text-xs whitespace-pre-wrap mt-2" style={{ color: 'var(--bad)' }}>
                   {out.error}
                 </pre>
               )}
-
-              <label className="label">CSS (scoped to this widget; hover the editor preview for ids/classes)</label>
-              <textarea className="input mono text-xs h-24 whitespace-pre" spellCheck={false} value={selected.css || ''} placeholder={'.label { fill: #ffd166; }\n:root { filter: drop-shadow(0 0 6px #000); }'} onChange={(e) => updateWidget(selected.id, { css: e.target.value })} />
-
-              <details className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
-                <summary className="cursor-pointer">Widget API reference</summary>
-                <pre className="mono whitespace-pre-wrap mt-1 p-2 rounded" style={{ background: 'var(--bg)' }}>
-                  {API_DOC}
-                </pre>
-              </details>
 
               <div className="flex gap-2 mt-3">
                 <button className="btn" onClick={() => saveToLibrary(selected)} title="Store a copy of this widget in the Library (a library widget with the same name is replaced)">
@@ -270,31 +249,3 @@ function fmt(v) {
   if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(3);
   return v === undefined ? 'undefined' : JSON.stringify(v);
 }
-
-const API_DOC = `function (values, time, ctx) { return '<div>…</div>'; }
-
-values   array of current values of the listed columns (interpolated)
-time     telemetry time in ms (integer) = video time × (1 + drift) + offset
-ctx.videoTime        video time (s)
-ctx.width, ctx.height  widget box size (px)
-ctx.columns          array of column names
-ctx.get(name)        interpolated value of any column
-ctx.raw(name)        last sample (no interpolation), e.g. for flags/strings
-ctx.range(name, fromMs, toMs, maxPoints)  -> [{t, v}] history window
-ctx.all(name, maxPoints)  -> [{t, v}] the WHOLE flight (profiles, tracks)
-ctx.stats(name)      -> {min, max, mean, count, tMin, tMax} whole-flight
-                     statistics (use for stable axis scaling)
-ctx.duration         telemetry length in ms
-ctx.state            object persisting between calls (cache here)
-ctx.fmt(v, digits)   number formatting helper
-ctx.image(url)       loads an image (map tile, icon) and returns a data: URL
-                     once cached; undefined while loading (widget re-renders
-                     automatically). Works in export too.
-
-The returned HTML is placed in an absolutely positioned box; style it with
-inline CSS or a <style> tag. Inline <svg> works. External URLs (web fonts,
-images) are not available in export – embed as data: URIs instead.
-
-CSS field: a stylesheet applied only to this widget (selectors are prefixed
-with the widget's box id automatically; ":root" = the box). Give elements
-ids/classes in the returned HTML and style them here – works in export too.`;

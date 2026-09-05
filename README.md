@@ -11,7 +11,7 @@ No editing, trimming or effects.
 1. **Open video** – any common format; a preview proxy is made automatically.
 2. **Open blackbox** – CSV or raw `.txt` / `.bbl` log (decoded with `blackbox_decode`), several files can be combined.
 3. **Synchronise** – set offset and drift by hand, or use auto sync (optical flow or a Gyroflow project).
-4. **Add and edit widgets** – write your own code in the editor or start from an example, place them on the video.
+4. **Add and edit widgets** – start from an example or write your own code in the editor, adjust its settings in the form, place it on the video.
 5. **Export** – burn the overlay into a video with ffmpeg, or write a PNG frame sequence.
 
 Manuals: [Creating widgets](manual/widgets.md) · [Synchronising video and blackbox](manual/synchronisation.md)

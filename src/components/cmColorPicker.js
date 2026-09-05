@@ -1,38 +1,15 @@
 import { EditorView, Decoration, WidgetType, ViewPlugin, MatchDecorator } from '@codemirror/view';
+import { hexString, rgbaString } from './ColorInput.jsx';
 
 // #rgb / #rgba / #rrggbb / #rrggbbaa (not followed by more word chars, so #badge doesn't match)
 // and rgb(r, g, b) / rgba(r, g, b, a)
 const COLOR_RE = /#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![\w-])|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(?:,\s*[\d.]+%?\s*)?\)/gi;
 
-/** Normalize any supported color text to a #rrggbb value for <input type="color"> (alpha dropped). */
-function toHex6(text) {
-  if (text.startsWith('#')) {
-    let b = text.slice(1);
-    if (b.length <= 4) b = b.slice(0, 3).split('').map((ch) => ch + ch).join('');
-    return '#' + b.slice(0, 6).toLowerCase();
-  }
-  const m = text.match(/([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/);
-  if (!m) return '#000000';
-  const h = (n) => Math.max(0, Math.min(255, Math.round(parseFloat(n)))).toString(16).padStart(2, '0');
-  return '#' + h(m[1]) + h(m[2]) + h(m[3]);
-}
-
-/** Rewrite the picked #rrggbb into the original color's format, preserving any alpha. */
-function applyHex(orig, hex) {
-  if (orig.startsWith('#')) {
-    const b = orig.slice(1);
-    if (b.length === 4) return hex + b[3] + b[3]; // #rgba → #rrggbbaa
-    if (b.length === 8) return hex + b.slice(6); // keep aa
-    return hex;
-  }
-  const m = orig.match(/rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(?:,\s*([^)\s]+)\s*)?\)/i);
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const alpha = m && m[1];
-  return alpha !== undefined && alpha !== null ? `rgba(${r}, ${g}, ${b}, ${alpha})` : `rgb(${r}, ${g}, ${b})`;
-}
-
+/**
+ * Swatch shown before every colour literal in the code. Clicking it dispatches a bubbling
+ * `cm-color-pick` DOM event ({view, wrap}); the editor modal opens the in-app colour popover
+ * (ColorInput.jsx) at the swatch and writes the picked colour back with replaceSwatchColor().
+ */
 class ColorSwatch extends WidgetType {
   constructor(text) {
     super();
@@ -49,25 +26,15 @@ class ColorSwatch extends WidgetType {
     const fill = document.createElement('span');
     fill.className = 'cm-color-swatch-fill';
     fill.style.backgroundColor = this.text;
-    const input = document.createElement('input');
-    input.type = 'color';
-    input.value = toHex6(this.text);
-    input.addEventListener('input', () => {
-      let pos;
-      try {
-        pos = view.posAtDOM(wrap);
-      } catch {
-        return;
-      }
-      const cur = wrap._text;
-      // only replace if the document still holds the color right after the swatch
-      if (view.state.doc.sliceString(pos, pos + cur.length) !== cur) return;
-      view.dispatch({ changes: { from: pos, to: pos + cur.length, insert: applyHex(cur, input.value) } });
+    wrap.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      wrap.dispatchEvent(new CustomEvent('cm-color-pick', { bubbles: true, detail: { view, wrap } }));
     });
-    wrap.append(fill, input);
+    wrap.append(fill);
     return wrap;
   }
-  // reuse the DOM node on doc changes so the native picker dialog keeps working while dragging
+  // reuse the DOM node on doc changes so the popover keeps pointing at the same swatch while dragging
   updateDOM(dom) {
     if (!dom.classList || !dom.classList.contains('cm-color-swatch')) return false;
     dom._text = this.text;
@@ -78,6 +45,31 @@ class ColorSwatch extends WidgetType {
   ignoreEvent() {
     return true;
   }
+}
+
+/** The colour literal a swatch currently stands for. */
+export function swatchText(wrap) {
+  return wrap._text;
+}
+
+/** Replace the literal after the swatch in the document. false when the swatch is stale. */
+export function replaceSwatchColor(view, wrap, text) {
+  let pos;
+  try {
+    pos = view.posAtDOM(wrap);
+  } catch {
+    return false;
+  }
+  const cur = wrap._text;
+  if (cur === text) return true;
+  if (view.state.doc.sliceString(pos, pos + cur.length) !== cur) return false;
+  view.dispatch({ changes: { from: pos, to: pos + cur.length, insert: text } });
+  return true;
+}
+
+/** Format a picked colour like the literal it replaces: hex stays hex while opaque, everything else rgba(). */
+export function formatLike(orig, c) {
+  return orig.startsWith('#') && c.a >= 1 ? hexString(c) : rgbaString(c);
 }
 
 const matcher = new MatchDecorator({
@@ -115,16 +107,6 @@ const theme = EditorView.baseTheme({
   '.cm-color-swatch-fill': {
     position: 'absolute',
     inset: '0',
-  },
-  '.cm-color-swatch input[type=color]': {
-    position: 'absolute',
-    inset: '0',
-    width: '100%',
-    height: '100%',
-    padding: '0',
-    border: 'none',
-    opacity: '0',
-    cursor: 'pointer',
   },
 });
 

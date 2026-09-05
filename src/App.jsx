@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TelemetryStore } from './telemetry.js';
 import { csvWorker } from './csvWorkerClient.js';
-import { newWidget, EMPTY_STAGE, uid } from './widgetRuntime.js';
+import { newWidget, cleanWidget, EMPTY_STAGE, uid } from './widgetRuntime.js';
 import { runExport, freeFolder } from './export.js';
 import Stage from './components/Stage.jsx';
 import SyncBar from './components/SyncBar.jsx';
@@ -60,13 +60,13 @@ function loadLibrary() {
     lib = lib.filter((w) => !(w.name || '').startsWith('Example:'));
     localStorage.removeItem(EXAMPLES_KEY);
   }
-  return lib.map((w) => ({ ...w, id: w.id || uid() }));
+  return lib.map((w) => cleanWidget({ ...w, id: w.id || uid() }));
 }
 
 function loadLayouts() {
   return loadJsonArray(LAYOUTS_KEY)
     .filter((l) => l && typeof l.name === 'string' && Array.isArray(l.widgets))
-    .map((l) => ({ ...l, id: l.id || uid(), layout: l.layout && l.layout.w ? l.layout : { w: 1920, h: 1080 } }));
+    .map((l) => ({ ...l, id: l.id || uid(), layout: l.layout && l.layout.w ? l.layout : { w: 1920, h: 1080 }, widgets: l.widgets.map(cleanWidget) }));
 }
 
 const TABS = [
@@ -522,7 +522,7 @@ export default function App() {
       let ws = (j.widgets || []).map((w) => {
         const id = w.id && !seen.has(w.id) ? w.id : uid();
         seen.add(id);
-        return { ...w, id };
+        return cleanWidget({ ...w, id });
       });
       // size the stored coordinates are in; older projects without it were designed on 1080p
       let space = j.layout && j.layout.w ? j.layout : ws.length ? { w: 1920, h: 1080 } : null;
