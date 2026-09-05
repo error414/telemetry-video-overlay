@@ -505,6 +505,411 @@ input[type='radio'] {
   pointer-events: none;
   white-space: normal;
 }
+
+/* ---- column input "?" + INAV field reference dialog ----
+   The mark sits inside the input's right edge (the input reserves padding for it) so it fits
+   every column field, from the wide widget list down to the three narrow gyro axes. */
+.col-field .col-help {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  font: 600 9px/1 var(--font-cond);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: color 0.12s, border-color 0.12s, opacity 0.12s;
+}
+.col-field .col-help:hover {
+  opacity: 1;
+  color: var(--tele);
+  border-color: var(--tele);
+}
+.col-field .col-help:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  opacity: 1;
+}
+.col-field .col-help:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* the reference is a tall teal bay: telemetry knowledge, not a control */
+.fr-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(94vw, 1060px);
+  height: min(90vh, 840px);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.fr-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-strong);
+  background: rgba(79, 195, 199, 0.08);
+  color: var(--tele);
+  font: 600 11px var(--font-cond);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.fr-head .bay-tick {
+  background: var(--tele);
+}
+.fr-head-note {
+  font: 500 10px var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.fr-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex-wrap: wrap;
+}
+.fr-search {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 200px;
+  color: var(--muted);
+}
+.fr-search svg {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.fr-search .input {
+  --input-color: var(--tele);
+  padding: 5px 26px 5px 26px;
+}
+.fr-search .input:focus {
+  border-color: var(--tele);
+  box-shadow: 0 0 0 2px var(--tele-soft);
+}
+.fr-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  font: 500 15px/1 var(--font-ui);
+  cursor: pointer;
+}
+.fr-clear:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+.fr-frames {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.fr-frame {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 0;
+  border-right: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: 500 11.5px var(--font-ui);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.fr-frame:last-child {
+  border-right: 0;
+}
+.fr-frame:hover {
+  background: var(--raise);
+  color: var(--text);
+}
+.fr-frame-on {
+  background: var(--tele-soft);
+  color: var(--tele);
+}
+.fr-frame-on:hover {
+  background: var(--tele-soft);
+  color: var(--tele);
+}
+.fr-frame:focus-visible {
+  outline: none;
+  box-shadow: inset var(--focus-ring);
+}
+/* frame letter as it appears in the log stream: I/P, G, H, S */
+.fr-letter {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: rgba(79, 195, 199, 0.16);
+  color: var(--tele);
+  font: 600 9.5px/15px var(--font-mono);
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.fr-frame-on .fr-letter {
+  background: var(--tele);
+  color: var(--bg-deep);
+}
+.fr-count {
+  font: 500 10px var(--font-mono);
+  color: var(--faint);
+}
+.fr-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 11.5px var(--font-ui);
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.fr-only input {
+  accent-color: var(--tele);
+}
+.fr-only-off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.fr-scroll {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg);
+}
+.fr-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+.fr-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 10px;
+  text-align: left;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border-strong);
+  font: 600 10.5px var(--font-cond);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.fr-th-key {
+  width: 26%;
+}
+.fr-th-desc {
+  width: 46%;
+}
+.fr-group td {
+  padding: 10px 10px 4px;
+  font: 600 11px var(--font-cond);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tele);
+  border-bottom: 1px solid var(--border);
+}
+.fr-group .fr-letter-lg {
+  margin-right: 8px;
+  font-size: 10.5px;
+  line-height: 17px;
+}
+.fr-group-note {
+  margin-left: 10px;
+  font: 400 11px var(--font-ui);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--faint);
+}
+.fr-group-count {
+  float: right;
+  font: 500 10px var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+.fr-row td {
+  padding: 6px 10px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.fr-row:hover td {
+  background: var(--panel);
+}
+.fr-key {
+  white-space: nowrap;
+}
+.fr-key-text {
+  color: var(--muted);
+  font-size: 12px;
+}
+.fr-row-loaded .fr-key-text {
+  color: var(--tele);
+}
+/* the dot says "this field exists in the loaded log" — the one thing a pilot wants to know first */
+.fr-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: var(--border-strong);
+  vertical-align: middle;
+}
+.fr-row-loaded .fr-dot {
+  background: var(--tele);
+  box-shadow: 0 0 6px rgba(79, 195, 199, 0.7);
+}
+.fr-cols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 5px 0 1px 12px;
+  white-space: normal;
+}
+.fr-col {
+  padding: 1px 7px;
+  border-radius: 3px;
+  border: 1px solid rgba(79, 195, 199, 0.4);
+  background: var(--tele-soft);
+  color: var(--tele);
+  font: 500 11px var(--font-mono);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.fr-col:hover {
+  background: rgba(79, 195, 199, 0.28);
+  border-color: var(--tele);
+}
+.fr-col:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.fr-col:disabled {
+  cursor: default;
+}
+.fr-col:disabled:hover {
+  background: var(--tele-soft);
+  border-color: rgba(79, 195, 199, 0.4);
+}
+/* amber = the column currently in the input */
+.fr-col-on {
+  background: var(--accent-soft);
+  border-color: rgba(242, 169, 59, 0.5);
+  color: var(--accent);
+}
+.fr-col-on:hover {
+  background: rgba(242, 169, 59, 0.26);
+  border-color: var(--accent);
+}
+.fr-unit {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.fr-unit strong {
+  color: var(--text);
+}
+.fr-desc {
+  color: var(--text);
+  line-height: 1.4;
+}
+.fr-desc strong {
+  font-weight: 600;
+  color: var(--accent-bright);
+}
+.fr-desc code,
+.fr-notes code {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  color: var(--tele);
+  font-size: 11px;
+}
+.fr-table mark {
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.fr-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.fr-empty .mono {
+  color: var(--tele);
+}
+
+.fr-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-strong);
+  background: var(--panel);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.fr-notes {
+  flex: 1;
+  min-width: 0;
+}
+.fr-notes summary {
+  cursor: pointer;
+  user-select: none;
+  color: var(--muted);
+  font: 600 10.5px var(--font-cond);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.fr-notes summary:hover {
+  color: var(--text);
+}
+.fr-notes ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  line-height: 1.45;
+}
+.fr-notes li + li {
+  margin-top: 3px;
+}
+.fr-foot-hint {
+  flex: none;
+  max-width: 46%;
+  text-align: right;
+  color: var(--faint);
+  white-space: normal;
+}
 .setting-row .input {
   height: 24px; /* one height for text, number and select — a native select is taller by default */
   padding: 0 6px;

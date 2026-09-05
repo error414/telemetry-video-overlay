@@ -1,6 +1,6 @@
 ---
 name: widget
-description: Create or modify an overlay widget for this "Blackbox overlay for INAV" app (JS function returning HTML, driven by INAV blackbox CSV columns). Self-contained — everything needed (runtime API, design language, template, test runner) is in this file; no need to read the app source. Use when the user asks for a new widget, gauge, graph, map, indicator, or wants an existing example widget changed.
+description: Create or modify an overlay widget for this "Blackbox overlay for INAV" app (JS function returning HTML, driven by INAV blackbox CSV columns). Self-contained — everything needed (runtime API, design language, template, test runner, blackbox field and flag-bit reference) is in this folder; no need to read the app source. Use when the user asks for a new widget, gauge, graph, map, indicator, or wants an existing example widget changed.
 ---
 
 # Creating a widget
@@ -8,6 +8,10 @@ description: Create or modify an overlay widget for this "Blackbox overlay for I
 This file is the complete contract. Do **not** read the app source to build a widget — everything
 the runtime provides and expects is documented here. (`src/widgetRuntime.js` and `src/examples.js`
 exist if you ever need to go deeper, but a widget built purely from this file is correct.)
+The companion `blackbox-fields.md` (same folder) explains what every INAV column **means** and
+holds the bit tables for `flightModeFlags`, `activeFlightModeFlags`, `stateFlags`, `navFlags`,
+`navState`, `failsafePhase` and `hwHealthStatus` — read it whenever a widget shows flight
+modes, nav / failsafe state, sensor health, or an estimator field you are unsure about.
 
 ## The contract
 
@@ -599,9 +603,13 @@ separate `.gps.csv`):
 | `GPS_home_lat`, `GPS_home_lon` | added by decoder, degrees |
 
 **Slow frame fields** (change rarely; value holds between samples):
-`activeWpNumber`; `flightModeFlags`, `activeFlightModeFlags`, `stateFlags`, `failsafePhase`
-(text names by default — strings, use `ctx.raw`; `flightModeFlags2` is merged into
-`flightModeFlags`); `rxSignalReceived`, `rxFlightChannelsValid` (0/1); `rxUpdateRate` (Hz);
+`activeWpNumber`; `flightModeFlags (flags)`, `stateFlags (flags)`, `failsafePhase (flags)`
+(**text** by default: names joined by `|`, e.g. `ARM|ANGLE|NAVRTH`, `0` when empty — strings,
+use `ctx.raw`; `flightModeFlags2` is merged into `flightModeFlags`); `activeFlightModeFlags`,
+`navState`, `navFlags`, `hwHealthStatus`, `mspOverrideFlags` (**plain integers** — the decoder
+has no name table for them, decode by bit; `activeFlightModeFlags` uses a *different* bit order
+than `flightModeFlags`). Names, masks and a `flagSet()` helper that handles both the text and
+the numeric form: `blackbox-fields.md`. `rxSignalReceived`, `rxFlightChannelsValid` (0/1); `rxUpdateRate` (Hz);
 `hwHealthStatus` (packed bits); `powerSupplyImpedance` (mΩ); `sagCompensatedVBat`
 (**stays 0.01 V — decoder converts only `vbat`**); `wind[0..2]` (cm/s NED);
 `mspOverrideFlags`; `IMUTemperature`, `baroTemperature`, `sens0..7Temp` (0.1 °C, invalid =

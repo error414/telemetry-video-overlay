@@ -54,7 +54,8 @@ const series = {
   'motor[1]': (i) => 1250 + (i % 40) * 10,
   'motor[2]': (i) => 1300 + (i % 30) * 10,
   'motor[3]': (i) => 1350 + (i % 20) * 10,
-  'flightModeFlags (flags)': (i) => (i < 100 ? 'ANGLE' : 'NAV RTH'),
+  'flightModeFlags (flags)': (i) => (i < 100 ? 'ARM|ANGLE' : 'ARM|ANGLE|NAVRTH'),
+  activeFlightModeFlags: (i) => (i < 100 ? 1 : 1 | 16),
   'stateFlags (flags)': () => 'GPS_FIX_HOME|GPS_FIX',
   'failsafePhase (flags)': () => 'IDLE',
 };

@@ -3,9 +3,13 @@ import { toTele } from '../time.js';
 import { parseColumns, renderWidget } from '../widgetRuntime.js';
 import { parseSettings } from '../widgetSettings.js';
 import SettingsForm from './SettingsForm.jsx';
+import { FieldHelpMark, FieldReferenceDialog } from './FieldReference.jsx';
 
-/** Comma-separated column list with autocomplete for the item under the caret. */
-/** Column name input with a suggestion list. `single` = one column (no comma-separated tokens). */
+/**
+ * Column name input with a suggestion list for the item under the caret and a "?" mark that opens
+ * the INAV field reference (searchable table, doubles as a picker for the loaded columns).
+ * `single` = one column (no comma-separated tokens).
+ */
 export function ColumnsInput({ value, onChange, columnNames, single = false, disabled = false, placeholder, title, style, className = '' }) {
   value = value || '';
   const [open, setOpen] = useState(false);
@@ -13,6 +17,19 @@ export function ColumnsInput({ value, onChange, columnNames, single = false, dis
   const ref = useRef(null);
   const [caret, setCaret] = useState(value.length);
   const [rect, setRect] = useState(null);
+  const [refOpen, setRefOpen] = useState(false);
+
+  // chips in the reference: single field = replace and close, list = toggle the column in place
+  const pickFromReference = (name, present) => {
+    if (single) {
+      onChange(name);
+      setRefOpen(false);
+      return;
+    }
+    const cols = parseColumns(value);
+    const next = present ? cols.filter((c) => c !== name) : [...cols, name];
+    onChange(next.join(', '));
+  };
 
   // split into "before", current token, "after" relative to the caret
   const before = value.slice(0, caret);
@@ -54,11 +71,11 @@ export function ColumnsInput({ value, onChange, columnNames, single = false, dis
   const maxH = Math.max(80, Math.min(260, flip ? spaceAbove : spaceBelow));
 
   return (
-    <div className={'relative ' + className} style={style?.width != null ? { width: style.width } : undefined}>
+    <div className={'relative col-field ' + className} style={style?.width != null ? { width: style.width } : undefined}>
       <input
         ref={ref}
         className="input mono"
-        style={style}
+        style={{ ...style, paddingRight: 26 }}
         value={value}
         disabled={disabled}
         title={title}
@@ -88,6 +105,8 @@ export function ColumnsInput({ value, onChange, columnNames, single = false, dis
           } else if (e.key === 'Escape') setOpen(false);
         }}
       />
+      <FieldHelpMark disabled={disabled} onClick={() => setRefOpen(true)} />
+      {refOpen && <FieldReferenceDialog columnNames={columnNames} selected={parseColumns(value)} single={single} onPick={pickFromReference} onClose={() => setRefOpen(false)} />}
       {open && matches.length > 0 && rect && (
         <div
           className="mono text-xs overflow-auto rounded"
