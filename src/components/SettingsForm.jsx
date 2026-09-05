@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { settingValue } from '../widgetSettings.js';
 import ColorInput from './ColorInput.jsx';
 
@@ -63,9 +64,10 @@ function SettingGroup({ name, open, onToggle, changedCount, children }) {
 function SettingRow({ def, value, changed, onChange }) {
   return (
     <div className="setting">
-      <div className="setting-row" title={def.description || undefined}>
+      <div className="setting-row">
         <span className="setting-name" style={changed ? { color: 'var(--accent)' } : undefined}>
-          {def.name}
+          <span className="setting-name-text">{def.name}</span>
+          {def.description && <HelpMark text={def.description} />}
         </span>
         <SettingControl def={def} value={value} onChange={onChange} />
         {changed ? (
@@ -76,8 +78,37 @@ function SettingRow({ def, value, changed, onChange }) {
           <span style={{ width: 22 }} />
         )}
       </div>
-      {def.description && <div className="setting-desc">{def.description}</div>}
     </div>
+  );
+}
+
+const TIP_WIDTH = 260;
+
+/**
+ * "?" after a setting name; hovering it shows the description. The tip is rendered through a
+ * portal in a fixed position because every ancestor (.bay, drawers, group bodies) clips overflow.
+ */
+function HelpMark({ text }) {
+  const [pos, setPos] = useState(null);
+  const show = (e) => {
+    // to the right of the mark and a bit below it, so the pointer never covers the text
+    const r = e.currentTarget.getBoundingClientRect();
+    const left = Math.max(4, Math.min(r.right + 10, window.innerWidth - TIP_WIDTH - 4));
+    setPos({ left, top: r.bottom + 6 });
+  };
+  return (
+    <>
+      <span className="setting-help" onMouseEnter={show} onMouseLeave={() => setPos(null)} aria-label={text}>
+        ?
+      </span>
+      {pos &&
+        createPortal(
+          <div className="setting-tip" style={{ left: pos.left, top: pos.top, maxWidth: TIP_WIDTH }}>
+            {text}
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 
