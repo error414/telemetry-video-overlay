@@ -60,7 +60,7 @@ has fewer than ~6 settings in total. Keys are unique across the whole definition
 | `name` | label in the form. The **key** the code uses is the name in snake_case: `Mode` → `settings.mode.value`, `Label font` → `settings.label_font.value` (an explicit `"key"` overrides) |
 | `type` | `text` (input) · `int` (whole number) · `number` (decimal) · `color_picker` (any CSS colour; the picker writes `rgba(r,g,b,a)`, alpha included) · `bool` (checkbox) · `select` |
 | `default` | **required in practice** — the value until the pilot changes it (the form starts from it; the definition is the single source of defaults) |
-| `description` | one line of help shown under the field — the same text as the SETTINGS-line comment |
+| `description` | one line of help shown when hovering the "?" after the field name — the same text as the SETTINGS-line comment |
 | `values` | `select` only: `{ "value": "label", … }` or `["a", "b"]`. Object keys are strings; when `default` is a number the numeric keys come back as numbers (`MODE === 2` works) |
 | `min`, `max`, `step` | `int`/`number` only, optional |
 
@@ -121,7 +121,14 @@ Export renders the returned HTML through an SVG `<foreignObject>` into a canvas:
    `ctx.values` are `undefined` — return a sensible placeholder (`'--'`, empty graph), not an error.
    Read every setting **only** through keys that exist in the definition (a typo throws).
 6. **Be fast.** Runs at video fps. Anything O(flight length) — projections, smoothing over
-   `ctx.all`, path strings for the whole flight — belongs in `ctx.state`, computed once.
+   `ctx.all`, path strings for the whole flight — belongs in `ctx.state`, computed once. Split
+   the markup into a **static part** (dial track, ticks, numbers, panel, grid — built once into
+   `ctx.state` keyed by size + the look settings) and a small **dynamic part** (needle, fill,
+   value text) rebuilt every frame; keep the element count low (a few dozen SVG nodes, not
+   hundreds of ticks) and use CSS `text-shadow` on SVG `<text>` sparingly (one or two
+   readouts) — the whole app re-renders every frame, so a heavy widget stutters playback.
+7. **No `xmlns` on inline `<svg>`.** The runtime does not need it and the test runner flags the
+   `http://www.w3.org/2000/svg` URL as an external resource.
 
 ## Design language — what makes a widget look good here
 
@@ -144,11 +151,33 @@ Widgets float over drone video: sky one second, dark forest the next. The house 
   `fill-opacity` ~0.15, or a top/bottom `linearGradient`).
 - **Structure lines:** grid `rgba(255,255,255,.15–.2)`, line charts ~2px stroke,
   `stroke-linejoin="round"`.
-- **Layout:** translucency comes from the colours themselves (rgba backgrounds), there is no
-  whole-widget opacity; keep ~40px from frame edges at 1920×1080;
+- **Global opacity — mandatory in every widget.** The app has no whole-widget opacity field, so
+  each widget offers its own `Opacity` setting (`number`, default 1, min 0, max 1, step 0.05,
+  key `opacity`, last item of the `Look`/`Box` group) and applies it as CSS `opacity:` on the
+  **root element** it returns (the outer `<div>` or `<svg>`; works in the stage and in export).
+  Individual colours stay rgba pickers for partial translucency of parts.
+- **Layout:** translucency of parts comes from the colours themselves (rgba backgrounds), the
+  whole widget from the `Opacity` setting; keep ~40px from frame edges at 1920×1080;
   typical sizes — value box 320×110, bar 300×40, graph 400–520×140–160, map 300×300,
   compass 220×60. Inner padding ≥ 6px (scaled); leave headroom above the tallest text so
-  ascenders aren't clipped: `var top = Math.max(6 * scale, fsz * 0.6);`.
+  ascenders aren't clipped: `var top = Math.max(6 * scale, fsz * 0.6);`. **The box clips
+  everything outside it** (stage and export alike): derive the outer radius / extent from the
+  *outermost* element including half of its stroke width and round caps — a marker that pokes
+  0.2 tw past a track drawn at `S / 2` is cut off at the top and at 90°, and "make the widget
+  taller" does not fix the sides. Check the preview at the flight minimum and maximum.
+- **No hairline seams between abutting shapes.** Two shapes that share an edge (a half disc and a
+  butt-capped arc, two arc segments, a bar and its cap) leave a 1 px anti-aliasing gap. Extend one
+  ~1.5 px (scaled) under the other; never rely on edges meeting exactly.
+- **Every text gets its own size setting.** Value, caption, unit-derived extras (peak value,
+  secondary readout) and axis/dial numbers each have an `int` size knob ("at the default WxH
+  size; scales with the widget"); extras default smaller than the caption. When an optional text
+  does not fit its area, the fix is a smaller default and the size knob — do **not** rearrange the
+  layout the pilot approved (moving the peak value above the number was rejected). Keep the
+  layout order fixed and check the preview with every optional text switched on.
+- **No light halo around a cover shape.** An opaque shape drawn exactly on top of a lighter one
+  of the same size (black fill arc over a light track, a bar over its trough) shows the lighter
+  colour's anti-aliased edge on both sides as a thin bright outline. Draw the cover 1–2 px
+  (scaled) wider than what it hides, or do not draw the hidden part at all.
 - **Inline SVG is the tool of choice** for gauges, graphs, tapes, roses, maps. Give the root
   `<svg>` numeric `width`/`height` (= `ctx.width`/`ctx.height`), not percentages. Remember SVG
   text/shapes use `fill`/`stroke` (not `color`/`background`) and move with `transform`, not
@@ -170,7 +199,8 @@ block, keep the rest readable too. Modern syntax compiles but don't use backtick
   thresholds array) may sit in the block as plain literals.
 - Typical knobs: `LABEL`, `UNIT`, `MULTIPLIER` (unit conversion: m/s→km/h = 3.6, cm→m = 0.01;
   type `number`), `DIGITS` (`int`, min 0), colours (`color_picker`), `BG` named `Background`,
-  `RADIUS`, `FONT` (`text`), `FONT_SIZE`, `SMOOTH_MS`, style enums (`select`:
+  `RADIUS`, `FONT` (`text`), `FONT_SIZE`, `SMOOTH_MS`, `OPACITY` (always present, see Design
+  language), style enums (`select`:
   `'arrow' | 'plane' | 'dot'`), unit enums (`select` `'deg' | 'decideg' | 'rad'` — INAV
   attitude comes in decidegrees).
 - "Auto or fixed" knobs (`MIN`/`MAX` where `null` used to mean "from `ctx.stats`"): a `bool`
@@ -193,9 +223,14 @@ block, keep the rest readable too. Modern syntax compiles but don't use backtick
   `scale` so the widget looks identical, just bigger. For elements keyed to one dimension
   (bar thickness) scale from that dimension: `Math.min(ctx.width, ctx.height) / DEFH`.
 - **Smooth noisy data.** Baro, current, GPS speed are noisy — offer `SMOOTH_MS` (centered
-  moving average, `0 = off`; snippet below). The displayed value and marker/dot must follow the
+  moving average, `0 = off`; snippet below). Smooth only when `ctx.values[i]` is a number:
+  outside the flight `ctx.range` still returns the nearest edge sample, so an unguarded average
+  shows the first/last value instead of `--` before and after the telemetry. The displayed value and marker/dot must follow the
   **smoothed** curve, not the raw sample. For headings/angles use the circular mean snippet
-  (the 359→0 wrap breaks plain averaging).
+  (the 359→0 wrap breaks plain averaging). **Every derived indicator (peak hold, min/max
+  markers, trails, thresholds) must run on the same smoothed series as the displayed value** — an
+  indicator fed raw samples while the value is smoothed follows noise the pilot never sees
+  (with 800 ms smoothing on baro it visibly "sticks" and jumps).
 - **Cache in `ctx.state`, keyed by everything the cache depends on.** `ctx.state` survives code
   and settings edits, so a cache checked only against the column ignores settings changes until restart:
 
@@ -210,6 +245,57 @@ block, keep the rest readable too. Modern syntax compiles but don't use backtick
 - **Pin scrolling-graph line ends to the window edges.** Raw samples make both ends pop as
   points enter/leave the window; keep one overhanging sample per side and interpolate points
   exactly at the window edges (snippet below).
+
+## Time-dependent indicators (peak hold, decay, trails) — replay, don't remember
+
+Anything that depends on *what happened before* (a peak-hold marker that holds and then slides,
+a decaying trail, a "max in the last N seconds") must **not** be integrated frame to frame from
+`ctx.state` — seeking, export at a different fps and the editor preview all call the function at
+arbitrary times, so the result has to be a pure function of `(settings, time, ctx)`. Recipe:
+
+- **Replay from history every frame.** Take `ctx.range(col, time - span, time, 2000)`, run the
+  state machine over those samples from a neutral start, then advance to `time`. Pick `span`
+  so any earlier state has provably converged (peak hold: `HOLD_MS + MAX / speed` — after the
+  hold plus a whole-dial slide the marker has met the value whatever it was before). A few
+  hundred samples per frame cost ~0.02 ms in Node.
+- **Smooth the replayed series the same way as the value** (centered moving average over the
+  window + `SMOOTH_MS / 2` on both sides), see the note above.
+- **Constant speed, expressed in dial units.** Offer `Hold ms` and a `Slide speed` in
+  *% of the dial per second* (robust across auto-scaled axes) instead of a decay duration —
+  the pilot asked for "stays a while, then slides at a constant speed to the current value even
+  while the value keeps changing". Easing the slide relative to each sample's own age produces a
+  jerky envelope when several samples compete; a linear slide from the current marker position does not.
+- **Re-arm the hold only on a real rise.** The marker catching up with the value from above
+  must not count as a new peak, and neither may noise: re-arm when the value climbs at least
+  1 % of the dial above the trough seen since the marker last sat on the value (hysteresis).
+  Without this the marker "sticks" just above a slowly falling value for a whole hold period.
+- **Fade by distance.** `alpha = OPACITY * min(1, (peak - cur) / (MAX * 0.02))` makes the
+  marker vanish smoothly as it meets the value; skip drawing below ~0.02.
+
+Verified peak-hold replay (`speed` in units per ms, `ser` = smoothed `[{t, v}]` window):
+
+```js
+var eps = MAX * 0.01, pk = null, trough = 0, lastT = 0, lastRise = -1e12;
+for (i = 0; i < ser.length; i++) {
+  var v = ser[i].v, t = ser[i].t;
+  if (typeof v !== 'number' || t > time) continue;
+  if (pk === null) { pk = v; trough = v; lastT = t; continue; }
+  if (t - lastRise > HOLD_MS) pk -= speed * (t - Math.max(lastT, lastRise + HOLD_MS));   // sliding
+  if (v >= pk) {                                    // marker rides on the value
+    pk = v;
+    if (v < trough) trough = v;
+    if (v - trough >= eps) lastRise = t;            // a real rise above the trough arms the hold
+  } else trough = v;                                // marker above the value: value is the reference
+  lastT = t;
+}
+if (pk !== null) {
+  if (time - lastRise > HOLD_MS) pk -= speed * (time - Math.max(lastT, lastRise + HOLD_MS));
+  peak = Math.min(MAX, Math.max(cur, pk));
+}
+```
+
+Check it with `replay-csv.mjs --stalls` on a real log (see Verify): the only intervals where the
+marker text stays put while the value moves should be the holds right after a real peak.
 
 ## Reference template — a complete, correct widget
 
@@ -237,7 +323,8 @@ Settings definition:
   ] } },
   { "group": { "name": "Box", "items": [
     { "name": "Background", "type": "color_picker", "default": "rgba(0,0,0,0)", "description": "box background; alpha 0 = no box" },
-    { "name": "Radius", "type": "int", "default": 8, "min": 0, "description": "corner radius at the default size; scales with the widget" }
+    { "name": "Radius", "type": "int", "default": 8, "min": 0, "description": "corner radius at the default size; scales with the widget" },
+    { "name": "Opacity", "type": "number", "default": 1, "min": 0, "max": 1, "step": 0.05, "description": "whole-widget opacity 0..1 (1 = opaque)" }
   ] } }
 ]
 ```
@@ -260,6 +347,7 @@ function (settings, time, ctx) {
   var ALIGN       = settings.align.value;        // 'left' | 'center' | 'right'
   var BG          = settings.background.value;   // box background; alpha 0 = no box
   var RADIUS      = settings.radius.value;       // corner radius at the default size; scales with the widget
+  var OPACITY     = settings.opacity.value;      // whole-widget opacity 0..1 (1 = opaque)
   // -------------------------------
   var scale = Math.min(ctx.width / 320, ctx.height / 110);
   var fs = SIZE * scale;
@@ -268,7 +356,7 @@ function (settings, time, ctx) {
   var st = SHOW_MAX ? ctx.stats(ctx.columns[0]) : null;
   return '<div id="bignum" class="box" style="width:100%;height:100%;box-sizing:border-box;padding:'
     + (4 * scale).toFixed(1) + 'px ' + (10 * scale).toFixed(1) + 'px;background:' + BG
-    + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px;font-family:' + FONT + ';color:' + COLOR
+    + ';border-radius:' + (RADIUS * scale).toFixed(1) + 'px;opacity:' + OPACITY + ';font-family:' + FONT + ';color:' + COLOR
     + ';text-shadow:' + SHADOW + ';text-align:' + ALIGN + '">'
     + (LABEL ? '<div class="label" style="font-size:' + (fs * 0.28).toFixed(1) + 'px;color:' + LABEL_COLOR
       + ';letter-spacing:' + (2 * scale).toFixed(1) + 'px">' + LABEL + '</div>' : '')
@@ -355,6 +443,88 @@ function px(lat, lon, z) {
 var dot     = '<circle r="' + (r * 0.6) + '"/>';
 var arrow   = '<path d="M0,' + (-r) + ' L' + (r * 0.7) + ',' + r + ' L0,' + (r * 0.55) + ' L' + (-r * 0.7) + ',' + r + ' Z"/>';
 var chevron = '<path d="M0,' + (-r) + ' L' + r + ',' + r + ' L0,' + (r * 0.4) + ' L' + (-r) + ',' + r + ' Z"/>';
+```
+
+**Nice axis / dial steps with a label cap** — never divide the range into N equal parts
+(`MAX = 8500` gives labels 0.9, 1.9, …) and never let a fixed user step explode (max 100 000
+with step 100 = 1000 labels). Steps come from the 1, 2, 2.5, 5 × 10ⁿ series, at most ~6 labels
+in auto mode and a hard cap of 20 when the pilot sets the step; in auto-range mode round the
+maximum **up to a whole number of steps** so the last label sits on the end of the scale:
+
+```js
+function niceStep(range, minStep, maxCount) {            // smallest nice step >= minStep with <= maxCount steps
+  var mags = [1, 2, 2.5, 5], mag = 1, k;
+  while (mag * 1e6 < minStep) mag *= 10;
+  for (k = 0; k < 400; k++) {
+    var step = mags[k % 4] * mag;
+    if (step >= minStep && range / step <= maxCount) return step;
+    if (k % 4 === 3) mag *= 10;
+  }
+  return range;
+}
+var major = MAJOR > 0 ? niceStep(mx, MAJOR, 20) : niceStep(mx, 0, 6);
+if (AUTO_MAX) mx = Math.max(major, Math.ceil(mx / major - 1e-9) * major);
+// ticks at i * (major / minor) for i = 0..floor(MAX / tick), never MAX * i / total
+```
+
+**Arc gauge geometry** (0° = 12 o'clock, clockwise; sweep `SWEEP`, e.g. 270° opening at the
+bottom; `Rt` = track centre radius, `tw` = track width):
+
+```js
+var R = S / 2 - tw * 0.4 - 1.5 * scale;   // marker overshoot (0.2 tw) + half its stroke (0.19 tw) + 1.5 px stay inside the box
+var Rt = R - tw / 2, a0 = -SWEEP / 2;
+var ov = 1.5 * scale / Rt * 180 / Math.PI; // ~1.5 px of arc: overlap for abutting shapes (no anti-aliasing seam)
+var fw = tw + 1.5 * scale;                 // fill a bit wider than the track: no light halo from the track's edges
+function ang(v) { return a0 + Math.max(0, Math.min(1, v / MAX)) * SWEEP; }
+function pt(r, a) { var t = a * Math.PI / 180; return [(cx + r * Math.sin(t)).toFixed(2), (cy - r * Math.cos(t)).toFixed(2)]; }
+function arc(r, a1, a2, color, width, cap) {              // stroke-only arc; cap = 'round' | 'butt'
+  if (a2 - a1 < 0.05) return '';                          // zero-length arcs render as a blob
+  var p1 = pt(r, a1), p2 = pt(r, a2);
+  return '<path d="M' + p1[0] + ',' + p1[1] + ' A' + r.toFixed(2) + ',' + r.toFixed(2) + ' 0 ' + ((a2 - a1) > 180 ? 1 : 0) + ' 1 ' + p2[0] + ',' + p2[1]
+    + '" fill="none" stroke="' + color + '" stroke-width="' + width.toFixed(2) + '" stroke-linecap="' + cap + '"/>';
+}
+// track: round caps. fill 0..value: BUTT caps (a round cap overshoots the end marker by tw/2).
+// The rounded zero end is a HALF disc bulging backwards only — a full dot sticks out past the
+// marker whenever the value is near zero (sweep-flag 0 = the half on the "before zero" side):
+var t0 = a0 * Math.PI / 180, hx = cx + Rt * Math.sin(t0), hy = cy - Rt * Math.cos(t0), hr = fw / 2;
+var nx = Math.sin(t0) * hr, ny = -Math.cos(t0) * hr;
+out += '<path d="M' + (hx + nx).toFixed(2) + ',' + (hy + ny).toFixed(2) + ' A' + hr.toFixed(2) + ',' + hr.toFixed(2) + ' 0 0 0 ' + (hx - nx).toFixed(2) + ',' + (hy - ny).toFixed(2) + ' Z" fill="' + FILL + '"/>';
+if (ang(cur) - a0 >= 0.05) out += arc(Rt, a0 - ov, ang(cur), FILL, fw, 'butt');   // starts under the half disc
+out += arc(Rt, a0, ang(cur), FILL, tw, 'butt');
+// radial marker line at the value: from just outside the track to GAP px before the centre disc
+var m1 = pt(rc + GAP * scale, ang(cur)), m2 = pt(Rt + tw * 0.7, ang(cur));
+```
+
+**Straight bar gauge layout (approved by the pilot, `widgets/bars/bar-rpm.json`)** — the straight
+sibling of the arc gauge: same track / fill / marker / ghost-peak language, no centre disc, no
+numeric peak value. Both variants come from one template with `var VERTICAL = __VERTICAL__;`.
+
+- **Horizontal (default 480×140), rows top to bottom:** caption top-left → scale numbers and
+  ticks **above** the track → track → value **under the marker**, centred on it and following it
+  (`text-anchor="middle"`, x clamped to `[p + est/2, W - p - est/2]` so it never leaves the box;
+  `est` = digits × 0.58 fs + unit). Without a caption / with numbers off the rows move up.
+- **Vertical (default 260×480):** caption top-left, track vertical (0 at the bottom), numbers and
+  ticks **left** of the track, value **right of the marker** at the marker's y (clamped to the
+  track ends); the box is wider than the track so a long value with unit fits.
+- **Marker** is a line across the track, symmetric: it sticks out `Marker overhang` px on both
+  sides (`tw/2 + ovh`), stroke `0.38 tw`, round caps. Numbers sit outside the marker's reach
+  (`off = tw/2 + ovh + mw/2`).
+- **Text over video** (no disc behind it): white text + `Text shadow` setting (default
+  `0 0 4px #000`), applied to value, caption and numbers.
+- **Zero end**: half disc bulging backwards + butt-ended fill overlapping it by 1.5 px, fill
+  1.5 px wider than the track (same rules as the arc).
+
+```js
+var p = 8 * scale, tw = TRACK_WIDTH * scale, fw = tw + 1.5 * scale, ovh = MARKER_OVER * scale, mw = tw * 0.38;
+var labelH = LABEL ? lfs * 1.5 : 0;
+var ta, a0, a1;                                   // track axis coordinate and its 0 / max ends
+if (VERTICAL) { ta = p + (SHOW_NUMBERS ? nfs * 2.4 : 0) + tw / 2 + ovh + mw / 2; a0 = H - p - tw / 2; a1 = labelH + p + Math.max(tw / 2, fs * 0.55); }
+else { ta = labelH + p + (SHOW_NUMBERS ? nfs * 1.2 : 0) + tw / 2 + ovh + mw / 2 + 2 * scale; a0 = p + tw / 2; a1 = W - p - tw / 2; }
+function pos(v) { return a0 + Math.max(0, Math.min(1, v / MAX)) * (a1 - a0); }
+// horizontal value: centred under the marker, clamped inside the box
+var est = txt.length * fs * 0.58 + (UNIT ? fs * 0.4 * UNIT.length * 0.6 + fs * 0.15 : 0);
+var tx = Math.max(p + est / 2, Math.min(W - p - est / 2, pos(cur))), ty = ta + tw / 2 + ovh + mw / 2 + fs * 0.6;
+// unit as a smaller tspan inside the same text so anchoring works for both: '<tspan font-size="' + (fs * 0.4) + '" dx="' + (fs * 0.12) + '">' + UNIT + '</tspan>'
 ```
 
 **Map tiles** — OSM `https://tile.openstreetmap.org/{z}/{x}/{y}.png` (attribution
@@ -465,7 +635,8 @@ Run the smoke test in this skill folder — it executes widgets in Node with syn
 a fake `ctx` and the `settings` built from the definition defaults (plus `clip_to_range` on),
 at several times **including out-of-range** and at two widget sizes, and fails on exceptions,
 non-string/empty output, http URLs in the output, a definition that does not parse, or a
-`settings.<key>` in the code that the definition lacks:
+`settings.<key>` in the code that the definition lacks; it also warns when the definition has no
+`opacity` setting (mandatory for every new widget, see Design language):
 
 ```
 node .claude/skills/widget/test-widgets.mjs                                # all src/examples.js entries
@@ -474,7 +645,61 @@ node .claude/skills/widget/test-widgets.mjs my.js --columns "BaroAlt (m)" --sett
                                                                            # one bare function + its definition
 ```
 
-The test cannot judge looks — after it passes, mentally check the output HTML for: text shadow
-present, sizes multiplied by `scale`, panel/contrast, `--` placeholder when data is missing.
-Then, if the app is running, add the widget from the Library and check the preview. For
-map/tile widgets confirm the "loading map…" note disappears.
+The test cannot judge looks or behaviour over time. Two more tools in this folder cover that:
+
+```
+node .claude/skills/widget/preview-widgets.mjs my.json [--csv LOG.csv] [--times 1000,2500,5400] [--config '{"max_rpm":200}'] [--out dir]
+node .claude/skills/widget/replay-csv.mjs my.json --csv LOG.csv --stalls [--config '{...}'] [--fps 30] [--from ms --to ms]
+# --columns "BaroAlt (m)" overrides the columns stored in the JSON (both tools) — use the pilot's real column
+```
+
+- **`preview-widgets.mjs`** renders the widget at several telemetry times (synthetic
+  burst-and-decay profile, or a real CSV column) plus a 60 % size and a no-data frame into
+  `preview.html`, then screenshots it to `preview.png` with the project's Electron
+  (offscreen window; `ELECTRON_RUN_AS_NODE` is stripped from the env). **Open the PNG with the
+  Read tool and look** — this is how label rounding, cap overshoot, overlapping text and missing
+  placeholders were caught. Run it after every visual change, before handing over.
+- **`replay-csv.mjs`** runs the widget frame by frame over a whole real log (decimated to
+  ~120 Hz like the app) and prints time, column-0 value and the visible text of each frame;
+  `--stalls` lists intervals where the visible text (or, with `--watch "MAX ([\d.]+)"`, one
+  captured number) froze for ≥ 300 ms while column 0 moved by ≥ 1 % of its range — the
+  signature of a stuck indicator. Legitimate holds right after a real peak show up too; anything
+  *mid-slide* or repeating on every small wiggle is a bug. Use it whenever a widget has memory-like behaviour (peak hold,
+  trails, averages) and whenever the user reports "it sticks / jumps at 1:53" — ask for the CSV
+  and their settings (`--config`), reproduce, fix, re-run and compare the counts.
+- **In the running app** (CLAUDE.md "Driving the app for verification"): seed the project into
+  `localStorage`, play, and count `requestAnimationFrame` ticks for ~4 s — a healthy widget
+  keeps the monitor refresh rate (165 fps here); a stuttering one shows up as a lower count and
+  long frames. `page.screenshot()` of the whole window works, a `[class*=stage]` locator does not.
+
+After the tools pass, mentally check the output HTML for: text shadow present, sizes multiplied
+by `scale`, panel/contrast, `--` placeholder when data is missing. For map/tile widgets confirm
+the "loading map…" note disappears in the app.
+
+## Lessons from real requests (keep in mind)
+
+- **Ask for / fetch the reference design before building.** A Facebook post URL is behind a
+  login (WebFetch returns only the title); the image CDN URL (`scontent…fbcdn.net/….jpg`) can
+  be downloaded with `curl -A "Mozilla/5.0"` and viewed with the Read tool. Building a "classic"
+  gauge without seeing the reference cost a full rewrite.
+- **A pilot's "it stutters / renders badly" report** usually means the widget is heavy (see
+  Hard rule 6) — reproduce in the app with the fps count instead of guessing, and slim the
+  markup regardless.
+- **Pilots change settings you did not test with.** Re-run the replay with their exact
+  `--config` (column, range, smoothing, speed) — the peak-hold stall only appeared with
+  `BaroAlt (m)`, `Smooth ms 800`, `Max 200`, not with the synthetic escRPM profile.
+- **Every visual fix gets a preview at the extremes.** The 1 px seam, the marker clipped at the
+  top and the full dot poking past the marker at value 0 were all only visible at value ≈ 0 or
+  ≈ max — `preview-widgets.mjs` therefore always renders the flight minimum and maximum too.
+  Look at the PNG before saying "done".
+- **Variants of one widget (horizontal / vertical bar, arc / straight) come from one template.**
+  Keep one code file with a structural constant in the SETTINGS block (`var VERTICAL = __VERTICAL__;`,
+  filled in by a small build script that writes every variant into **one** import JSON — the
+  `widgets` array takes any number of entries). Reuse the sibling's settings definition and
+  drop only the knobs that make no sense for the new shape (sweep, centre disc, marker gap for a
+  bar); rename nothing the pilot already knows. Preview each variant separately (the preview tool
+  renders the first widget of a JSON — write per-variant JSONs from the build script).
+- **Deliverable for a one-off widget is the import JSON** (`widgets/<family>/<name>.json` in the repo, e.g. `widgets/bars/`,
+  when the user asks to "save it to a file"); regenerate it from the code + definition with a
+  script rather than editing the escaped string by hand, and remind the user that widgets already
+  on the stage are copies — re-import and re-apply their settings.

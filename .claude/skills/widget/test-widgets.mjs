@@ -98,6 +98,8 @@ const variants = widgets.flatMap((w) => {
 });
 for (const w of variants) {
   const settings = buildSettings(parseSettings(w.settings).defs, w.config);
+  // every new widget offers a global Opacity setting (see SKILL.md, Design language) — warn, do not fail (older examples)
+  if (!settings.opacity && !/[clip_to_range]$/.test(w.name)) console.log(`  ! ${w.name}: no "Opacity" setting (every widget should offer whole-widget opacity, key "opacity")`);
   // every settings.<key> the code reads must exist in the definition
   for (const m of (w.code || '').matchAll(/settings\.([a-z0-9_]+)/g)) if (!settings[m[1]]) failures.push(`${w.name}: code reads settings.${m[1]} but the definition has no such setting`);
   const cols = (w.columns || '')
