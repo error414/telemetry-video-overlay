@@ -1,19 +1,25 @@
 import { toTele } from './time.js';
+import { parseSettings, settingsFor, defsToSource } from './widgetSettings.js';
 /**
  * Widget API
  * ----------
  * A widget is a JavaScript function written by the user:
  *
- *   function (values, time, ctx) {
- *     return '<div>' + values[0] + '</div>';
+ *   function (settings, time, ctx) {
+ *     var COLOR = settings.color.value;
+ *     return '<div style="color:' + COLOR + '">' + ctx.fmt(ctx.values[0], 1) + '</div>';
  *   }
  *
- *  values : array with the current value of every column listed in the widget's
- *           "columns" setting, in the same order (comma separated column names of
- *           the CSV).  Numeric columns are linearly interpolated between samples.
- *           Undefined when the video time is outside the telemetry range.
- *  time   : telemetry time in integer milliseconds (video time × (1 + drift) + offset, see time.js toTele).
- *  ctx    : helper object
+ *  settings : the widget's settings (see widgetSettings.js): the "Settings definition" tab of
+ *             the editor declares them, the app renders a form (Widgets tab, editor) and passes
+ *             the chosen values here as { key: { value, name, type, … } }; key = the setting's
+ *             name in snake_case ("Label font" -> settings.label_font.value).
+ *  time     : telemetry time in integer milliseconds (video time × (1 + drift) + offset, see time.js toTele).
+ *  ctx      : helper object
+ *     ctx.values      array with the current value of every column listed in the widget's
+ *                     "columns" setting, in the same order (comma separated column names of
+ *                     the CSV). Numeric columns are linearly interpolated between samples.
+ *                     Undefined when the video time is outside the telemetry range.
  *     ctx.videoTime   video time in seconds
  *     ctx.width/height  widget box size in pixels
  *     ctx.columns     the column names array
@@ -28,8 +34,8 @@ import { toTele } from './time.js';
  *                     it in ctx.state cache keys, otherwise a widget rendered before the CSV
  *                     finished loading keeps its empty cache forever
  *
- * Returned HTML is placed inside an absolutely positioned box (x, y, width, height,
- * opacity are widget settings). Use inline styles / <style> tags inside the returned
+ * Returned HTML is placed inside an absolutely positioned box (x, y, width, height
+ * are widget properties). Use inline styles / <style> tags inside the returned
  * markup for looks. Inline SVG is fine. External resources (fonts, images from the
  * web) are NOT available during export.
  */
@@ -40,13 +46,13 @@ export function compileWidget(code) {
   if (compiled.has(code)) return compiled.get(code);
   let entry;
   try {
-    // Accept "function (...) {...}", "(a,b)=>...", or a bare body using `values`/`time`.
+    // Accept "function (...) {...}", "(a,b)=>...", or a bare body using `settings`/`time`/`ctx`.
     let fn;
     const trimmed = code.trim();
     if (/^(async\s+)?function\b/.test(trimmed) || /^\(?[\w\s,]*\)?\s*=>/.test(trimmed)) {
       fn = new Function('"use strict"; return (' + trimmed + ');')();
     } else {
-      fn = new Function('values', 'time', 'ctx', trimmed);
+      fn = new Function('settings', 'time', 'ctx', trimmed);
     }
     if (typeof fn !== 'function') throw new Error('Code did not evaluate to a function');
     entry = { fn, error: null };
@@ -119,15 +125,19 @@ export function exportRangeMs(range, duration, sync) {
  * env: { range, duration } — export range (video seconds) and video duration, for ctx.exportRange.
  * sync: {offset, drift} (or a plain offset in seconds) — see time.js.
  */
-export function renderWidget(widget, store, videoTime, sync, scopeMode = 'id', env = {}) {
+export function renderWidget(widget, store, videoTime, sync, env = {}) {
   const { fn, error } = compileWidget(widget.code || '');
   if (error) return { html: errBox('Compile error: ' + error), error };
+  const sdef = parseSettings(widget.settings);
+  if (sdef.error) return { html: errBox('Settings definition error: ' + sdef.error), error: 'Settings definition: ' + sdef.error };
+  const settings = settingsFor(sdef.defs, widget.config);
   const relSec = toTele(videoTime, sync);
   const cols = parseColumns(widget.columns);
   const values = cols.map((c) => store.valueAt(c, relSec, true));
   const timeMs = Math.round(relSec * 1000);
   if (!stateByWidget.has(widget.id)) stateByWidget.set(widget.id, {});
   const ctx = {
+    values,
     videoTime,
     width: widget.w,
     height: widget.h,
@@ -150,11 +160,8 @@ export function renderWidget(widget, store, videoTime, sync, scopeMode = 'id', e
     dataVersion: store.revision || 0,
   };
   try {
-    const out = fn(values, timeMs, ctx);
-    let html = out == null ? '' : String(out);
-    // per-widget stylesheet, scoped to this widget's box (#w-<id>)
-    if (widget.css && widget.css.trim()) html = '<style>' + scopeCss(widget.css, widgetDomId(widget), scopeMode) + '</style>' + html;
-    return { html, error: null };
+    const out = fn(settings, timeMs, ctx);
+    return { html: out == null ? '' : String(out), error: null };
   } catch (e) {
     const msg = String(e && e.message ? e.message : e);
     return { html: errBox('Runtime error: ' + msg), error: msg };
@@ -163,57 +170,6 @@ export function renderWidget(widget, store, videoTime, sync, scopeMode = 'id', e
 
 export function widgetDomId(widget) {
   return 'w-' + String(widget.id || 'x').replace(/[^\w-]/g, '');
-}
-
-/**
- * Prefix every selector of a stylesheet with `#id ` so rules only apply inside the widget box.
- * Handles plain rules and nested @media/@supports blocks; @keyframes/@font-face are left as is.
- * `:root` / `:host` refer to the widget box itself.
- */
-export function scopeCss(css, id, mode = 'id') {
-  // mode 'id': prefix with #id (export: plain DOM inside foreignObject)
-  // mode 'shadow': widget HTML lives in a shadow root → the box is :host
-  const prefix = mode === 'shadow' ? ':host' : '#' + id;
-  const scopeSelectors = (sel) =>
-    sel
-      .split(',')
-      .map((s) => {
-        s = s.trim();
-        if (!s) return s;
-        if (/^(:root|:host)\b/.test(s)) {
-          const rest = s.replace(/^(:root|:host)/, '');
-          return mode === 'shadow' && rest && !rest.startsWith(' ') ? ':host(' + rest.replace(/^\s+/, '') + ')' : prefix + rest;
-        }
-        return prefix + ' ' + s;
-      })
-      .join(', ');
-  const walk = (src) => {
-    let out = '';
-    let i = 0;
-    while (i < src.length) {
-      const open = src.indexOf('{', i);
-      if (open < 0) break;
-      const head = src.slice(i, open).trim();
-      // find the matching closing brace
-      let depth = 1;
-      let j = open + 1;
-      while (j < src.length && depth) {
-        if (src[j] === '{') depth++;
-        else if (src[j] === '}') depth--;
-        j++;
-      }
-      const body = src.slice(open + 1, j - 1);
-      if (head.startsWith('@')) {
-        if (/^@(media|supports|container|layer)/.test(head)) out += head + '{' + walk(body) + '}';
-        else out += head + '{' + body + '}';
-      } else {
-        out += scopeSelectors(head.replace(/\/\*[\s\S]*?\*\//g, '')) + '{' + body + '}';
-      }
-      i = j;
-    }
-    return out;
-  };
-  return walk(css.replace(/\/\*[\s\S]*?\*\//g, ''));
 }
 
 function errBox(msg) {
@@ -245,7 +201,7 @@ export const EMPTY_STAGE = { w: 1280, h: 720 };
 export function widgetBoxStyle(w, extra = '', lt = IDENTITY_LT) {
   const scale = lt.k !== 1 ? 'transform:scale(' + lt.k + ');transform-origin:0 0;' : '';
   return (
-    'position:absolute;left:' + w.x * lt.sx + 'px;top:' + w.y * lt.sy + 'px;width:' + w.w + 'px;height:' + w.h + 'px;opacity:' + (w.opacity ?? 1) + ';overflow:visible;box-sizing:border-box;' + scale + extra
+    'position:absolute;left:' + w.x * lt.sx + 'px;top:' + w.y * lt.sy + 'px;width:' + w.w + 'px;height:' + w.h + 'px;overflow:visible;box-sizing:border-box;' + scale + extra
   );
 }
 
@@ -256,7 +212,7 @@ export function composeFrameSvg(widgets, store, videoTime, sync, width, height, 
   const oy = region ? region.y : 0;
   for (const w of widgets) {
     if (w.visible === false) continue;
-    const { html } = renderWidget(w, store, videoTime, sync, 'id', env);
+    const { html } = renderWidget(w, store, videoTime, sync, env);
     // shift by the region origin in layout units so that (x - ox/sx) * sx = x*sx - ox
     const shifted = ox || oy ? { ...w, x: w.x - ox / lt.sx, y: w.y - oy / lt.sy } : w;
     inner += '<div id="' + widgetDomId(w) + '" style="' + widgetBoxStyle(shifted, '', lt) + '">' + html + '</div>';
@@ -293,8 +249,24 @@ export const byName = (items, key = (x) => x.name) => items.slice().sort((a, b) 
 /** Unique id for widgets, library entries and layouts. */
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
+/**
+ * Normalise a widget record coming from storage, a project file, an import or the examples:
+ * drops fields of older versions (css, opacity), guarantees settings (string) and config (object).
+ * The id is kept as is (callers decide about ids).
+ */
+export function cleanWidget(w) {
+  // eslint-disable-next-line no-unused-vars
+  const { css, opacity, ...rest } = w;
+  return {
+    ...rest,
+    settings: typeof rest.settings === 'string' ? rest.settings : '',
+    config: rest.config && typeof rest.config === 'object' && !Array.isArray(rest.config) ? rest.config : {},
+  };
+}
+
 export function newWidget(partial = {}) {
   // Always assign a fresh unique id (callers may pass id: undefined or a library id).
+  const rest = cleanWidget(partial);
   return {
     name: 'New widget',
     columns: '',
@@ -302,17 +274,27 @@ export function newWidget(partial = {}) {
     y: 40,
     w: 300,
     h: 80,
-    opacity: 1,
     visible: true,
-    css: '',
     code: DEFAULT_CODE,
-    ...partial,
+    ...rest,
+    // a widget with its own code but no definition (older library entries) simply has no settings
+    settings: partial.settings != null ? rest.settings : partial.code == null ? DEFAULT_SETTINGS : '',
     id: uid(),
   };
 }
 
-export const DEFAULT_CODE = `function (values, time, ctx) {
-  // values[i] = current value of the i-th column listed in "Columns"
-  return '<div style="font:bold 40px sans-serif;color:#fff;text-shadow:0 0 6px #000">'
-    + ctx.fmt(values[0], 1) + '</div>';
+export const DEFAULT_CODE = `function (settings, time, ctx) {
+  // ---------- SETTINGS ----------
+  var COLOR = settings.color.value;   // text color
+  var SIZE  = settings.size.value;    // font size in px
+  // -------------------------------
+  // ctx.values[i] = current value of the i-th column listed in "Columns"
+  return '<div style="font:bold ' + SIZE + 'px sans-serif;color:' + COLOR + ';text-shadow:0 0 6px #000">'
+    + ctx.fmt(ctx.values[0], 1) + '</div>';
 }`;
+
+/** Settings definition of a new widget (the form for DEFAULT_CODE). */
+export const DEFAULT_SETTINGS = defsToSource([
+  { name: 'Color', type: 'color_picker', default: '#ffffff', description: 'text color' },
+  { name: 'Size', type: 'int', default: 40, min: 8, max: 400, description: 'font size in px' },
+]);

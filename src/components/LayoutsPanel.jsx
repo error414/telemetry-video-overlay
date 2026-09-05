@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { byName, uid } from '../widgetRuntime.js';
+import { byName, uid, cleanWidget } from '../widgetRuntime.js';
 
 /** Layout file / stored entry: { name, layout: {w, h} (the video size the coordinates are in), widgets: [...] } */
 export function layoutFromJson(j, fallbackName) {
@@ -7,7 +7,7 @@ export function layoutFromJson(j, fallbackName) {
   if (!widgets.length) throw new Error('No widgets in file');
   // a project file works too: it carries the same widgets + layout fields; older ones were designed on 1080p
   const space = j && j.layout && j.layout.w ? { w: j.layout.w, h: j.layout.h } : { w: 1920, h: 1080 };
-  return { name: ((j && j.name) || fallbackName || 'Imported layout').trim(), layout: space, widgets: widgets.map(({ id, ...w }) => w) };
+  return { name: ((j && j.name) || fallbackName || 'Imported layout').trim(), layout: space, widgets: widgets.map(({ id, ...w }) => cleanWidget(w)) };
 }
 
 // Top-level row component — see LibraryPanel for why it must not be defined inside the panel.

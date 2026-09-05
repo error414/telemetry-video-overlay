@@ -24,7 +24,7 @@ result with the bundled ffmpeg. Overlay only: no video editing/trimming, no pred
   `_2` widget editor, `_3` sync bar / auto sync). Retake them when the UI they show changes.
 - `docs/`: developer notes (measured drifts, auto sync window options), not linked from README.
 - The widget API reference lives in the `widget` skill (`.claude/skills/widget/`) and in the
-  in-app **Widget API reference**, not in README or `manual/`.
+  in-app **API reference** tab of the widget editor, not in README or `manual/`.
 
 ### Why it exists and the workflow
 
@@ -115,11 +115,22 @@ to anything that must re-render on source changes.
 
 ### Widget runtime (src/widgetRuntime.js)
 
-A widget is `{id, name, columns, x, y, w, h, opacity, visible, css, code}` where `code` is a
-function `(values, time, ctx) -> HTML string`. `renderWidget()` compiles (cached per code
-string), builds `ctx` (interpolated values, `range`/`all`/`stats` history, `state` persisted per
-widget id, `image()` data-URL cache, `exportRange`, `dataVersion`) and never throws. Per-widget
-CSS is scoped by prefixing selectors with `#w-<id>`. The same function renders the live stage
+A widget is `{id, name, columns, x, y, w, h, visible, settings, config, code}` where
+`code` is a function `(settings, time, ctx) -> HTML string`, `settings` is the source text of the
+settings definition (JSON array of `{name, type, default, description, values, min, max, step}`,
+types `text | int | number | color_picker | bool | select`, optionally wrapped in
+`{group: {name, items: [...]}}` = collapsible section of the form, collapsed by default; edited in
+the editor's **Settings definition** tab) and `config` holds the values the user changed in the generated form
+(`{key: value}`, key = name in snake_case; missing = definition default). `src/widgetSettings.js`
+(pure, Node-friendly) parses the definition (JSON or JS literal, cached per string) and builds
+the `settings` object handed to the code: `settings.<key>.value`. `SettingsForm.jsx` renders the
+form (Widgets tab and editor), `ColorInput.jsx` is the in-app rgba colour popover (react-colorful)
+also used by the code editor's colour swatches. `renderWidget()` compiles (cached per code
+string), builds `ctx` (`values` of the listed columns, `range`/`all`/`stats` history, `state`
+persisted per widget id, `image()` data-URL cache, `exportRange`, `dataVersion`) and never
+throws. There is no per-widget CSS or whole-widget opacity any more: `cleanWidget()` drops those
+older fields and guarantees `settings`/`config` wherever a record enters the app (stored library and
+layouts, project files, widget/layout imports, `newWidget`). The same function renders the live stage
 (`Stage.jsx`, inside shadow roots via `ShadowHtml.jsx`), the editor preview, and export frames
 (`composeFrameSvg` → SVG `foreignObject` → canvas → RGBA), so widget HTML must be XHTML-safe
 (`toXhtml`) and must not rely on external resources.
@@ -128,9 +139,10 @@ Widget coordinates are in pixels of the current video; `layout: {w,h}` records t
 `rescaleWidgets` (App.jsx) converts when a differently sized video or layout is loaded
 (`EMPTY_STAGE` 1280×720 while no video is loaded).
 
-`src/examples.js` holds the built-in examples; each starts with a `SETTINGS` block. When
-adding or changing one, keep that convention (see the `widget` skill for the authoring
-guide).
+`src/examples.js` holds the built-in examples; each has a `settings` definition and starts with
+a `SETTINGS` block of `var X = settings.x.value;` lines. When adding or changing one, keep that
+convention and run `node .claude/skills/widget/test-widgets.mjs` (see the `widget` skill for the
+authoring guide).
 
 ### Export (src/export.js)
 

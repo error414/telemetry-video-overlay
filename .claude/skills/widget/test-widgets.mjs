@@ -1,18 +1,22 @@
 #!/usr/bin/env node
-// Smoke-test widgets in Node with synthetic telemetry and a fake ctx.
+// Smoke-test widgets in Node with synthetic telemetry, a fake ctx and the settings built from
+// each widget's settings definition (defaults; a "clip_to_range" bool is also tried switched on).
 //   node .claude/skills/widget/test-widgets.mjs                                 -> all EXAMPLE_WIDGETS from src/examples.js
 //   node .claude/skills/widget/test-widgets.mjs file.json                       -> widgets from an export/import JSON
-//   node .claude/skills/widget/test-widgets.mjs file.js --columns "a, b"        -> one bare widget function in a .js file
+//   node .claude/skills/widget/test-widgets.mjs file.js --columns "a, b" [--settings defs.json]
+//                                                                               -> one bare widget function in a .js file (+ its settings definition)
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', '..', '..');
+const { parseSettings, buildSettings } = await import(pathToFileURL(path.join(root, 'src', 'widgetSettings.js')).href);
 
 let widgets;
 if (process.argv[2] && process.argv[2].endsWith('.js')) {
   const ci = process.argv.indexOf('--columns');
-  widgets = [{ name: path.basename(process.argv[2]), columns: ci > 0 ? process.argv[ci + 1] : '', code: readFileSync(process.argv[2], 'utf8') }];
+  const si = process.argv.indexOf('--settings');
+  widgets = [{ name: path.basename(process.argv[2]), columns: ci > 0 ? process.argv[ci + 1] : '', settings: si > 0 ? readFileSync(process.argv[si + 1], 'utf8') : '', code: readFileSync(process.argv[2], 'utf8') }];
 } else if (process.argv[2]) {
   const j = JSON.parse(readFileSync(process.argv[2], 'utf8'));
   widgets = Array.isArray(j) ? j : j.widgets || [];
@@ -82,9 +86,20 @@ function stats(name) {
 
 const failures = [];
 const unknownCols = new Set();
-// widgets with a CLIP_TO_RANGE setting are also exercised with it switched on
-const variants = widgets.flatMap((w) => (/var CLIP_TO_RANGE\s*=\s*false/.test(w.code || '') ? [w, { ...w, name: w.name + ' [CLIP_TO_RANGE]', code: w.code.replace(/var CLIP_TO_RANGE\s*=\s*false/, 'var CLIP_TO_RANGE = true') }] : [w]));
+// widgets with a "clip_to_range" bool setting are also exercised with it switched on
+const variants = widgets.flatMap((w) => {
+  const { defs, error } = parseSettings(w.settings);
+  if (error) {
+    failures.push(`${w.name}: settings definition error: ${error}`);
+    return [];
+  }
+  const clip = defs.find((d) => d.key === 'clip_to_range' && d.type === 'bool');
+  return clip ? [w, { ...w, name: w.name + ' [clip_to_range]', config: { ...(w.config || {}), clip_to_range: true } }] : [w];
+});
 for (const w of variants) {
+  const settings = buildSettings(parseSettings(w.settings).defs, w.config);
+  // every settings.<key> the code reads must exist in the definition
+  for (const m of (w.code || '').matchAll(/settings\.([a-z0-9_]+)/g)) if (!settings[m[1]]) failures.push(`${w.name}: code reads settings.${m[1]} but the definition has no such setting`);
   const cols = (w.columns || '')
     .split(',')
     .map((s) => s.trim())
@@ -93,7 +108,7 @@ for (const w of variants) {
   let fn;
   try {
     const code = (w.code || '').trim();
-    fn = /^(async\s+)?function\b/.test(code) || /^\(?[\w\s,]*\)?\s*=>/.test(code) ? new Function('return (' + code + ')')() : new Function('values', 'time', 'ctx', code);
+    fn = /^(async\s+)?function\b/.test(code) || /^\(?[\w\s,]*\)?\s*=>/.test(code) ? new Function('return (' + code + ')')() : new Function('settings', 'time', 'ctx', code);
   } catch (e) {
     failures.push(`${w.name}: compile error: ${e.message}`);
     continue;
@@ -109,6 +124,7 @@ for (const w of variants) {
       const inRange = i >= 0 && i < N;
       const values = cols.map((c) => (inRange ? at(c, i) : undefined));
       const ctx = {
+        values,
         videoTime: time / 1000,
         width: W,
         height: H,
@@ -126,7 +142,7 @@ for (const w of variants) {
         image: (url) => 'data:image/png;base64,iVBORw0KGgo=' + url.length,
       };
       try {
-        const html = fn(values, time, ctx);
+        const html = fn(settings, time, ctx);
         if (typeof html !== 'string') throw new Error('did not return a string');
         if (inRange && !html.length) throw new Error('empty output at time ' + time);
         if (/https?:\/\//.test(html) && !/data:/.test(html)) console.warn(`  ! ${w.name}: contains an http(s) URL — will not load in export (use ctx.image)`);
@@ -135,7 +151,8 @@ for (const w of variants) {
       }
     }
   }
-  const html = fn(cols.map((c) => at(c, 50)), 5000, { videoTime: 5, width: w.w || 300, height: w.h || 100, columns: cols, state, get: (n) => at(n, 50), raw: (n) => at(n, 50), range, all: (n, m) => range(n, -1e12, 1e12, m), stats, duration: N * 100, exportRange: { from: 2000, to: 15000 }, dataVersion: 1, fmt: (v, d = 1) => (typeof v === 'number' ? v.toFixed(d) : '--'), image: () => 'data:image/png;base64,iVBORw0KGgo=' });
+  const vals = cols.map((c) => at(c, 50));
+  const html = fn(settings, 5000, { values: vals, videoTime: 5, width: w.w || 300, height: w.h || 100, columns: cols, state, get: (n) => at(n, 50), raw: (n) => at(n, 50), range, all: (n, m) => range(n, -1e12, 1e12, m), stats, duration: N * 100, exportRange: { from: 2000, to: 15000 }, dataVersion: 1, fmt: (v, d = 1) => (typeof v === 'number' ? v.toFixed(d) : '--'), image: () => 'data:image/png;base64,iVBORw0KGgo=' });
   console.log(`ok  ${w.name}  (${String(html).length} chars)`);
 }
 if (unknownCols.size) console.log('note: columns without synthetic data (values were undefined): ' + [...unknownCols].join(', '));

@@ -430,6 +430,165 @@ input[type='radio'] {
   text-transform: none;
 }
 
+/* ---- widget settings form (generated from the widget's settings definition) ---- */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+}
+/* one setting = row + optional description; a hairline separates neighbours */
+.setting {
+  padding: 4px 0;
+}
+.setting + .setting {
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+}
+.setting + .setting-group,
+.setting-group + .setting {
+  margin-top: 4px;
+}
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 40%) minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 6px;
+}
+.setting-name {
+  font: 600 10.5px var(--font-cond);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.setting-desc {
+  margin: -2px 0 0;
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--muted);
+  opacity: 0.8;
+}
+.setting-row .input {
+  height: 24px; /* one height for text, number and select — a native select is taller by default */
+  padding: 0 6px;
+  box-sizing: border-box;
+  font-size: 12px;
+  line-height: 22px;
+}
+.setting-row select.input {
+  padding: 0 2px 0 4px;
+}
+.setting-row .btn-icon {
+  padding: 1px 0;
+  width: 22px;
+}
+/* collapsible group of settings: a recessed sub-module inside the card (the body sits on --bg,
+   one step darker than the card), whose header carries a faint amber wash fading to the right —
+   amber = controls, the same hue the bay headers use, at a fraction of their weight */
+.setting-group {
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.setting-group-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px 5px 7px;
+  border-left: 2px solid rgba(242, 169, 59, 0.5);
+  background: linear-gradient(90deg, rgba(242, 169, 59, 0.13), rgba(242, 169, 59, 0.035) 55%, transparent);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s;
+}
+.setting-group-head:hover {
+  background: linear-gradient(90deg, rgba(242, 169, 59, 0.2), rgba(242, 169, 59, 0.06) 55%, transparent);
+}
+.setting-group-head .bay-chev {
+  color: var(--muted);
+}
+.setting-group.open .setting-group-head {
+  border-left-color: var(--accent);
+  border-bottom: 1px solid var(--border);
+}
+.setting-group.open .setting-group-head .bay-chev {
+  transform: rotate(90deg);
+  color: var(--accent);
+}
+.setting-group-name {
+  flex: 1;
+  font: 600 10.5px var(--font-cond);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.setting-group-body {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 8px 4px;
+}
+
+/* colour input: swatch + text; the swatch opens the in-app picker popover */
+.color-input {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.color-input .input {
+  flex: 1;
+  min-width: 0;
+}
+.color-swatch {
+  flex: none;
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  /* checkerboard shows through semi-transparent colours */
+  background: repeating-conic-gradient(#777 0 25%, #bbb 0 50%) 0 0 / 8px 8px;
+}
+.color-swatch > span {
+  position: absolute;
+  inset: 0;
+}
+.color-pop {
+  position: fixed;
+  z-index: 200;
+  width: 220px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+.color-pop .react-colorful {
+  width: 100%;
+  height: 170px;
+}
+.color-pop .react-colorful__saturation {
+  border-radius: 4px 4px 0 0;
+}
+.color-pop .react-colorful__last-control {
+  border-radius: 0 0 4px 4px;
+}
+.color-pop .react-colorful__hue,
+.color-pop .react-colorful__alpha {
+  height: 14px;
+}
+.color-pop .react-colorful__pointer {
+  width: 16px;
+  height: 16px;
+}
+
 /* ---- tabs (panel selector) ---- */
 .tab {
   display: flex;

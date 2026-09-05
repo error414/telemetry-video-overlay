@@ -2,39 +2,32 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toTele, toVideo } from '../time.js';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
-import { css as cssLang } from '@codemirror/lang-css';
 import { githubDark } from '@uiw/codemirror-theme-github';
 import { renderWidget, parseColumns, widgetDomId } from '../widgetRuntime.js';
-import { colorPicker } from './cmColorPicker.js';
+import { parseSettings } from '../widgetSettings.js';
+import { colorPicker, swatchText, replaceSwatchColor, formatLike } from './cmColorPicker.js';
+import { ColorPopover, parseColor } from './ColorInput.jsx';
+import SettingsForm from './SettingsForm.jsx';
 import ShadowHtml from './ShadowHtml.jsx';
 
-/** Build a readable selector for an element: tag#id.class1.class2 */
-function describe(el) {
-  let s = el.tagName.toLowerCase();
-  if (el.id) s += '#' + el.id;
-  const cls = typeof el.className === 'string' ? el.className : el.className && el.className.baseVal;
-  if (cls) s += '.' + cls.trim().split(/\s+/).join('.');
-  return s;
-}
-
 /**
- * Full-screen widget editor: CodeMirror (Code / CSS tabs) on the left, live preview + settings on
- * the right. Hovering the preview shows the element under the cursor (selector for the CSS tab);
- * clicking copies it. Edits apply immediately; "Close" just closes.
+ * Full-screen widget editor: CodeMirror (Code / Settings definition / API tabs) on the left, live
+ * preview + columns, box and the generated settings form on the right. Edits apply immediately;
+ * "Close" just closes.
  */
 export default function CodeEditorModal({ widget, updateWidget, onClose, store, time, sync, columnNames, ColumnsInput, env, title = 'Widget editor' }) {
   const [previewTime, setPreviewTime] = useState(time);
   const [follow, setFollow] = useState(true);
   const [tab, setTab] = useState('code');
-  const [hover, setHover] = useState(null); // {selector, path, rect}
-  const [copied, setCopied] = useState('');
-  const previewRef = useRef(null);
+  const [pick, setPick] = useState(null); // colour swatch clicked in the code: {view, wrap, rect, color}
   const boxRef = useRef(null);
+  const leftRef = useRef(null);
   useEffect(() => {
     if (follow) setPreviewTime(time);
   }, [time, follow]);
 
-  const out = useMemo(() => renderWidget(widget, store, previewTime, sync, 'shadow', env), [widget, store, previewTime, sync, env]);
+  const out = useMemo(() => renderWidget(widget, store, previewTime, sync, env), [widget, store, previewTime, sync, env]);
+  const sdef = useMemo(() => parseSettings(widget.settings), [widget.settings]);
   const cols = parseColumns(widget.columns);
   const missing = cols.filter((c) => !store.columns[c]);
   const duration = store.duration();
@@ -52,25 +45,24 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
 
-  // ---- hover inspector ----
-  const onPreviewMove = (e) => {
-    const box = boxRef.current;
-    const root = box && box.shadowRoot;
-    if (!root) return setHover(null);
-    // widget HTML lives in a shadow root → ask the shadow root for the element under the cursor
-    const el = root.elementFromPoint(e.clientX, e.clientY);
-    if (!el || el === box) return setHover(null);
-    const path = [];
-    for (let n = el; n && n !== root && n !== box; n = n.parentElement) path.unshift(describe(n));
-    const r = el.getBoundingClientRect();
-    const pr = previewRef.current.getBoundingClientRect();
-    setHover({ selector: describe(el), path: path.join(' > '), rect: { left: r.left - pr.left, top: r.top - pr.top, width: r.width, height: r.height } });
-  };
-  const copySelector = () => {
-    if (!hover) return;
-    navigator.clipboard.writeText(hover.selector);
-    setCopied(hover.selector);
-    setTimeout(() => setCopied(''), 1200);
+  // colour swatches in the code editor open the in-app picker (cmColorPicker.js dispatches cm-color-pick)
+  useEffect(() => {
+    const el = leftRef.current;
+    if (!el) return;
+    const h = (e) => {
+      const { view, wrap } = e.detail;
+      setPick({ view, wrap, rect: wrap.getBoundingClientRect(), color: parseColor(swatchText(wrap)) || { r: 255, g: 255, b: 255, a: 1 } });
+    };
+    el.addEventListener('cm-color-pick', h);
+    return () => el.removeEventListener('cm-color-pick', h);
+  }, []);
+  useEffect(() => setPick(null), [tab]);
+
+  const setConfig = (key, value) => {
+    const config = { ...(widget.config || {}) };
+    if (value === undefined) delete config[key];
+    else config[key] = value;
+    updateWidget(widget.id, { config });
   };
 
   return (
@@ -86,40 +78,53 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
         </header>
 
         <div className="flex-1 flex min-h-0">
-          {/* code / css */}
-          <div className="flex-1 min-w-0 flex flex-col" style={{ borderRight: '1px solid var(--border)' }}>
+          {/* code / settings definition / api */}
+          <div ref={leftRef} className="flex-1 min-w-0 flex flex-col" style={{ borderRight: '1px solid var(--border)' }}>
             <div className="flex items-center gap-1 px-2 text-xs" style={{ borderBottom: '1px solid var(--border)' }}>
               <div className={'tab ' + (tab === 'code' ? 'tab-active' : '')} onClick={() => setTab('code')}>
-                Code <span className="mono hint">function (values, time, ctx)</span>
+                Code <span className="mono hint" style={{ whiteSpace: 'nowrap' }}>function (settings, time, ctx)</span>
               </div>
-              <div className={'tab ' + (tab === 'css' ? 'tab-active' : '')} onClick={() => setTab('css')}>
-                CSS {widget.css && widget.css.trim() ? <span className="chip chip-accent ml-1">on</span> : null}
+              <div className={'tab ' + (tab === 'settings' ? 'tab-active' : '')} onClick={() => setTab('settings')}>
+                Settings definition{' '}
+                {sdef.error ? <span className="chip chip-bad ml-1">error</span> : sdef.defs.length ? <span className="chip chip-accent ml-1">{sdef.defs.length}</span> : null}
+              </div>
+              <div className={'tab ' + (tab === 'api' ? 'tab-active' : '')} onClick={() => setTab('api')}>
+                API reference
               </div>
               {out.error ? <span className="chip chip-bad ml-auto">error</span> : <span className="chip chip-good ml-auto">ok</span>}
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
               {tab === 'code' ? (
                 <CodeMirror value={widget.code} height="100%" theme={githubDark} extensions={[javascript(), colorPicker]} onChange={(v) => updateWidget(widget.id, { code: v })} basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }} style={{ height: '100%' }} />
-              ) : (
+              ) : tab === 'settings' ? (
                 <CodeMirror
-                  value={widget.css || ''}
+                  value={widget.settings || ''}
                   height="100%"
                   theme={githubDark}
-                  extensions={[cssLang(), colorPicker]}
-                  placeholder={CSS_PLACEHOLDER}
-                  onChange={(v) => updateWidget(widget.id, { css: v })}
+                  extensions={[javascript(), colorPicker]}
+                  placeholder={SETTINGS_PLACEHOLDER}
+                  onChange={(v) => updateWidget(widget.id, { settings: v })}
                   basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }}
                   style={{ height: '100%' }}
                 />
+              ) : (
+                <pre className="mono text-xs whitespace-pre-wrap p-3 h-full overflow-auto" style={{ color: 'var(--text)', margin: 0 }}>
+                  {API_DOC}
+                </pre>
               )}
             </div>
-            {tab === 'css' && (
+            {tab === 'settings' && (
               <div className="px-3 py-1.5 text-xs hint" style={{ borderTop: '1px solid var(--border)' }}>
-                Rules are scoped to this widget automatically; <span className="mono">:root</span> targets the widget box. Hover the preview to find ids/classes; click to copy. SVG text/shapes use <span className="mono">fill</span>/<span className="mono">stroke</span> and are moved with <span className="mono">transform: translate(10px, -4px)</span> (margin/left/top have no effect inside &lt;svg&gt;).
+                A JSON array of settings, optionally in groups (<span className="mono">{'{ "group": { "name", "items": [...] } }'}</span> = a collapsible section); the form is generated from it (right, and in the Widgets tab). Types: <span className="mono">text</span>, <span className="mono">int</span>, <span className="mono">number</span>, <span className="mono">color_picker</span>, <span className="mono">bool</span>, <span className="mono">select</span> (with <span className="mono">values</span>). The code reads a setting as <span className="mono">settings.&lt;name in snake_case&gt;.value</span>.
               </div>
             )}
-            {out.error && (
-              <pre className="px-3 py-2 text-xs whitespace-pre-wrap" style={{ color: 'var(--bad)', background: 'rgba(229,100,92,.08)', borderTop: '1px solid var(--border)', maxHeight: 120, overflow: 'auto' }}>
+            {tab === 'settings' && sdef.error && (
+              <pre className="px-3 py-2 text-xs whitespace-pre-wrap" style={{ color: 'var(--bad)', background: 'rgba(229,100,92,.08)', borderTop: '1px solid var(--border)', margin: 0 }}>
+                {sdef.error}
+              </pre>
+            )}
+            {tab === 'code' && out.error && (
+              <pre className="px-3 py-2 text-xs whitespace-pre-wrap" style={{ color: 'var(--bad)', background: 'rgba(229,100,92,.08)', borderTop: '1px solid var(--border)', maxHeight: 120, overflow: 'auto', margin: 0 }}>
                 {out.error}
               </pre>
             )}
@@ -135,32 +140,15 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
                 {widget.w}×{widget.h} · {Math.round(scale * 100)}%
               </span>
             </div>
-            <div
-              ref={previewRef}
-              className="flex items-center justify-center"
-              style={{ height: previewH, background: 'repeating-conic-gradient(#20262d 0 25%, #191f25 0 50%) 0 0 / 20px 20px', position: 'relative', overflow: 'hidden', cursor: hover ? 'copy' : 'default' }}
-              onMouseMove={onPreviewMove}
-              onMouseLeave={() => setHover(null)}
-              onClick={copySelector}
-            >
+            <div className="flex items-center justify-center" style={{ height: previewH, background: 'repeating-conic-gradient(#20262d 0 25%, #191f25 0 50%) 0 0 / 20px 20px', position: 'relative', overflow: 'hidden' }}>
               <div style={{ width: widget.w * scale, height: widget.h * scale, position: 'relative' }}>
                 <ShadowHtml
                   hostRef={boxRef}
                   id={widgetDomId(widget)}
                   html={out.html}
-                  style={{ width: widget.w, height: widget.h, transform: `scale(${scale})`, transformOrigin: '0 0', position: 'absolute', opacity: widget.opacity, color: '#fff', fontFamily: 'Arial, Helvetica, sans-serif', outline: '1px dashed rgba(255,255,255,.25)' }}
+                  style={{ width: widget.w, height: widget.h, transform: `scale(${scale})`, transformOrigin: '0 0', position: 'absolute', color: '#fff', fontFamily: 'Arial, Helvetica, sans-serif', outline: '1px dashed rgba(255,255,255,.25)' }}
                 />
               </div>
-              {hover && (
-                <>
-                  <div style={{ position: 'absolute', pointerEvents: 'none', left: hover.rect.left, top: hover.rect.top, width: hover.rect.width, height: hover.rect.height, outline: '1.5px solid var(--accent)', background: 'rgba(242,169,59,.12)' }} />
-                  <div className="mono" style={{ position: 'absolute', pointerEvents: 'none', left: 8, bottom: 8, right: 8, padding: '4px 8px', borderRadius: 4, background: 'rgba(15,19,23,.92)', border: '1px solid var(--border-strong)', fontSize: 11, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    <span style={{ color: 'var(--accent)' }}>{hover.selector}</span>
-                    <span className="hint"> — {hover.path}</span>
-                    {copied === hover.selector && <span style={{ color: 'var(--good)' }}> · copied</span>}
-                  </div>
-                </>
-              )}
             </div>
             <div className="flex items-center gap-2 px-3 py-2 text-xs" style={{ borderBottom: '1px solid var(--border)', borderTop: '1px solid var(--border)' }}>
               <label className="flex items-center gap-1 cursor-pointer">
@@ -172,7 +160,7 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
               </span>
             </div>
             <div className="flex-1 overflow-y-auto px-3 pb-3">
-              <label className="label">Columns → values[0], values[1], …</label>
+              <label className="label">Columns → ctx.values[0], ctx.values[1], …</label>
               <ColumnsInput value={widget.columns} onChange={(v) => updateWidget(widget.id, { columns: v })} columnNames={columnNames} />
               {missing.length > 0 && (
                 <div className="text-xs mt-1" style={{ color: 'var(--warn)' }}>
@@ -184,34 +172,93 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
                   {cols.map((c, i) => `[${i}] ${fmt(store.valueAt(c, toTele(previewTime, sync)))}`).join('   ')}
                 </div>
               )}
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 {['x', 'y', 'w', 'h'].map((k) => (
                   <label key={k}>
                     <span className="label">{k}</span>
                     <input className="input mono" type="number" value={widget[k]} onChange={(e) => updateWidget(widget.id, { [k]: Number(e.target.value) })} />
                   </label>
                 ))}
-                <label>
-                  <span className="label">opacity</span>
-                  <input className="input mono" type="number" min={0} max={1} step={0.05} value={widget.opacity} onChange={(e) => updateWidget(widget.id, { opacity: Number(e.target.value) })} />
-                </label>
               </div>
+              <label className="label">Settings</label>
+              <SettingsForm key={widget.id} defs={sdef.defs} sections={sdef.sections} error={sdef.error} config={widget.config} onChange={setConfig} onReset={() => updateWidget(widget.id, { config: {} })} />
             </div>
           </div>
         </div>
       </div>
+      {pick && (
+        <ColorPopover
+          anchorRect={pick.rect}
+          color={pick.color}
+          onChange={(c) => {
+            if (!replaceSwatchColor(pick.view, pick.wrap, formatLike(swatchText(pick.wrap), c))) return setPick(null);
+            setPick((p) => (p ? { ...p, color: c } : p));
+          }}
+          onClose={() => setPick(null)}
+        />
+      )}
     </div>
   );
 }
 
-const CSS_PLACEHOLDER = `/* Styles for this widget only. Examples: */
-:root { filter: drop-shadow(0 0 6px #000); }   /* the widget box */
-.label { font-weight: bold; fill: #ffd166; }    /* SVG text uses fill, not color */
-#box-left .stick { fill: #4fc3c7; }
-text.value { transform: translate(10px, -4px); } /* move SVG elements with transform (px units) */
-`;
+const SETTINGS_PLACEHOLDER = `[
+  { "name": "Color",  "type": "color_picker", "default": "rgba(255,255,255,.9)", "description": "text color" },
+  { "name": "Size",   "type": "int",    "default": 40, "min": 8, "max": 200 },
+  { "group": { "name": "Sticks", "items": [
+    { "name": "Mode",   "type": "select", "values": { "1": "Mode 1", "2": "Mode 2" }, "default": 2 }
+  ] } },
+  { "group": { "name": "Labels", "items": [
+    { "name": "Labels", "type": "bool",   "default": true },
+    { "name": "Label font", "type": "text", "default": "Arial" }
+  ] } }
+]
+// in the code: var MODE = settings.mode.value;  var FONT = settings.label_font.value;
+// groups are collapsible sections of the form; keys are unique across the whole definition`;
 
 function fmt(v) {
   if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(3);
   return v === undefined ? 'undefined' : JSON.stringify(v);
 }
+
+export const API_DOC = `function (settings, time, ctx) { return '<div>…</div>'; }
+
+settings   the widget's settings, generated from the Settings definition tab:
+           settings.<key>.value  (key = the setting's name in snake_case,
+           "Label font" -> settings.label_font.value; also .name, .type,
+           .label for selects). The user changes them in the form (Widgets
+           tab / editor); the definition gives the defaults.
+time       telemetry time in ms (integer) = video time × (1 + drift) + offset
+ctx.values           array of current values of the listed columns (interpolated)
+ctx.videoTime        video time (s)
+ctx.width, ctx.height  widget box size (px)
+ctx.columns          array of column names
+ctx.get(name)        interpolated value of any column
+ctx.raw(name)        last sample (no interpolation), e.g. for flags/strings
+ctx.range(name, fromMs, toMs, maxPoints)  -> [{t, v}] history window
+ctx.all(name, maxPoints)  -> [{t, v}] the WHOLE flight (profiles, tracks)
+ctx.stats(name)      -> {min, max, mean, count, tMin, tMax} whole-flight
+                     statistics (use for stable axis scaling)
+ctx.duration         telemetry length in ms
+ctx.exportRange      {from, to} in telemetry ms (sync bar in/out points or the
+                     whole video); null without a video
+ctx.dataVersion      changes when telemetry files change — put it in every
+                     ctx.state cache key
+ctx.state            object persisting between calls (cache here)
+ctx.fmt(v, digits)   number formatting helper
+ctx.image(url)       loads an image (map tile, icon) and returns a data: URL
+                     once cached; undefined while loading (widget re-renders
+                     automatically). Works in export too.
+
+Settings definition (JSON array, one object per setting, or a group
+{ "group": { "name": "…", "items": [ …settings… ] } } = collapsible section):
+  name         shown in the form; the key is derived from it ("key" overrides)
+  type         text | int | number | color_picker | bool | select
+  default      value used until the user changes it
+  description  help text under the field
+  values       select only: { "value": "label", … } or ["a", "b"]
+               (numeric keys come back as numbers when default is a number)
+  min, max, step   int / number only
+
+The returned HTML is placed in an absolutely positioned box; style it with
+inline CSS or a <style> tag. Inline <svg> works. External URLs (web fonts,
+images) are not available in export – embed as data: URIs instead.`;
