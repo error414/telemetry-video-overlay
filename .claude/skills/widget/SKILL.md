@@ -121,6 +121,9 @@ Export renders the returned HTML through an SVG `<foreignObject>` into a canvas:
 4. **Unique SVG defs ids.** In export all widgets are composed into one SVG document, so
    `<defs>` ids (`linearGradient`, `clipPath`, filters) collide across widgets. Generate a
    unique id once: `var uid = ctx.state.uid || (ctx.state.uid = 'u' + Math.random().toString(36).slice(2, 8));`
+   and append a per-frame counter (`+ (ctx.state.frame = ((ctx.state.frame || 0) + 1) % 1e6)`) — the
+   preview tool renders several frames of one widget (shared `ctx.state`) into one page, and with one
+   id the first `<clipPath>` / gradient wins in every cell.
 5. **Never throw.** Guard `typeof v === 'number'` before math. Outside the telemetry range all
    `ctx.values` are `undefined` — return a sensible placeholder (`'--'`, empty graph), not an error.
    Read every setting **only** through keys that exist in the definition (a typo throws).
@@ -182,6 +185,18 @@ Widgets float over drone video: sky one second, dark forest the next. The house 
   of the same size (black fill arc over a light track, a bar over its trough) shows the lighter
   colour's anti-aliased edge on both sides as a thin bright outline. Draw the cover 1–2 px
   (scaled) wider than what it hides, or do not draw the hidden part at all.
+- **Stacked curved shapes share ONE path.** A fill over a track, a ghost over a fill, a highlight
+  over a ring: give every layer the *same* SVG path (same start, end, radius, caps) and vary only
+  stroke width, colour, opacity and a `clipPath` wedge. Never draw the partial layer as its own
+  shorter arc: Chrome approximates each arc by segments chosen from its total sweep, so two arcs
+  with different sweeps or caps are different curves — the lower one peeks out along the edge as
+  a wavy bright fringe on light video, and a partial arc's width "breathes" as the value changes
+  (see Arc gauge geometry). A translucent layer (ghost / peak / trail) gets exactly the width of
+  what it lies on — a wider translucent stroke shows as a dark outline on light video.
+- **Look at it on light video too.** The default preview ground is dark green, where dark fills
+  hide every fringe. Fringes, halos, seams and translucent overlaps only show on sand, sky or snow:
+  run `preview-widgets.mjs --bg '#c8a070'` (and `--bg '#fff'` for white text / light tracks)
+  before handing over any widget that layers shapes.
 - **Inline SVG is the tool of choice** for gauges, graphs, tapes, roses, maps. Give the root
   `<svg>` numeric `width`/`height` (= `ctx.width`/`ctx.height`), not percentages. Remember SVG
   text/shapes use `fill`/`stroke` (not `color`/`background`) and move with `transform`, not
@@ -488,13 +503,28 @@ function arc(r, a1, a2, color, width, cap) {              // stroke-only arc; ca
     + '" fill="none" stroke="' + color + '" stroke-width="' + width.toFixed(2) + '" stroke-linecap="' + cap + '"/>';
 }
 // track: round caps. fill 0..value: BUTT caps (a round cap overshoots the end marker by tw/2).
-// The rounded zero end is a HALF disc bulging backwards only — a full dot sticks out past the
-// marker whenever the value is near zero (sweep-flag 0 = the half on the "before zero" side):
-var t0 = a0 * Math.PI / 180, hx = cx + Rt * Math.sin(t0), hy = cy - Rt * Math.cos(t0), hr = fw / 2;
-var nx = Math.sin(t0) * hr, ny = -Math.cos(t0) * hr;
-out += '<path d="M' + (hx + nx).toFixed(2) + ',' + (hy + ny).toFixed(2) + ' A' + hr.toFixed(2) + ',' + hr.toFixed(2) + ' 0 0 0 ' + (hx - nx).toFixed(2) + ',' + (hy - ny).toFixed(2) + ' Z" fill="' + FILL + '"/>';
-if (ang(cur) - a0 >= 0.05) out += arc(Rt, a0 - ov, ang(cur), FILL, fw, 'butt');   // starts under the half disc
-out += arc(Rt, a0, ang(cur), FILL, tw, 'butt');
+// The rounded zero end must bulge backwards only — a full dot sticks out past the marker whenever
+// the value is near zero. With the clipped full-track path below, the track's own round start cap
+// does exactly that (the wedge starts 20 deg before zero, the clip's radial edge is at the value).
+// The value-length fill is NOT a partial arc path: Chrome splits an SVG arc into segments by its total
+// sweep and re-approximates the curve whenever the end angle changes, so a partial arc's stroke width
+// visibly wobbles by 1 px as the value moves (measured: 24 <-> 25 px at a fixed spot; a dash of a fixed
+// path is re-extracted as a new curve and wobbles as well). Draw the FULL-sweep arc (fixed geometry)
+// and clip it with a polygon wedge — only the wedge's radial edge at the value moves. Give the fill the
+// track's EXACT path (same start, end, radius, round caps): two arcs with different sweeps or caps are
+// approximated by different segment sets and the light track can peek out from under the fill on light
+// video; the round start cap bulging backwards also replaces the half disc, and a translucent ghost /
+// peak arc uses the track width tw (a wider translucent stroke shows as a dark fringe on light video).
+var uid = (s.uid || (s.uid = 'u' + Math.random().toString(36).slice(2, 8))) + (s.frame = ((s.frame || 0) + 1) % 1000000);
+function wedge(id, a1, a2) {                       // clipPath polygon covering dial angles a1..a2, well past the box
+  var Rf = S * 1.2, n = Math.max(1, Math.ceil((a2 - a1) / 45)), d = 'M' + cx.toFixed(2) + ',' + cy.toFixed(2), k, p;
+  for (k = 0; k <= n; k++) { p = pt(Rf, a1 + (a2 - a1) * k / n); d += ' L' + p[0] + ',' + p[1]; }
+  return '<clipPath id="' + id + '"><path d="' + d + ' Z"/></clipPath>';
+}
+if (ang(cur) - a0 >= 0.05) out += wedge(uid + 'f', a0 - 20, ang(cur))                 // -20: keeps the round start cap
+  + arc(Rt, a0, a0 + SWEEP, FILL, fw, 'round', ' clip-path="url(#' + uid + 'f)"');   // arc() takes an extra-attributes arg
+// the per-frame counter in the id matters: preview-widgets.mjs renders several frames of one widget (shared
+// ctx.state) into one page, and with one id the first clip wins in every cell
 // radial marker line at the value: from just outside the track to GAP px before the centre disc
 var m1 = pt(rc + GAP * scale, ang(cur)), m2 = pt(Rt + tw * 0.7, ang(cur));
 ```
@@ -656,7 +686,7 @@ node .claude/skills/widget/test-widgets.mjs my.js --columns "BaroAlt (m)" --sett
 The test cannot judge looks or behaviour over time. Two more tools in this folder cover that:
 
 ```
-node .claude/skills/widget/preview-widgets.mjs my.json [--csv LOG.csv] [--times 1000,2500,5400] [--config '{"max_rpm":200}'] [--out dir]
+node .claude/skills/widget/preview-widgets.mjs my.json [--csv LOG.csv] [--times 1000,2500,5400] [--config '{"max_rpm":200}'] [--bg '#c8a070'] [--out dir]
 node .claude/skills/widget/replay-csv.mjs my.json --csv LOG.csv --stalls [--config '{...}'] [--fps 30] [--from ms --to ms]
 # --columns "BaroAlt (m)" overrides the columns stored in the JSON (both tools) — use the pilot's real column
 ```
@@ -666,7 +696,13 @@ node .claude/skills/widget/replay-csv.mjs my.json --csv LOG.csv --stalls [--conf
   `preview.html`, then screenshots it to `preview.png` with the project's Electron
   (offscreen window; `ELECTRON_RUN_AS_NODE` is stripped from the env). **Open the PNG with the
   Read tool and look** — this is how label rounding, cap overshoot, overlapping text and missing
-  placeholders were caught. Run it after every visual change, before handing over.
+  placeholders were caught. Run it after every visual change, before handing over, **twice**: on the
+  default dark-green ground and with `--bg '#c8a070'` (sand) — a light ground is where the track
+  peeking out from under a fill, a translucent ghost's dark outline and 1 px seams become visible.
+  For a fringe you cannot judge by eye, measure: render the widget at many values into one page,
+  screenshot it and count pixels brighter / darker than the ground in a thin band along the edge
+  (`nativeImage.toBitmap()` in a tiny Electron script) — a real fringe gives a non-zero count,
+  and the count before / after a fix is the proof.
 - **`replay-csv.mjs`** runs the widget frame by frame over a whole real log (decimated to
   ~120 Hz like the app) and prints time, column-0 value and the visible text of each frame;
   `--stalls` lists intervals where the visible text (or, with `--watch "MAX ([\d.]+)"`, one
@@ -696,6 +732,22 @@ the "loading map…" note disappears in the app.
 - **Pilots change settings you did not test with.** Re-run the replay with their exact
   `--config` (column, range, smoothing, speed) — the peak-hold stall only appeared with
   `BaroAlt (m)`, `Smooth ms 800`, `Max 200`, not with the synthetic escRPM profile.
+- **A partial SVG arc "breathes".** The pilot saw the filled arc of the RPM dial change width by
+  1–2 px as the marker passed ~80 %. Measured with a pixel scan (a page with the widget at
+  50..100 % in 1 % steps, count dark pixels along a fixed ray in an Electron screenshot): the
+  stroke width flips 24 ↔ 25 px whenever the end angle changes, because the browser re-approximates
+  the arc per total sweep. Fixed full-sweep arc + polygon `clipPath` wedge (snippet in Arc gauge
+  geometry) gives a constant width; `stroke-dasharray` on a fixed path does not. Verified identical
+  through the export path (`foreignObject` → canvas).
+- **Jagged edges in a pilot's screenshot may not be the widget's.** "The bar looks jagged on
+  light video" reproduced nowhere in the widget — not standalone, not in the app stage over a
+  light video (pixel count along both fill edges: zero fringe pixels at eight values), not in
+  the raw export frame, not after ffmpeg's `overlay` — but it did after the h264/HEVC encoder
+  (CRF 20, even 4:4:4): a near-black stroke on a light ground is the highest-contrast edge the
+  encoder sees, and ringing on it looks like serration when zoomed. Reproduce in this order
+  before touching code — standalone preview on a light ground, the app stage, the raw export
+  frame, the encoded file — and when only the encoded file shows it, the answer is the export
+  quality setting (Constant quality / PNG sequence), not a widget change.
 - **Every visual fix gets a preview at the extremes.** The 1 px seam, the marker clipped at the
   top and the full dot poking past the marker at value 0 were all only visible at value ≈ 0 or
   ≈ max — `preview-widgets.mjs` therefore always renders the flight minimum and maximum too.

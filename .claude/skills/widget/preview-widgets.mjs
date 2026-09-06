@@ -7,6 +7,8 @@
 //   --csv file.csv          real telemetry instead of the synthetic profile (first widget column is read from it)
 //   --times 1000,2500,5400  telemetry times (ms) to render (default: a burst-and-decay profile 1000..7400)
 //   --config '{"max_rpm":200}'  settings overrides (keys as in the definition, snake_case)
+//   --bg '#c8a070'          page background (default dark green #3a5a2a); run once with a light ground (sand / white)
+//                           too — fringes, halos, seams and translucent overlaps only show there
 //   --out dir               where preview.html / preview.png go (default: the current directory)
 //   --no-png                skip the Electron screenshot
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -20,7 +22,7 @@ const { parseSettings, buildSettings } = await import(pathToFileURL(path.join(ro
 const argv = process.argv.slice(2);
 const opt = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; };
 const file = argv[0];
-if (!file) { console.error('usage: preview-widgets.mjs <widget.json | widget.js --columns "..." --settings defs.json> [--csv f] [--times a,b,c] [--config json] [--out dir] [--no-png]'); process.exit(2); }
+if (!file) { console.error('usage: preview-widgets.mjs <widget.json | widget.js --columns "..." --settings defs.json> [--csv f] [--times a,b,c] [--config json] [--bg color] [--out dir] [--no-png]'); process.exit(2); }
 let w;
 if (file.endsWith('.js')) w = { name: path.basename(file), columns: opt('--columns', ''), settings: opt('--settings') ? readFileSync(opt('--settings'), 'utf8') : '', code: readFileSync(file, 'utf8'), w: 320, h: 320 };
 else { const j = JSON.parse(readFileSync(file, 'utf8')); w = (Array.isArray(j) ? j : j.widgets || [])[0]; }
@@ -74,7 +76,8 @@ const ctxAt = (t, width, height, state) => ({
 
 const times = opt('--times') ? opt('--times').split(',').map(Number) : [1000, 2500, 3600, 4600, 5400, 6200, 7400];
 const W = w.w || 320, H = w.h || 320, state = {};
-let page = '<!doctype html><html><body style="background:#3a5a2a;padding:16px;font-family:Arial;color:#fff">';
+const bg = opt('--bg', '#3a5a2a');
+let page = '<!doctype html><html><body style="background:' + bg + ';padding:16px;font-family:Arial;color:#fff">';
 const cell = (label, html) => '<div style="display:inline-block;vertical-align:top;margin:8px"><div style="font-size:12px;margin-bottom:4px">' + label + '</div><div style="position:relative;width:' + W + 'px;height:' + H + 'px">' + html + '</div></div>';
 for (const t of times) page += cell('t=' + t + ' ms', fn(settings, t, ctxAt(t, W, H, state)));
 // extremes: the flight minimum and maximum of column 0 — clipping, seams and cap overshoot show up only there
