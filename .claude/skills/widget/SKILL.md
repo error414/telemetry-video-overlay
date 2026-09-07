@@ -241,8 +241,14 @@ block, keep the rest readable too. Modern syntax compiles but don't use backtick
   strokes, radii, paddings, offsets. For density knobs (e.g. tape `DEG_PER_PX`) **divide** by
   `scale` so the widget looks identical, just bigger. For elements keyed to one dimension
   (bar thickness) scale from that dimension: `Math.min(ctx.width, ctx.height) / DEFH`.
-- **Smooth noisy data.** Baro, current, GPS speed are noisy — offer `SMOOTH_MS` (centered
-  moving average, `0 = off`; snippet below). Smooth only when `ctx.values[i]` is a number:
+- **Smoothing — mandatory in every widget that shows a numeric column.** Every generated widget
+  offers a `Smooth ms` setting (`int`, default 0 = off, min 0, step 50, key `smooth_ms`, in the
+  `Data` group, description `smoothing window in ms, centered on the current time (0 = off)`) and
+  applies it to every displayed column: centered moving average (snippet below) for plain values,
+  the circular mean snippet for headings / roll / any angle that wraps. Only widgets with no numeric
+  data at all (flight mode text, flag lists, map tiles) may leave it out; the test runner warns when
+  the key is missing. Baro, current, GPS speed are noisy, attitude is not — the default stays 0 so
+  the pilot opts in, but the knob is always there. Smooth only when `ctx.values[i]` is a number:
   outside the flight `ctx.range` still returns the nearest edge sample, so an unguarded average
   shows the first/last value instead of `--` before and after the telemetry. The displayed value and marker/dot must follow the
   **smoothed** curve, not the raw sample. For headings/angles use the circular mean snippet
@@ -674,7 +680,8 @@ a fake `ctx` and the `settings` built from the definition defaults (plus `clip_t
 at several times **including out-of-range** and at two widget sizes, and fails on exceptions,
 non-string/empty output, http URLs in the output, a definition that does not parse, or a
 `settings.<key>` in the code that the definition lacks; it also warns when the definition has no
-`opacity` setting (mandatory for every new widget, see Design language):
+`opacity` setting (mandatory for every new widget, see Design language) or no `smooth_ms` setting
+(mandatory for every widget showing a numeric column, see Sizing, smoothing, caching):
 
 ```
 node .claude/skills/widget/test-widgets.mjs                                # all src/examples.js entries
