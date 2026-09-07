@@ -13,6 +13,20 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
   const frame = 1 / (video && video.fps ? video.fps : 30);
   const sync = { offset, drift };
   const [playing, setPlaying] = useState(false);
+  // audio mute of the preview only (the export never carries the overlay's audio state); remembered across sessions
+  const [muted, setMuted] = useState(() => {
+    try {
+      return localStorage.getItem('telemetry-overlay.muted') === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('telemetry-overlay.muted', muted ? '1' : '0');
+    } catch {}
+    if (videoRef.current) videoRef.current.muted = muted;
+  }, [muted, videoRef, video]);
   const [graphCol, setGraphCol] = useState('');
   const canvasRef = useRef(null);
   // bumped whenever the canvas changes size, so the sparkline effect below re-renders the bitmap at the
@@ -122,7 +136,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
     seek(time + n / (video ? video.fps : 30));
   };
 
-  // keyboard: space play, arrows frame step, shift+arrows = 1s, [ ] adjust offset, I / O export in/out point
+  // keyboard: space play, arrows frame step, shift+arrows = 1s, [ ] adjust offset, I / O export in/out point, M mute
   useEffect(() => {
     const h = (e) => {
       // ignore shortcuts while typing anywhere editable (inputs, textareas, CodeMirror's contenteditable)
@@ -137,6 +151,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
       else if (e.key === ']') setOffset((o) => +(o + (e.shiftKey ? 1 : 0.01)).toFixed(3));
       else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'i' || e.key === 'I')) setPoint('in', time);
       else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'o' || e.key === 'O')) setPoint('out', time);
+      else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'm' || e.key === 'M')) setMuted((m) => !m);
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -329,6 +344,19 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
               <rect x="12" y="2.5" width="2" height="11" />
             </svg>
           </button>
+          <button className={'btn-transport quiet' + (muted ? ' on' : '')} onClick={() => setMuted((m) => !m)} aria-pressed={muted} title={muted ? 'Unmute video (M)' : 'Mute video (M)'}>
+            {muted ? (
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M2.5 6h2.5l3.5-3v10l-3.5-3H2.5z" fill="currentColor" stroke="none" />
+                <path d="M10.5 6l4 4M14.5 6l-4 4" />
+              </svg>
+            ) : (
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M2.5 6h2.5l3.5-3v10l-3.5-3H2.5z" fill="currentColor" stroke="none" />
+                <path d="M11 5.5a3.5 3.5 0 0 1 0 5M13 3.5a6 6 0 0 1 0 9" />
+              </svg>
+            )}
+          </button>
         </div>
         <div className="timecode">
           <span className="tc-main">{fmtTime(time)}</span>
@@ -388,7 +416,7 @@ export default function SyncBar({ video, videoRef, time, setTime, offset, setOff
                 playback locked — create a proxy in Files
               </span>
             )}
-            <span className="hint rack-keys" style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>space · ←/→ · [ ] · I/O</span>
+            <span className="hint rack-keys" style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>space · ←/→ · [ ] · I/O · M</span>
           </div>
         </div>
 

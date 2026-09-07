@@ -158,6 +158,22 @@ input[type='number'] {
 .btn-transport svg {
   display: block;
 }
+/* quiet: borderless secondary control of the deck (mute); lights amber when engaged */
+.btn-transport.quiet {
+  width: 26px;
+  margin-left: 4px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.btn-transport.quiet:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+  color: var(--text);
+}
+.btn-transport.quiet.on {
+  color: var(--accent);
+}
 
 /* ---- inputs ---- */
 .input {
