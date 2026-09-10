@@ -16,7 +16,7 @@ function liveProxyMime(video) {
   return 'video/mp4; codecs="avc1.640033"';
 }
 
-export default function Stage({ video, videoRef, widgets, store, storeVersion, sync, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, layout, setStatus, onOpenEditor, empty, range }) {
+export default function Stage({ video, videoRef, widgets, store, storeVersion, sync, time, setTime, selectedId, setSelectedId, updateWidget, editMode, grid, layout, setStatus, onOpenEditor, empty, range, showWidgets = true }) {
   const gridSize = grid && grid.size > 1 ? grid.size : 1;
   // snap to grid unless disabled; holding Alt while dragging temporarily disables snapping
   const snap = (v, alt) => (grid && grid.snap && !alt ? Math.round(v / gridSize) * gridSize : Math.round(v));
@@ -98,7 +98,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, s
   }, []);
 
   const env = useMemo(() => ({ range, duration: video ? video.duration : 0 }), [range, video]);
-  const rendered = useMemo(() => widgets.map((w) => ({ w, out: renderWidget(w, store, time, sync, env) })), [widgets, store, time, sync, storeVersion, assetVersion, env]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rendered = useMemo(() => (showWidgets ? widgets.map((w) => ({ w, out: renderWidget(w, store, time, sync, env) })) : []), [widgets, store, time, sync, storeVersion, assetVersion, env, showWidgets]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- drag / resize ----
   const dragRef = useRef(null);
@@ -127,7 +127,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, s
   };
 
   return (
-    <div ref={wrapRef} className="flex-1 min-h-0 flex items-center justify-center bg-[var(--bg-deep)] overflow-hidden relative" onPointerDown={() => setSelectedId(null)}>
+    <div ref={wrapRef} className="flex-1 min-h-0 w-full h-full flex items-center justify-center overflow-hidden relative" onPointerDown={() => editMode && setSelectedId(null)}>
       <div style={{ width: vw * scale, height: vh * scale, position: 'relative' }}>
         {video && editMode && (
           <>
@@ -157,13 +157,17 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, s
               ref={videoRef}
               src={srcUrl || undefined}
               style={{ width: vw, height: vh, display: 'block', objectFit: 'fill' }}
+              // a fresh element (the step screen changed) starts at 0: park it on the playhead the previous step left
+              onLoadedMetadata={(e) => {
+                if (Math.abs(e.target.currentTime - timeKeepRef.current) > 0.01) e.target.currentTime = timeKeepRef.current;
+              }}
               onSeeked={(e) => setTime(e.target.currentTime)}
               onPause={(e) => setTime(e.target.currentTime)}
               onError={(e) => {
                 const err = e.target.error;
-                setStatus('Video playback error: ' + (err ? err.message || 'code ' + err.code : 'unknown') + ' — create a preview proxy in the Files tab.');
+                setStatus('Video playback error: ' + (err ? err.message || 'code ' + err.code : 'unknown') + ' — create a preview proxy in the Files step.');
               }}
-              onStalled={() => setStatus('Video decoding is stalling (too heavy for the GPU decoder) — create a preview proxy in the Files tab.')}
+              onStalled={() => setStatus('Video decoding is stalling (too heavy for the GPU decoder) — create a preview proxy in the Files step.')}
             />
           ) : null}
           {editMode && grid && grid.show && (
@@ -172,7 +176,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, s
                 position: 'absolute',
                 inset: 0,
                 pointerEvents: 'none',
-                backgroundImage: 'linear-gradient(to right, rgba(242,169,59,.15) 1px, transparent 1px), linear-gradient(to bottom, rgba(242,169,59,.15) 1px, transparent 1px)',
+                backgroundImage: 'linear-gradient(to right, rgba(255,185,92,.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,185,92,.14) 1px, transparent 1px)',
                 backgroundSize: `${gridSize}px ${gridSize}px`,
               }}
             />
@@ -184,7 +188,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, s
                 id={widgetDomId(w)}
                 style={{
                   ...styleObj(widgetBoxStyle(w)),
-                  outline: editMode ? (selectedId === w.id ? '2px solid #f2a93b' : '1px dashed rgba(255,255,255,.35)') : 'none',
+                  outline: editMode ? (selectedId === w.id ? '2px solid #ffb95c' : '1px dashed rgba(255,255,255,.35)') : 'none',
                   cursor: editMode ? 'move' : 'default',
                 }}
                 onPointerDown={(e) => onPointerDown(e, w, 'move')}
@@ -197,7 +201,7 @@ export default function Stage({ video, videoRef, widgets, store, storeVersion, s
                 {editMode && (
                   <div
                     onPointerDown={(e) => onPointerDown(e, w, 'resize')}
-                    style={{ position: 'absolute', right: -6, bottom: -6, width: 14, height: 14, background: '#f2a93b', cursor: 'nwse-resize', borderRadius: 2 }}
+                    style={{ position: 'absolute', right: -7, bottom: -7, width: 14, height: 14, background: '#ffb95c', cursor: 'nwse-resize', borderRadius: '50%', boxShadow: '0 0 0 2px rgba(0,0,0,.4)' }}
                   />
                 )}
               </div>

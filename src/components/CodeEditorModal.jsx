@@ -3,23 +3,27 @@ import { toTele, toVideo } from '../time.js';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { githubDark } from '@uiw/codemirror-theme-github';
-import { renderWidget, parseColumns, widgetDomId } from '../widgetRuntime.js';
+import { renderWidget, parseColumns, widgetDomId, normalizeTags } from '../widgetRuntime.js';
 import { parseSettings } from '../widgetSettings.js';
 import { colorPicker, swatchText, replaceSwatchColor, formatLike } from './cmColorPicker.js';
 import { ColorPopover, parseColor } from './ColorInput.jsx';
 import SettingsForm from './SettingsForm.jsx';
 import ShadowHtml from './ShadowHtml.jsx';
+import Dialog from './Dialog.jsx';
+import Icon, { WidgetIcon } from './Icon.jsx';
+import { ColumnsInput } from './ColumnsInput.jsx';
 
 /**
- * Full-screen widget editor: CodeMirror (Code / Settings definition / API tabs) on the left, live
- * preview + columns, box and the generated settings form on the right. Edits apply immediately;
- * "Close" just closes.
+ * Full-screen widget editor: CodeMirror (Code / Settings definition / Icon & tags / API tabs) on
+ * the left, live preview + columns, box and the generated settings form on the right. Edits
+ * apply immediately; "Close" just closes.
  */
-export default function CodeEditorModal({ widget, updateWidget, onClose, store, time, sync, columnNames, ColumnsInput, env, title = 'Widget editor' }) {
+export default function CodeEditorModal({ widget, updateWidget, onClose, store, time, sync, columnNames, env, title = 'Widget editor' }) {
   const [previewTime, setPreviewTime] = useState(time);
   const [follow, setFollow] = useState(true);
   const [tab, setTab] = useState('code');
   const [pick, setPick] = useState(null); // colour swatch clicked in the code: {view, wrap, rect, color}
+  const [tagsText, setTagsText] = useState((widget.tags || []).join(', '));
   const boxRef = useRef(null);
   const leftRef = useRef(null);
   useEffect(() => {
@@ -34,16 +38,8 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
 
   // fit the widget into the preview area
   const previewW = 640;
-  const previewH = 400;
+  const previewH = 380;
   const scale = Math.min(1, (previewW - 40) / Math.max(1, widget.w), (previewH - 40) / Math.max(1, widget.h));
-
-  useEffect(() => {
-    const h = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
 
   // colour swatches in the code editor open the in-app picker (cmColorPicker.js dispatches cm-color-pick)
   useEffect(() => {
@@ -65,122 +61,167 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
     updateWidget(widget.id, { config });
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(5,8,11,.72)' }} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="flex flex-col rounded-lg overflow-hidden" style={{ width: 'min(96vw, 1500px)', height: 'min(94vh, 960px)', background: 'var(--panel)', border: '1px solid var(--border-strong)', boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}>
-        <header className="flex items-center gap-3 px-4 py-2" style={{ borderBottom: '1px solid var(--border)' }}>
-          <span className="font-semibold">{title}</span>
-          <input className="input" style={{ width: 260 }} value={widget.name} onChange={(e) => updateWidget(widget.id, { name: e.target.value })} />
-          <span className="hint">Changes apply immediately · Esc closes</span>
-          <button className="btn ml-auto" onClick={onClose}>
-            Close
-          </button>
-        </header>
+  const TABS = [
+    ['code', 'Code'],
+    ['settings', 'Settings definition'],
+    ['meta', 'Icon & tags'],
+    ['api', 'API reference'],
+  ];
 
-        <div className="flex-1 flex min-h-0">
-          {/* code / settings definition / api */}
-          <div ref={leftRef} className="flex-1 min-w-0 flex flex-col" style={{ borderRight: '1px solid var(--border)' }}>
-            <div className="flex items-center gap-1 px-2 text-xs" style={{ borderBottom: '1px solid var(--border)' }}>
-              <div className={'tab ' + (tab === 'code' ? 'tab-active' : '')} onClick={() => setTab('code')}>
-                Code <span className="mono hint" style={{ whiteSpace: 'nowrap' }}>function (settings, time, ctx)</span>
+  return (
+    <Dialog size="full" onClose={onClose} className="gap-0" bodyClassName="flex flex-col" zIndex={70} closeOnBackdrop={false}>
+      <header className="editor-head">
+        <span className="dialog-title" style={{ fontSize: 20 }}>
+          <WidgetIcon widget={widget} />
+          {title}
+        </span>
+        <input className="input" style={{ width: 280 }} value={widget.name} onChange={(e) => updateWidget(widget.id, { name: e.target.value })} spellCheck={false} />
+        <span className="hint">Changes apply immediately · Esc closes</span>
+        <button className="btn btn-tonal ml-auto" onClick={onClose}>
+          <Icon name="check" />
+          Done
+        </button>
+      </header>
+
+      <div className="flex-1 flex min-h-0">
+        {/* code / settings definition / meta / api */}
+        <div ref={leftRef} className="flex-1 min-w-0 flex flex-col">
+          <div className="tabs px-3">
+            {TABS.map(([k, l]) => (
+              <div key={k} className={'tab' + (tab === k ? ' on' : '')} onClick={() => setTab(k)}>
+                {l}
+                {k === 'code' && <span className="mono hint">(settings, time, ctx)</span>}
+                {k === 'settings' && (sdef.error ? <span className="chip chip-sm chip-bad">error</span> : sdef.defs.length ? <span className="chip chip-sm chip-accent">{sdef.defs.length}</span> : null)}
               </div>
-              <div className={'tab ' + (tab === 'settings' ? 'tab-active' : '')} onClick={() => setTab('settings')}>
-                Settings definition{' '}
-                {sdef.error ? <span className="chip chip-bad ml-1">error</span> : sdef.defs.length ? <span className="chip chip-accent ml-1">{sdef.defs.length}</span> : null}
+            ))}
+            <span className="ml-auto self-center">{out.error ? <span className="chip chip-sm chip-bad">error</span> : <span className="chip chip-sm chip-good">ok</span>}</span>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {tab === 'code' ? (
+              <CodeMirror value={widget.code} height="100%" theme={githubDark} extensions={[javascript(), colorPicker]} onChange={(v) => updateWidget(widget.id, { code: v })} basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }} style={{ height: '100%' }} />
+            ) : tab === 'settings' ? (
+              <CodeMirror
+                value={widget.settings || ''}
+                height="100%"
+                theme={githubDark}
+                extensions={[javascript(), colorPicker]}
+                placeholder={SETTINGS_PLACEHOLDER}
+                onChange={(v) => updateWidget(widget.id, { settings: v })}
+                basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }}
+                style={{ height: '100%' }}
+              />
+            ) : tab === 'meta' ? (
+              <div className="p-6 stack overflow-y-auto h-full" style={{ maxWidth: 720 }}>
+                <div>
+                  <span className="label mt-0">Tags (categories) — comma separated, used by the search and the tag filter in “Add widget”</span>
+                  <input
+                    className="input"
+                    value={tagsText}
+                    spellCheck={false}
+                    placeholder="gauge, speed, my flights"
+                    onChange={(e) => {
+                      setTagsText(e.target.value);
+                      updateWidget(widget.id, { tags: normalizeTags(e.target.value) });
+                    }}
+                  />
+                  {widget.tags && widget.tags.length > 0 && (
+                    <div className="flex gap-1 flex-wrap mt-2">
+                      {widget.tags.map((t) => (
+                        <span key={t} className="chip chip-sm">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <span className="label mt-0">Icon — one inline SVG, single colour (currentColor), 24×24 viewBox</span>
+                  <div className="flex gap-4 items-start">
+                    <span className="wcard-icon own" style={{ width: 64, height: 64 }}>
+                      <WidgetIcon widget={widget} size={40} />
+                    </span>
+                    <textarea className="input mono flex-1" rows={6} value={widget.icon || ''} spellCheck={false} placeholder='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="…"/></svg>' onChange={(e) => updateWidget(widget.id, { icon: e.target.value })} />
+                  </div>
+                  <div className="hint mt-2">Shown in the widget list and the “Add widget” grid. Keep it a simple line drawing; scripts, event handlers and external references are rejected and the generic icon is shown instead.</div>
+                </div>
               </div>
-              <div className={'tab ' + (tab === 'api' ? 'tab-active' : '')} onClick={() => setTab('api')}>
-                API reference
-              </div>
-              {out.error ? <span className="chip chip-bad ml-auto">error</span> : <span className="chip chip-good ml-auto">ok</span>}
-            </div>
-            <div className="flex-1 min-h-0 overflow-hidden">
-              {tab === 'code' ? (
-                <CodeMirror value={widget.code} height="100%" theme={githubDark} extensions={[javascript(), colorPicker]} onChange={(v) => updateWidget(widget.id, { code: v })} basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }} style={{ height: '100%' }} />
-              ) : tab === 'settings' ? (
-                <CodeMirror
-                  value={widget.settings || ''}
-                  height="100%"
-                  theme={githubDark}
-                  extensions={[javascript(), colorPicker]}
-                  placeholder={SETTINGS_PLACEHOLDER}
-                  onChange={(v) => updateWidget(widget.id, { settings: v })}
-                  basicSetup={{ lineNumbers: true, foldGutter: true, autocompletion: false, tabSize: 2 }}
-                  style={{ height: '100%' }}
-                />
-              ) : (
-                <pre className="mono text-xs whitespace-pre-wrap p-3 h-full overflow-auto" style={{ color: 'var(--text)', margin: 0 }}>
-                  {API_DOC}
-                </pre>
-              )}
-            </div>
-            {tab === 'settings' && (
-              <div className="px-3 py-1.5 text-xs hint" style={{ borderTop: '1px solid var(--border)' }}>
-                A JSON array of settings, optionally in groups (<span className="mono">{'{ "group": { "name", "items": [...] } }'}</span> = a collapsible section); the form is generated from it (right, and in the Widgets tab). Types: <span className="mono">text</span>, <span className="mono">int</span>, <span className="mono">number</span>, <span className="mono">color_picker</span>, <span className="mono">bool</span>, <span className="mono">select</span> (with <span className="mono">values</span>). The code reads a setting as <span className="mono">settings.&lt;name in snake_case&gt;.value</span>.
-              </div>
-            )}
-            {tab === 'settings' && sdef.error && (
-              <pre className="px-3 py-2 text-xs whitespace-pre-wrap" style={{ color: 'var(--bad)', background: 'rgba(229,100,92,.08)', borderTop: '1px solid var(--border)', margin: 0 }}>
-                {sdef.error}
-              </pre>
-            )}
-            {tab === 'code' && out.error && (
-              <pre className="px-3 py-2 text-xs whitespace-pre-wrap" style={{ color: 'var(--bad)', background: 'rgba(229,100,92,.08)', borderTop: '1px solid var(--border)', maxHeight: 120, overflow: 'auto', margin: 0 }}>
-                {out.error}
+            ) : (
+              <pre className="mono text-xs whitespace-pre-wrap p-4 h-full overflow-auto m-0" style={{ color: 'var(--on-surface)' }}>
+                {API_DOC}
               </pre>
             )}
           </div>
+          {tab === 'settings' && (
+            <div className="px-4 py-2 hint" style={{ borderTop: '1px solid var(--outline-variant)' }}>
+              A JSON array of settings, in groups (<span className="mono">{'{ "group": { "name", "icon", "items": [...] } }'}</span> = a collapsible section with its icon); the form is generated from it (right, and in the Widgets step). Types: <span className="mono">text</span>, <span className="mono">int</span>, <span className="mono">number</span>, <span className="mono">color_picker</span>, <span className="mono">bool</span>, <span className="mono">select</span> (with <span className="mono">values</span>). The code reads a setting as <span className="mono">settings.&lt;name in snake_case&gt;.value</span>.
+            </div>
+          )}
+          {tab === 'settings' && sdef.error && (
+            <pre className="px-4 py-2 text-xs whitespace-pre-wrap m-0" style={{ color: 'var(--error)', background: 'rgba(147,0,10,.25)' }}>
+              {sdef.error}
+            </pre>
+          )}
+          {tab === 'code' && out.error && (
+            <pre className="px-4 py-2 text-xs whitespace-pre-wrap m-0" style={{ color: 'var(--error)', background: 'rgba(147,0,10,.25)', maxHeight: 120, overflow: 'auto' }}>
+              {out.error}
+            </pre>
+          )}
+        </div>
 
-          {/* preview + settings */}
-          <div className="flex flex-col" style={{ width: previewW + 24, minWidth: 420 }}>
-            <div className="flex items-center gap-2 px-3 py-1.5 text-xs" style={{ borderBottom: '1px solid var(--border)' }}>
-              <span className="section-title" style={{ margin: 0 }}>
-                Preview
-              </span>
-              <span className="mono ml-auto" style={{ color: 'var(--muted)' }}>
-                {widget.w}×{widget.h} · {Math.round(scale * 100)}%
-              </span>
+        {/* preview + settings */}
+        <div className="editor-side" style={{ width: previewW + 32, minWidth: 440 }}>
+          <div className="flex items-center gap-2 px-4" style={{ height: 44 }}>
+            <span className="title">Preview</span>
+            <span className="mono ml-auto hint">
+              {widget.w}×{widget.h} · {Math.round(scale * 100)}%
+            </span>
+          </div>
+          <div className="preview-ground mx-4 rounded-xl" style={{ height: previewH }}>
+            <div style={{ width: widget.w * scale, height: widget.h * scale, position: 'relative' }}>
+              <ShadowHtml hostRef={boxRef} id={widgetDomId(widget)} html={out.html} style={{ width: widget.w, height: widget.h, transform: `scale(${scale})`, transformOrigin: '0 0', position: 'absolute', color: '#fff', fontFamily: 'Arial, Helvetica, sans-serif', outline: '1px dashed rgba(255,255,255,.25)' }} />
             </div>
-            <div className="flex items-center justify-center" style={{ height: previewH, background: 'repeating-conic-gradient(#20262d 0 25%, #191f25 0 50%) 0 0 / 20px 20px', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ width: widget.w * scale, height: widget.h * scale, position: 'relative' }}>
-                <ShadowHtml
-                  hostRef={boxRef}
-                  id={widgetDomId(widget)}
-                  html={out.html}
-                  style={{ width: widget.w, height: widget.h, transform: `scale(${scale})`, transformOrigin: '0 0', position: 'absolute', color: '#fff', fontFamily: 'Arial, Helvetica, sans-serif', outline: '1px dashed rgba(255,255,255,.25)' }}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-2 text-xs" style={{ borderBottom: '1px solid var(--border)', borderTop: '1px solid var(--border)' }}>
-              <label className="flex items-center gap-1 cursor-pointer">
-                <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> follow video
-              </label>
-              <input type="range" min={0} max={duration || 1} step={0.01} value={toTele(previewTime, sync)} onChange={(e) => { setFollow(false); setPreviewTime(toVideo(Number(e.target.value), sync)); }} className="flex-1" />
-              <span className="mono w-20 text-right" style={{ color: 'var(--muted)' }}>
-                t = {toTele(previewTime, sync).toFixed(2)} s
-              </span>
-            </div>
-            <div className="flex-1 overflow-y-auto px-3 pb-3">
-              <label className="label">Columns → ctx.values[0], ctx.values[1], …</label>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-2 text-xs">
+            <label className={'switch' + (follow ? ' on' : '')}>
+              <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+              <span className="track" />
+              follow video
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={duration || 1}
+              step={0.01}
+              value={toTele(previewTime, sync)}
+              onChange={(e) => {
+                setFollow(false);
+                setPreviewTime(toVideo(Number(e.target.value), sync));
+              }}
+              className="flex-1"
+            />
+            <span className="mono text-right hint whitespace-nowrap" style={{ minWidth: 88 }}>t = {toTele(previewTime, sync).toFixed(2)} s</span>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 pb-4 stack">
+            <div>
+              <span className="label mt-0">Columns → ctx.values[0], ctx.values[1], …</span>
               <ColumnsInput value={widget.columns} onChange={(v) => updateWidget(widget.id, { columns: v })} columnNames={columnNames} />
-              {missing.length > 0 && (
-                <div className="text-xs mt-1" style={{ color: 'var(--warn)' }}>
-                  Not found in loaded CSVs: {missing.join(', ')}
-                </div>
-              )}
+              {missing.length > 0 && <div className="text-xs mt-1 text-[var(--warn)]">Not found in the loaded telemetry: {missing.join(', ')}</div>}
               {cols.length > 0 && (
-                <div className="mono text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                <div className="mono text-xs mt-1 hint">
                   {cols.map((c, i) => `[${i}] ${fmt(store.valueAt(c, toTele(previewTime, sync)))}`).join('   ')}
                 </div>
               )}
-              <div className="grid grid-cols-4 gap-2">
-                {['x', 'y', 'w', 'h'].map((k) => (
-                  <label key={k}>
-                    <span className="label">{k}</span>
-                    <input className="input mono" type="number" value={widget[k]} onChange={(e) => updateWidget(widget.id, { [k]: Number(e.target.value) })} />
-                  </label>
-                ))}
-              </div>
-              <label className="label">Settings</label>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {['x', 'y', 'w', 'h'].map((k) => (
+                <label key={k}>
+                  <span className="label mt-0">{k}</span>
+                  <input className="input input-sm mono" type="number" value={widget[k]} onChange={(e) => updateWidget(widget.id, { [k]: Number(e.target.value) })} />
+                </label>
+              ))}
+            </div>
+            <div>
+              <span className="label mt-0">Settings</span>
               <SettingsForm key={widget.id} defs={sdef.defs} sections={sdef.sections} error={sdef.error} config={widget.config} onChange={setConfig} onReset={() => updateWidget(widget.id, { config: {} })} />
             </div>
           </div>
@@ -197,23 +238,23 @@ export default function CodeEditorModal({ widget, updateWidget, onClose, store, 
           onClose={() => setPick(null)}
         />
       )}
-    </div>
+    </Dialog>
   );
 }
 
 const SETTINGS_PLACEHOLDER = `[
-  { "name": "Color",  "type": "color_picker", "default": "rgba(255,255,255,.9)", "description": "text color" },
-  { "name": "Size",   "type": "int",    "default": 40, "min": 8, "max": 200 },
-  { "group": { "name": "Sticks", "items": [
+  { "group": { "name": "Sticks", "icon": "<svg viewBox=\\"0 0 24 24\\" fill=\\"none\\" stroke=\\"currentColor\\" stroke-width=\\"1.8\\"><circle cx=\\"7\\" cy=\\"12\\" r=\\"4\\"/><circle cx=\\"17\\" cy=\\"12\\" r=\\"4\\"/></svg>", "items": [
     { "name": "Mode",   "type": "select", "values": { "1": "Mode 1", "2": "Mode 2" }, "default": 2 }
   ] } },
-  { "group": { "name": "Labels", "items": [
+  { "group": { "name": "Labels", "icon": "<svg viewBox=\\"0 0 24 24\\" fill=\\"none\\" stroke=\\"currentColor\\" stroke-width=\\"1.8\\"><path d=\\"M3 12V4h8l10 10-8 8z\\"/></svg>", "items": [
     { "name": "Labels", "type": "bool",   "default": true },
-    { "name": "Label font", "type": "text", "default": "Arial" }
+    { "name": "Label font", "type": "text", "default": "Arial" },
+    { "name": "Color",  "type": "color_picker", "default": "rgba(255,255,255,.9)", "description": "text color" },
+    { "name": "Size",   "type": "int",    "default": 40, "min": 8, "max": 200 }
   ] } }
 ]
 // in the code: var MODE = settings.mode.value;  var FONT = settings.label_font.value;
-// groups are collapsible sections of the form; keys are unique across the whole definition`;
+// every group is a collapsible section of the form with its icon; keys are unique across the whole definition`;
 
 function fmt(v) {
   if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(3);
@@ -226,7 +267,7 @@ settings   the widget's settings, generated from the Settings definition tab:
            settings.<key>.value  (key = the setting's name in snake_case,
            "Label font" -> settings.label_font.value; also .name, .type,
            .label for selects). The user changes them in the form (Widgets
-           tab / editor); the definition gives the defaults.
+           step / editor); the definition gives the defaults.
 time       telemetry time in ms (integer) = video time × (1 + drift) + offset
 ctx.values           array of current values of the listed columns (interpolated)
 ctx.videoTime        video time (s)
@@ -239,7 +280,7 @@ ctx.all(name, maxPoints)  -> [{t, v}] the WHOLE flight (profiles, tracks)
 ctx.stats(name)      -> {min, max, mean, count, tMin, tMax} whole-flight
                      statistics (use for stable axis scaling)
 ctx.duration         telemetry length in ms
-ctx.exportRange      {from, to} in telemetry ms (sync bar in/out points or the
+ctx.exportRange      {from, to} in telemetry ms (export step in/out points or the
                      whole video); null without a video
 ctx.dataVersion      changes when telemetry files change — put it in every
                      ctx.state cache key
@@ -249,15 +290,19 @@ ctx.image(url)       loads an image (map tile, icon) and returns a data: URL
                      once cached; undefined while loading (widget re-renders
                      automatically). Works in export too.
 
-Settings definition (JSON array, one object per setting, or a group
-{ "group": { "name": "…", "items": [ …settings… ] } } = collapsible section):
+Settings definition (JSON array of groups; a group
+{ "group": { "name": "…", "icon": "<svg…>", "items": [ …settings… ] } } is a
+collapsible section of the form with its icon):
   name         shown in the form; the key is derived from it ("key" overrides)
   type         text | int | number | color_picker | bool | select
   default      value used until the user changes it
-  description  help text under the field
+  description  help text under the field name
   values       select only: { "value": "label", … } or ["a", "b"]
                (numeric keys come back as numbers when default is a number)
   min, max, step   int / number only
+
+Widget record: name, icon (inline SVG string, single colour), tags (array of
+categories for the "Add widget" search), columns, x, y, w, h, settings, config, code.
 
 The returned HTML is placed in an absolutely positioned box; style it with
 inline CSS or a <style> tag. Inline <svg> works. External URLs (web fonts,

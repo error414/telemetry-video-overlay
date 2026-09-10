@@ -15,13 +15,14 @@ result with the bundled ffmpeg. Overlay only: no video editing/trimming, no pred
   disclaimer, screenshot, licence). Keep its Workflow section in step with UI changes; details
   belong in `manual/`, not here.
 - `manual/*.md`: user manuals, one topic per file, written for pilots (not developers) and
-  referring to UI labels as they appear in the app (**Sync** drawer, **Start = here**, **Library**
-  tab, ...). Currently `widgets.md` (what a widget is, Library/Examples flow, `/widget` skill) and
+  referring to UI labels as they appear in the app (**Sync** step, **Start = here**, **Add widget**
+  dialog, ...). Currently `widgets.md` (what a widget is, Add widget / library flow, `/widget` skill) and
   `synchronisation.md` (offset/drift, manual sync, both auto sync methods). When a UI label,
   button or dialog they mention changes, update the manual in the same commit; add a new file
   for a new user-facing topic and link it from the README "Manuals" line.
-- `images/`: screenshots referenced by README and the manuals (`Screenshot_1.png` overview,
-  `_2` widget editor, `_3` sync bar / auto sync). Retake them when the UI they show changes.
+- `images/`: screenshots referenced by README and the manuals (`Screenshot_1.png` Widgets step,
+  `_2` widget editor, `_3` Sync step). Retake them when the UI they show changes (the driver
+  script recipe is in "Driving the app for verification").
 - `docs/`: developer notes (measured drifts, auto sync window options), not linked from README.
 - The widget API reference lives in the `widget` skill (`.claude/skills/widget/`) and in the
   in-app **API reference** tab of the widget editor, not in README or `manual/`.
@@ -29,15 +30,17 @@ result with the bundled ffmpeg. Overlay only: no video editing/trimming, no pred
 ### Why it exists and the workflow
 
 Single-purpose tool: it exists to put telemetry widgets into a video, nothing else. Every
-feature serves this one linear workflow:
+feature serves this one linear workflow, and the UI is built as exactly these screens (one per
+step, a stepper in the app bar, Back / next-step buttons in the bottom bar; every step shows
+only what it needs, see "Screens" below):
 
-1. Open video (ffprobe, preview proxy).
-2. Open blackbox (`.csv` or raw `.txt`/`.bbl`/`.bfl`/`.log` decoded by `blackbox_decode`; multiple files allowed).
-3. Synchronise video and telemetry: either manually (offset/drift in the sync bar) or with
-   auto sync (optical flow or Gyroflow project, see `src/sync/`).
-4. Add and edit widgets (own code in the editor, or copies of the read-only examples), place
-   them on the stage.
-5. Export: burn into a video with ffmpeg, or write a PNG frame sequence.
+0. Start screen: continue the previous session, new project, or open a project file.
+1. Files: open video (ffprobe, preview proxy) and blackbox (`.csv` or raw `.txt`/`.bbl`/`.bfl`/`.log`
+   decoded by `blackbox_decode`; multiple files allowed).
+2. Sync: manual (offset/drift steppers), video motion or Gyroflow project (`src/sync/`).
+3. Widgets: add from the Add widget dialog (examples + own library, search + tag filter), arrange
+   on the stage, tune settings, edit code, manage the library and layouts.
+4. Export: range, format, render with ffmpeg or PNG sequence.
 
 Anything outside this path (editing, trimming, effects, non-INAV formats) is out of scope.
 
@@ -60,9 +63,11 @@ Start an isolated dev server on another port (`npx vite --port 5199 --strictPort
 through playwright-core `_electron.launch`, then seed state via `localStorage` and reload.
 Port 5173 is the user's own dev origin with their autosaved project; never point tests at it.
 Native file dialogs cannot be stubbed (`window.api` is a frozen contextBridge object), so seed
-`telemetry-overlay.lastProject.v1` / `.widgetLibrary.v1` / `.layouts.v1` instead. The startup
-dialog appears whenever a stored project exists; click "Continue previous session" first.
-Autosave of the project is debounced 500 ms, wait before reading it back.
+`telemetry-overlay.lastProject.v1` / `.widgetLibrary.v1` / `.layouts.v1` instead. The app always
+opens on the start screen (`.home`); click "Continue previous session" (or press Escape) to reach
+the stored project — it lands on the step saved in the project JSON (`step`). Autosave of the
+project is debounced 500 ms, wait before reading it back. Dialogs (`.dialog`) are portalled to
+`document.body`, so scope selectors (`.dialog .search input`) — the side panel has a search box too.
 
 ## Architecture
 
@@ -78,13 +83,33 @@ Autosave of the project is debounced 500 ms, wait before reading it back.
   process and `src/export.js` posts raw RGBA buffers through it (contextBridge value copies cost
   ~30 ms per 1080p frame). Keep that channel for anything bulk.
 
+### Screens (src/steps/, src/components/)
+
+`App.jsx` keeps `screen` = `'home'` | step id (`STEPS`: files, sync, widgets, export) and renders
+`steps/HomeScreen.jsx` or one of `steps/FilesStep.jsx`, `SyncStep.jsx`, `WidgetsStep.jsx`,
+`ExportStep.jsx`. Every step is built on `steps/StepScreen.jsx`: stage + play deck + timeline on
+the left (`Stage.jsx`, `Transport.jsx`, `Timeline.jsx`, playback state from the `usePlayer` hook in
+`components/player.js`), the step's cards in the side panel on the right. What the stage shows is
+decided per step through props: Files = plain video, no widgets; Sync = widgets read-only + teal
+trace on the timeline; Widgets = edit mode, grid toggles; Export = widgets read-only + editable
+export range on the timeline. Keyboard shortcuts follow the same rule (space/arrows/M in the
+player hook everywhere, `[` `]` only while `SyncControls` is mounted, I/O only while the timeline
+range is editable). The Sync step hosts the manual controls (`SyncControls.jsx`) and the inline
+auto sync panel (`AutoSync.jsx`, method chosen with a segmented button, registry in
+`src/sync/methods.js`). The Widgets step opens two dialogs: `WidgetPicker.jsx` (grid of examples +
+own library, text search with `#tag` words, tag chips, per-card menu, import/export) and
+`LayoutsDialog.jsx`. The stepper (`Stepper.jsx`) and the Back / next buttons in the bottom bar
+move between steps; nothing is locked except during an export. The step is stored in the project
+JSON (`step`) so "Continue" returns to it. All modals use `Dialog.jsx` (scrim + rounded panel).
+
 ### Renderer state (src/App.jsx)
 
 `App.jsx` owns all project state (video info, telemetry store, widgets, sync, export range,
-library, layouts, tab) and passes it down as props; there is no store library. Persistence is
-localStorage only:
+library, layouts, screen) and hands it to the step screens as one `app` object; there is no store
+library. Persistence is localStorage only:
 
-- `telemetry-overlay.lastProject.v1`: autosaved project (debounced), offered by `StartupDialog`.
+- `telemetry-overlay.lastProject.v1`: autosaved project (debounced, only after the start-screen
+  choice), offered by `HomeScreen`.
 - `telemetry-overlay.widgetLibrary.v1`: the user's own widgets only. Examples are rendered
   straight from `src/examples.js` and are never stored; an old `examplesVersion` marker
   triggers a one-time cleanup of seeded "Example:" copies.
@@ -115,21 +140,26 @@ to anything that must re-render on source changes.
 
 ### Widget runtime (src/widgetRuntime.js)
 
-A widget is `{id, name, columns, x, y, w, h, visible, settings, config, code}` where
-`code` is a function `(settings, time, ctx) -> HTML string`, `settings` is the source text of the
+A widget is `{id, name, icon, tags, columns, x, y, w, h, visible, settings, config, code}` where
+`code` is a function `(settings, time, ctx) -> HTML string`, `icon` an inline single-colour SVG
+string (`safeIconSvg` in `src/icons.js` rejects scripts / external references; `WIDGET_ICONS` holds
+the built-in ones, `Icon.jsx` renders them), `tags` an array of lower-case categories (the Add
+widget search and tag chips; `widgetMatches`), `settings` is the source text of the
 settings definition (JSON array of `{name, type, default, description, values, min, max, step}`,
-types `text | int | number | color_picker | bool | select`, optionally wrapped in
-`{group: {name, items: [...]}}` = collapsible section of the form, collapsed by default; edited in
-the editor's **Settings definition** tab) and `config` holds the values the user changed in the generated form
+types `text | int | number | color_picker | bool | select`, wrapped in
+`{group: {name, icon, items: [...]}}` = collapsible section of the form with its icon (`GROUP_ICONS`
+/ `groupIcon(name)` in `src/icons.js`; the examples use `gi('Group')`, JSON files embed the SVG),
+collapsed by default; edited in the editor's **Settings definition** tab) and `config` holds the
+values the user changed in the generated form
 (`{key: value}`, key = name in snake_case; missing = definition default). `src/widgetSettings.js`
 (pure, Node-friendly) parses the definition (JSON or JS literal, cached per string) and builds
 the `settings` object handed to the code: `settings.<key>.value`. `SettingsForm.jsx` renders the
-form (Widgets tab and editor), `ColorInput.jsx` is the in-app rgba colour popover (react-colorful)
+form (Widgets step and editor; searchable, groups show their icon), `ColorInput.jsx` is the in-app rgba colour popover (react-colorful)
 also used by the code editor's colour swatches. `renderWidget()` compiles (cached per code
 string), builds `ctx` (`values` of the listed columns, `range`/`all`/`stats` history, `state`
 persisted per widget id, `image()` data-URL cache, `exportRange`, `dataVersion`) and never
 throws. There is no per-widget CSS or whole-widget opacity any more: `cleanWidget()` drops those
-older fields and guarantees `settings`/`config` wherever a record enters the app (stored library and
+older fields and guarantees `settings`/`config`/`tags`/`icon` wherever a record enters the app (stored library and
 layouts, project files, widget/layout imports, `newWidget`). The same function renders the live stage
 (`Stage.jsx`, inside shadow roots via `ShadowHtml.jsx`), the editor preview, and export frames
 (`composeFrameSvg` → SVG `foreignObject` → canvas → RGBA), so widget HTML must be XHTML-safe
@@ -139,10 +169,12 @@ Widget coordinates are in pixels of the current video; `layout: {w,h}` records t
 `rescaleWidgets` (App.jsx) converts when a differently sized video or layout is loaded
 (`EMPTY_STAGE` 1280×720 while no video is loaded).
 
-`src/examples.js` holds the built-in examples; each has a `settings` definition and starts with
-a `SETTINGS` block of `var X = settings.x.value;` lines. When adding or changing one, keep that
-convention and run `node .claude/skills/widget/test-widgets.mjs` (see the `widget` skill for the
-authoring guide).
+`src/examples.js` holds the built-in examples; each has an `icon`, `tags` (all carry `library`), a
+`settings` definition with a group icon per group, and starts with a `SETTINGS` block of
+`var X = settings.x.value;` lines. When adding or changing one, keep that convention, run
+`node .claude/skills/widget/test-widgets.mjs` (warns on a missing icon / tags / group icon) and,
+after touching `src/icons.js`, `node .claude/skills/widget/icons-md.mjs` (regenerates the skill's
+`icons.md`). The importable widgets in `widgets/` follow the same rules (see the `widget` skill).
 
 ### Export (src/export.js)
 
@@ -153,11 +185,20 @@ writes a numbered per-frame sequence (optionally one folder per widget, integer 
 
 ## UI conventions (src/index.css)
 
-Dark "ground station" look with two hues: amber `--accent` = machine state/controls/selection,
-teal `--tele` = telemetry data. Sidebar panels group content into `.bay` modules
-(`bay-amber`/`bay-tele`/`bay-mixed`, `.bay-head` strip with `.bay-tick`, `.bay-note` readout,
-`btn-xs` actions; `.bay-toggle` + `.bay-drawer` for collapsible ones). `.section-title` is
-deprecated in panels. Condensed caps labels use `--font-cond`, readouts `--font-mono`.
+Material Design 3, dark scheme, airy: tonal surfaces instead of borders (`--surface`,
+`--surface-container-low/…/highest`), 8 px spacing, large radii (`--radius-md` 12 cards,
+`--radius-xl` 28 dialogs, pill buttons), Roboto / Roboto Mono. Two accent hues carry meaning:
+`--primary` (amber) = the machine: controls, selection, playhead, current step; `--secondary`
+(teal) = telemetry data: traces, columns, data chips. Building blocks: `.btn` with
+`btn-filled` (the one main action of a card) / `btn-tonal` (secondary) / `btn-outlined` /
+`btn-text` / `btn-icon` (+ `sm`), `.input` (+ `input-sm`), `.search`, `.switch`, `.chip` (+ `on`,
+`chip-sm`, hue variants), `.seg` segmented buttons (+ `seg-primary`, `seg-fill`, `stepper`), `.card`
+with `.card-head` (icon + `.card-title` + mono `.card-meta`), `.list` / `.list-item` rows
+(`li-lead` icon circle, `li-body`, `li-trail` actions), `.banner` for step guidance, `.dialog`,
+`.menu`, `.wcard` picker cards, `.setting-group` / `.setting` form rows. Icons come from
+`src/icons.js` through `Icon.jsx` (`<Icon name="…">`, stored SVG strings through `SvgIcon` /
+`WidgetIcon`). The legacy token names (`--accent`, `--tele`, `--panel`, `--muted`, …) are aliases
+kept for the field reference and colour picker; new code uses the M3 names.
 
 Define list-row components at module top level, never inline inside a panel's render: the
 whole app re-renders every animation frame during playback, and an inline component remounts

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Dialog from './Dialog.jsx';
 
 /**
  * Yes/no confirmation modal.
@@ -32,34 +33,31 @@ function ConfirmDialog({ title, message, onAnswer }) {
   useEffect(() => {
     yesRef.current?.focus();
     const onKey = (e) => {
-      if (e.key === 'Escape') (e.preventDefault(), onAnswer(false));
-      else if (e.key === 'Enter') (e.preventDefault(), onAnswer(true));
+      if (e.key === 'Enter') (e.preventDefault(), onAnswer(true));
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onAnswer]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(5,8,11,.72)' }} onMouseDown={(e) => e.target === e.currentTarget && onAnswer(false)}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="rounded-lg p-5 flex flex-col gap-4"
-        style={{ width: 'min(92vw, 440px)', background: 'var(--panel)', border: '1px solid var(--border-strong)', boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}
-      >
-        <div className="font-semibold text-base">{title}</div>
-        <div className="text-sm break-words" style={{ color: 'var(--muted)' }}>
-          {message}
-        </div>
-        <div className="flex gap-2 justify-end">
-          <button className="btn" onClick={() => onAnswer(false)}>
+    <Dialog
+      title={title}
+      icon="help"
+      width={440}
+      zIndex={130}
+      onClose={() => onAnswer(false)}
+      actions={
+        <>
+          <button className="btn btn-text" onClick={() => onAnswer(false)}>
             No
           </button>
-          <button ref={yesRef} className="btn btn-danger" onClick={() => onAnswer(true)}>
+          <button ref={yesRef} className="btn btn-filled" onClick={() => onAnswer(true)}>
             Yes
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <div className="break-words">{message}</div>
+    </Dialog>
   );
 }

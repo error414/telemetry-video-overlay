@@ -3,18 +3,17 @@ import { TelemetryStore } from './telemetry.js';
 import { csvWorker } from './csvWorkerClient.js';
 import { newWidget, cleanWidget, EMPTY_STAGE, uid } from './widgetRuntime.js';
 import { runExport, freeFolder } from './export.js';
-import Stage from './components/Stage.jsx';
-import SyncBar from './components/SyncBar.jsx';
-import FilesPanel from './components/FilesPanel.jsx';
-import WidgetsPanel, { ColumnsInput } from './components/WidgetsPanel.jsx';
-import LibraryPanel from './components/LibraryPanel.jsx';
-import LayoutsPanel from './components/LayoutsPanel.jsx';
-import ExportPanel, { EXPORT_MODES } from './components/ExportPanel.jsx';
-import CodeEditorModal from './components/CodeEditorModal.jsx';
-import AutoSyncDialog from './components/AutoSyncDialog.jsx';
-import StartupDialog from './components/StartupDialog.jsx';
-import { useConfirm } from './components/ConfirmDialog.jsx';
 import { toTele } from './time.js';
+import Stepper from './components/Stepper.jsx';
+import Icon from './components/Icon.jsx';
+import Dialog from './components/Dialog.jsx';
+import CodeEditorModal from './components/CodeEditorModal.jsx';
+import { useConfirm } from './components/ConfirmDialog.jsx';
+import HomeScreen from './steps/HomeScreen.jsx';
+import FilesStep from './steps/FilesStep.jsx';
+import SyncStep from './steps/SyncStep.jsx';
+import WidgetsStep from './steps/WidgetsStep.jsx';
+import ExportStep, { EXPORT_MODES } from './steps/ExportStep.jsx';
 
 const LIB_KEY = 'telemetry-overlay.widgetLibrary.v1';
 const LAYOUTS_KEY = 'telemetry-overlay.layouts.v1';
@@ -32,6 +31,16 @@ export const DEFAULT_BB_OPTIONS = {
   unitAmperage: 'A',
   index: '',
 };
+
+// The workflow: one screen per step, always in this order; the stepper in the app bar and the
+// Back / Continue buttons move between them. 'home' is the start screen (continue / new / open).
+export const STEPS = [
+  { id: 'files', label: 'Files', hint: 'Open the video and the blackbox log' },
+  { id: 'sync', label: 'Sync', hint: 'Line the telemetry up with the video' },
+  { id: 'widgets', label: 'Widgets', hint: 'Add, arrange and tune widgets' },
+  { id: 'export', label: 'Export', hint: 'Render the overlay into a video or PNG frames' },
+];
+const STEP_IDS = STEPS.map((s) => s.id);
 
 // move/resize widgets from one video size to another: positions follow each axis, the box
 // (and with it the widget's content, which is sized from w/h) keeps its shape
@@ -69,63 +78,13 @@ function loadLayouts() {
     .map((l) => ({ ...l, id: l.id || uid(), layout: l.layout && l.layout.w ? l.layout : { w: 1920, h: 1080 }, widgets: l.widgets.map(cleanWidget) }));
 }
 
-const TABS = [
-  ['files', 'Files'],
-  ['widgets', 'Widgets'],
-  ['layouts', 'Layouts'],
-  ['library', 'Library'],
-  ['export', 'Export'],
-];
-
-const TAB_ICONS = {
-  files: (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1" />
-      <path d="M4.75 2.75v10.5M11.25 2.75v10.5" />
-    </svg>
-  ),
-  widgets: (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <rect x="1.75" y="1.75" width="5" height="5" />
-      <rect x="9.25" y="1.75" width="5" height="5" />
-      <rect x="1.75" y="9.25" width="5" height="5" />
-      <rect x="9.25" y="9.25" width="5" height="5" />
-    </svg>
-  ),
-  layouts: (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <rect x="1.75" y="1.75" width="12.5" height="12.5" rx="1" />
-      <path d="M1.75 6.25h12.5M6.25 6.25v8" />
-    </svg>
-  ),
-  library: (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <path d="M3.75 1.75h8.5v12.5L8 11l-4.25 3.25z" />
-    </svg>
-  ),
-  export: (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <path d="M8 10.5V2M4.5 5.5 8 2l3.5 3.5" />
-      <path d="M2 10.5v3.5h12v-3.5" />
-    </svg>
-  ),
-};
-
-function Toggle({ checked, onChange, title, children }) {
-  return (
-    <label className={'toggle' + (checked ? ' on' : '')} title={title}>
-      <input type="checkbox" checked={checked} onChange={onChange} />
-      {children}
-    </label>
-  );
-}
-
 export default function App() {
   const storeRef = useRef(new TelemetryStore());
   const store = storeRef.current;
   const [storeVersion, setStoreVersion] = useState(0);
   const bump = () => setStoreVersion((v) => v + 1);
 
+  const [screen, setScreen] = useState('home'); // 'home' | step id
   const [video, setVideo] = useState(null); // probe info
   const [offset, setOffset] = useState(0); // seconds added to video time to get telemetry time
   const [drift, setDrift] = useState(0); // ms of telemetry per second of video the two clocks drift apart (see time.js)
@@ -134,10 +93,9 @@ export default function App() {
   const [widgets, setWidgets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [library, setLibrary] = useState(loadLibrary);
-  const [libEditId, setLibEditId] = useState(null); // library widget open in the editor (Library tab → Edit)
+  const [libEditId, setLibEditId] = useState(null); // library widget open in the editor (picker → Edit)
   const [layouts, setLayouts] = useState(loadLayouts);
-  const [layoutName, setLayoutName] = useState(''); // name in the Widgets tab "Save to layout" box (last saved / loaded layout)
-  const [tab, setTab] = useState('files');
+  const [layoutName, setLayoutName] = useState(''); // name in the Layouts dialog "Save" box (last saved / loaded layout)
   const [status, setStatus] = useState('');
   // playback problems get a modal on top of the status line — the corner status is easy to miss
   const [playError, setPlayError] = useState(null);
@@ -152,7 +110,6 @@ export default function App() {
   }, []);
   const [editMode, setEditMode] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [autoSyncOpen, setAutoSyncOpen] = useState(false);
   // layout grid (video pixels): snap on/off, size, visibility — remembered between sessions
   const [grid, setGrid] = useState(() => {
     try {
@@ -228,7 +185,6 @@ export default function App() {
         await addCsvFiles(r.files);
         setStatus('Decoded ' + r.files.length + ' CSV file(s) from ' + f.split(/[\\/]/).pop());
       }
-      setTab('files');
     } catch (e) {
       setStatus('Decode error: ' + e.message);
     } finally {
@@ -285,46 +241,52 @@ export default function App() {
 
   // Ask the browser up front whether it can decode this file (codec/resolution/fps from ffprobe).
   // Chromium reports supported/smooth without touching the file, so we can warn before the user hits play.
-  const warnIfUndecodable = useCallback(async (info) => {
-    if (info.proxy || !navigator.mediaCapabilities) return;
-    const mime = { h264: 'video/mp4; codecs="avc1.640033"', hevc: 'video/mp4; codecs="hvc1.1.6.L186.B0"', vp9: 'video/webm; codecs="vp09.00.51.08"', av1: 'video/mp4; codecs="av01.0.13M.08"' }[info.codec];
-    if (!mime) return;
-    try {
-      const cap = await navigator.mediaCapabilities.decodingInfo({
-        type: 'file',
-        video: { contentType: mime, width: info.width, height: info.height, framerate: info.fps, bitrate: Math.round(info.width * info.height * info.fps * 0.08) || 8_000_000 },
-      });
-      const what = `${info.codec} ${info.width}×${info.height} @ ${info.fps.toFixed(2)} fps`;
-      if (!cap.supported) showPlayError(`The player cannot decode this video (${what}) — create a preview proxy in the Files tab.`);
-      else if (!cap.smooth) showPlayError(`This video (${what}) is likely too heavy for smooth playback on this machine — create a preview proxy in the Files tab.`, { block: false });
-    } catch {
-      // capability probe failed → fall back to the runtime stall detection in SyncBar
-    }
-  }, [showPlayError]);
+  const warnIfUndecodable = useCallback(
+    async (info) => {
+      if (info.proxy || !navigator.mediaCapabilities) return;
+      const mime = { h264: 'video/mp4; codecs="avc1.640033"', hevc: 'video/mp4; codecs="hvc1.1.6.L186.B0"', vp9: 'video/webm; codecs="vp09.00.51.08"', av1: 'video/mp4; codecs="av01.0.13M.08"' }[info.codec];
+      if (!mime) return;
+      try {
+        const cap = await navigator.mediaCapabilities.decodingInfo({
+          type: 'file',
+          video: { contentType: mime, width: info.width, height: info.height, framerate: info.fps, bitrate: Math.round(info.width * info.height * info.fps * 0.08) || 8_000_000 },
+        });
+        const what = `${info.codec} ${info.width}×${info.height} @ ${info.fps.toFixed(2)} fps`;
+        if (!cap.supported) showPlayError(`The player cannot decode this video (${what}) — create a preview proxy in the Files step.`);
+        else if (!cap.smooth) showPlayError(`This video (${what}) is likely too heavy for smooth playback on this machine — create a preview proxy in the Files step.`, { block: false });
+      } catch {
+        // capability probe failed → fall back to the runtime stall detection in the player
+      }
+    },
+    [showPlayError]
+  );
 
   const [proxyProgress, setProxyProgress] = useState(null);
   useEffect(() => window.api.onProxyProgress(setProxyProgress), []);
   // the proxy is playable while still being encoded: main announces the growing .part file
   // and the Stage plays it through MSE (liveProxy.js) until the finished proxy takes over
   useEffect(() => window.api.onProxyLive(({ part, codec }) => setVideo((v) => (v ? { ...v, liveProxy: part, liveCodec: codec } : v))), []);
-  const makeProxy = useCallback(async (kind = 'full') => {
-    if (!video) return;
-    setProxyProgress(0);
-    try {
-      const proxy = await window.api.makeProxy(video.path, video.duration, kind, video.fps);
-      if (!proxy) {
-        setStatus('Proxy creation cancelled');
-        return;
+  const makeProxy = useCallback(
+    async (kind = 'full') => {
+      if (!video) return;
+      setProxyProgress(0);
+      try {
+        const proxy = await window.api.makeProxy(video.path, video.duration, kind, video.fps);
+        if (!proxy) {
+          setStatus('Proxy creation cancelled');
+          return;
+        }
+        setVideo((v) => ({ ...v, proxy, liveProxy: null }));
+        setStatus('Preview proxy created: ' + proxy);
+      } catch (e) {
+        setStatus('Proxy error: ' + e.message);
+      } finally {
+        setVideo((v) => (v && v.proxy ? v : v ? { ...v, liveProxy: null } : v));
+        setProxyProgress(null);
       }
-      setVideo((v) => ({ ...v, proxy, liveProxy: null }));
-      setStatus('Preview proxy created: ' + proxy);
-    } catch (e) {
-      setStatus('Proxy error: ' + e.message);
-    } finally {
-      setVideo((v) => (v && v.proxy ? v : v ? { ...v, liveProxy: null } : v));
-      setProxyProgress(null);
-    }
-  }, [video]);
+    },
+    [video]
+  );
 
   const openVideo = useCallback(async () => {
     const p = await window.api.openVideo();
@@ -365,7 +327,7 @@ export default function App() {
     const w = newWidget(partial);
     setWidgets((ws) => [...ws, w]);
     setSelectedId(w.id);
-    setTab('widgets');
+    setStatus('Added "' + w.name + '"');
   }, []);
   const removeWidget = useCallback(
     async (id) => {
@@ -376,6 +338,10 @@ export default function App() {
     },
     [widgets, confirm]
   );
+  const openEditorFor = useCallback((id) => {
+    setSelectedId(id);
+    setEditorOpen(true);
+  }, []);
 
   // ---- Library & layouts ----
   // names are unique in the library: saving a widget under a name that is already there replaces that entry
@@ -415,13 +381,12 @@ export default function App() {
       setWidgets(ws);
       setSelectedId(null);
       setLayoutName(entry.name);
-      setTab('widgets');
       setStatus('Loaded layout "' + entry.name + '" (' + ws.length + (ws.length === 1 ? ' widget)' : ' widgets)'));
     },
     [widgets.length, stageSpace, confirm]
   );
 
-  // ---- Export job (lives here so it survives tab switches) ----
+  // ---- Export job (lives here so it survives step switches) ----
   const [job, setJob] = useState({ mode: 'video', quality: 'bitrate', encoder: 'auto', overlayFps: 30, perWidget: false, pngScale: 1, running: false, progress: null, log: '', result: null, out: null, setup: null });
   const cancelRef = useRef(false);
   const setJobOption = useCallback((patch) => setJob((j) => ({ ...j, ...patch })), []);
@@ -444,7 +409,7 @@ export default function App() {
     if (!out) return;
     cancelRef.current = false;
     setJob((j) => ({ ...j, running: true, log: '', result: null, out, setup: null, progress: { frame: 0, total: 1, fps: 0, eta: 0 } }));
-    setStatus('Export running… (tabs are locked until it finishes)');
+    setStatus('Export running… (the other steps are locked until it finishes)');
     try {
       const r = await runExport({
         mode: job.mode,
@@ -467,7 +432,7 @@ export default function App() {
       setStatus(r.cancelled ? 'Export cancelled' : 'Export finished: ' + out);
     } catch (e) {
       setJob((j) => ({ ...j, running: false, result: 'error', log: j.log + '\n' + e.message }));
-      setStatus('Export failed — see the Export tab');
+      setStatus('Export failed — see the Export step');
     }
   }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, job.perWidget, job.pngScale, widgets, store, sync, range]);
   const cancelExport = useCallback(() => (cancelRef.current = true), []);
@@ -487,13 +452,14 @@ export default function App() {
           range,
           widgets,
           layoutName,
+          step: STEP_IDS.includes(screen) ? screen : undefined,
         },
         null,
         2
       ),
     // storeVersion: store is a stable instance — source add/remove/edit only bumps the version,
     // and without it here the autosave effect below never sees those changes
-    [video, store, storeVersion, layout, offset, drift, range, widgets, layoutName]
+    [video, store, storeVersion, layout, offset, drift, range, widgets, layoutName, screen]
   );
 
   const saveProject = useCallback(async () => {
@@ -502,6 +468,24 @@ export default function App() {
     await window.api.writeText(p, projectJson());
     setStatus('Project saved: ' + p);
   }, [projectJson]);
+
+  const clearProject = useCallback(() => {
+    for (const s of store.sources) csvWorker.remove(s.id);
+    store.sources = [];
+    store.rebuild();
+    bump();
+    setVideo(null);
+    setPlaybackBlocked(false);
+    setPlayError(null);
+    setTime(0);
+    setOffset(0);
+    setDrift(0);
+    setRange({ start: 0, end: null });
+    setWidgets([]);
+    setSelectedId(null);
+    setLayout(null);
+    setLayoutName('');
+  }, [store]);
 
   const loadProjectData = useCallback(
     async (j) => {
@@ -540,27 +524,34 @@ export default function App() {
         }
       }
       setWidgets(ws);
+      setSelectedId(null);
       setLayout(space);
       setLayoutName(typeof j.layoutName === 'string' ? j.layoutName : '');
     },
     [store, addCsvFiles, updateSource, probeVideo, warnIfUndecodable]
   );
 
+  // The step a loaded project lands on: the one it was saved in, else the first step that is not done yet.
+  const stepFor = (j) => (STEP_IDS.includes(j.step) ? j.step : !j.video || !(j.sources && j.sources.length) ? 'files' : !(j.widgets && j.widgets.length) ? 'widgets' : 'export');
+
   const loadProject = useCallback(async () => {
     const p = await window.api.openJson('Open project');
     if (!p) return;
     try {
-      await loadProjectData(JSON.parse(await window.api.readText(p)));
+      const j = JSON.parse(await window.api.readText(p));
+      await loadProjectData(j);
+      setBooted(true);
+      setScreen(stepFor(j));
       setStatus('Project loaded: ' + p);
     } catch (e) {
       setStatus('Load error: ' + e.message);
     }
   }, [loadProjectData]);
 
-  // On launch the autosaved project (if there is one) is offered in a dialog: continue it or
-  // start empty. Until the user picks, the autosave below stays off — otherwise the fresh empty
-  // state would overwrite the stored project before the choice is made.
-  const [startup, setStartup] = useState(() => {
+  // On launch the start screen offers the autosaved project (if there is one), a new project or
+  // a project file. Until the user picks, the autosave below stays off — otherwise the fresh
+  // empty state would overwrite the stored project before the choice is made.
+  const [startup] = useState(() => {
     try {
       const raw = localStorage.getItem(PROJECT_KEY);
       if (raw) {
@@ -572,22 +563,38 @@ export default function App() {
     }
     return null;
   });
+  const [booted, setBooted] = useState(false); // the first choice on the start screen was made
+  const hasProject = !!video || store.sources.length > 0 || widgets.length > 0;
   const continueSession = useCallback(() => {
-    const j = startup;
-    setStartup(null);
-    if (j) loadProjectData(j);
-  }, [startup, loadProjectData]);
-  const newSession = useCallback(() => {
+    if (booted) {
+      setScreen((s) => (STEP_IDS.includes(s) ? s : 'files'));
+      return;
+    }
+    setBooted(true);
+    if (startup) {
+      loadProjectData(startup);
+      setScreen(stepFor(startup));
+    } else setScreen('files');
+  }, [booted, startup, loadProjectData]);
+  const newSession = useCallback(async () => {
+    if (booted && hasProject && !(await confirm('Discard the open project and start an empty one? A project saved to a file stays untouched.', { title: 'New project?' }))) return;
     localStorage.removeItem(PROJECT_KEY);
-    setStartup(null);
-  }, []);
+    clearProject();
+    setBooted(true);
+    setScreen('files');
+  }, [booted, hasProject, confirm, clearProject]);
+  const [lastStep, setLastStep] = useState('files');
+  const goHome = useCallback(() => {
+    setLastStep(screen);
+    setScreen('home');
+  }, [screen]);
 
   // autosave the current project in localStorage so a restart keeps the work
   useEffect(() => {
-    if (startup) return undefined;
+    if (!booted) return undefined;
     const t = setTimeout(() => localStorage.setItem(PROJECT_KEY, projectJson()), 500);
     return () => clearTimeout(t);
-  }, [projectJson, startup]);
+  }, [projectJson, booted]);
 
   const selected = useMemo(() => widgets.find((w) => w.id === selectedId) || null, [widgets, selectedId]);
   const columnNames = useMemo(() => store.columnNames(), [store, storeVersion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -595,211 +602,138 @@ export default function App() {
   const widgetEnv = useMemo(() => ({ range, duration: video ? video.duration : 0 }), [range, video]);
   const locked = job.running;
 
+  // ---- steps ----
+  const stepIndex = STEP_IDS.indexOf(screen);
+  const steps = STEPS.map((s) => ({
+    ...s,
+    done: s.id === 'files' ? !!video && store.sources.length > 0 : s.id === 'sync' ? !!video && store.sources.length > 0 && (offset !== 0 || drift !== 0) : s.id === 'widgets' ? widgets.length > 0 : job.result === 'ok',
+  }));
+  const goStep = useCallback((id) => setScreen(id), []);
+
+  const app = {
+    video,
+    videoRef,
+    time,
+    setTime,
+    playbackBlocked,
+    proxyProgress,
+    showPlayError,
+    setStatus,
+    store,
+    storeVersion,
+    columnNames,
+    sync,
+    offset,
+    setOffset,
+    drift,
+    setDrift,
+    range,
+    setRange,
+    widgets,
+    setWidgets,
+    selected,
+    selectedId,
+    setSelectedId,
+    addWidget,
+    updateWidget,
+    removeWidget,
+    openEditorFor,
+    widgetEnv,
+    grid,
+    setGrid,
+    editMode,
+    setEditMode,
+    layout,
+    library,
+    setLibrary,
+    setLibEditId,
+    saveToLibrary,
+    layouts,
+    setLayouts,
+    applyLayout,
+    saveLayout,
+    layoutName,
+    setLayoutName,
+    confirm,
+    openVideo,
+    removeVideo,
+    makeProxy,
+    decodeBlackbox,
+    decoding,
+    busy,
+    bbOptions,
+    setBbOptions,
+    addCsvFiles,
+    updateSource,
+    removeSource,
+    removeAllSources,
+    job,
+    setJobOption,
+    startExport,
+    cancelExport,
+  };
+
+  if (screen === 'home') {
+    return (
+      <>
+        <HomeScreen project={startup} current={booted && hasProject ? { video: video ? video.path : null, sources: store.sources, widgets } : null} onContinue={booted ? () => setScreen(STEP_IDS.includes(lastStep) ? lastStep : 'files') : continueSession} onNew={newSession} onOpen={loadProject} />
+        {confirmDialog}
+      </>
+    );
+  }
+
   return (
-    <div className="h-full flex flex-col">
-      <header className="flex items-center gap-3 px-3" style={{ height: 46, background: 'var(--panel)', borderBottom: '1px solid var(--border)' }}>
-        <span className="wordmark">Blackbox overlay for INAV</span>
-        <span style={{ width: 1, height: 20, background: 'var(--border-strong)' }} />
-        <div className="flex items-center gap-1.5">
-          <button className="btn" onClick={openVideo} disabled={locked}>
-            Open video
-          </button>
-          <button className="btn" onClick={decodeBlackbox} disabled={decoding || busy != null || locked}>
-            {decoding ? 'Decoding…' : 'Add blackbox log'}
-          </button>
-          <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())} disabled={busy != null || locked}>
-            Add CSV
-          </button>
-        </div>
-        <div className="flex items-center gap-1 ml-auto">
-          <button className="btn btn-ghost" onClick={loadProject} disabled={locked}>
+    <div className="app">
+      <header className="appbar">
+        <button className="btn btn-icon" onClick={goHome} disabled={locked} title="Start screen: continue, new project, open project file">
+          <Icon name="home" />
+        </button>
+        <span className="wordmark">
+          <Icon name="widgets" />
+          Blackbox overlay for INAV
+        </span>
+        <Stepper steps={steps} current={screen} onSelect={goStep} locked={locked} />
+        <div className="appbar-actions">
+          <button className="btn btn-text" onClick={loadProject} disabled={locked} title="Open a project file (video, telemetry, sync, widgets)">
+            <Icon name="open" />
             Open project
           </button>
-          <button className="btn btn-ghost" onClick={saveProject}>
+          <button className="btn btn-text" onClick={saveProject} title="Save the project to a file">
+            <Icon name="save" />
             Save project
           </button>
         </div>
       </header>
 
-      <div className="flex-1 flex min-h-0">
-        <main className="flex-1 flex flex-col min-w-0">
-          <div className="stage-toolbar">
-            <span className="bar-label">Layout</span>
-            <Toggle checked={editMode} onChange={(e) => setEditMode(e.target.checked)} title="Move and resize widgets on the video">
-              Edit
-            </Toggle>
-            <Toggle checked={grid.snap} onChange={(e) => setGrid((g) => ({ ...g, snap: e.target.checked }))} title="Snap widget position and size to the grid while dragging (hold Alt to bypass)">
-              Snap
-            </Toggle>
-            <Toggle checked={grid.show} onChange={(e) => setGrid((g) => ({ ...g, show: e.target.checked }))} title="Show the layout grid over the video">
-              Grid
-            </Toggle>
-            <label className="flex items-center gap-1 text-xs" style={{ color: 'var(--muted)' }} title="Grid size in video pixels">
-              <input className="input mono" type="number" min={2} max={500} step={1} value={grid.size} style={{ width: 56, padding: '2px 6px' }} onChange={(e) => setGrid((g) => ({ ...g, size: Math.max(2, Number(e.target.value) || 2) }))} />
-              px
-            </label>
-            <span className="ml-auto" />
-            {video && (video.proxy || video.liveProxy) && (
-              <span className="chip chip-tele" title="The preview plays a re-encoded proxy; export always uses the original file">
-                proxy preview
-              </span>
-            )}
-          </div>
-          <Stage
-            video={video}
-            videoRef={videoRef}
-            widgets={widgets}
-            store={store}
-            storeVersion={storeVersion}
-            sync={sync}
-            time={time}
-            setTime={setTime}
-            range={range}
-            selectedId={selectedId}
-            setSelectedId={setSelectedId}
-            updateWidget={updateWidget}
-            editMode={editMode}
-            grid={grid}
-            layout={layout}
-            setStatus={showPlayError}
-            onOpenEditor={(id) => {
-              setSelectedId(id);
-              setEditorOpen(true);
-            }}
-            empty={
-              widgets.length ? null : (
-                <div className="empty-state">
-                  <span className="es-corner" />
-                  <span className="es-corner" />
-                  <span className="es-corner" />
-                  <span className="es-corner" />
-                  <div className="es-title">No signal</div>
-                  <div className="hint" style={{ textAlign: 'center', maxWidth: 340 }}>
-                    Open flight footage, then add a blackbox log or CSV telemetry. The next launch offers to pick up where you left off.
-                  </div>
-                  <div className="flex gap-2 mt-2 flex-wrap justify-center">
-                    <button className="btn btn-primary" onClick={openVideo}>
-                      Open video…
-                    </button>
-                    <button className="btn" onClick={decodeBlackbox} disabled={decoding || busy != null}>
-                      {decoding ? 'Decoding…' : 'Decode blackbox…'}
-                    </button>
-                    <button className="btn" onClick={async () => addCsvFiles(await window.api.openCsv())} disabled={busy != null}>
-                      Add CSV…
-                    </button>
-                  </div>
-                </div>
-              )
-            }
-          />
-          <SyncBar
-            video={video}
-            videoRef={videoRef}
-            time={time}
-            setTime={setTime}
-            offset={offset}
-            setOffset={setOffset}
-            drift={drift}
-            setDrift={setDrift}
-            store={store}
-            storeVersion={storeVersion}
-            columnNames={columnNames}
-            setStatus={showPlayError}
-            disabled={playbackBlocked && !(video && (video.proxy || video.liveProxy))}
-            // while the live proxy is still encoding, seeking (and the export in/out points) is capped to the part ffmpeg has written
-            seekLimit={video && video.liveProxy && !video.proxy && proxyProgress != null ? Math.max(0, proxyProgress * video.duration - 1) : undefined}
-            range={range}
-            setRange={setRange}
-            onAutoSync={() => setAutoSyncOpen(true)}
-          />
-        </main>
+      {screen === 'files' && <FilesStep app={app} />}
+      {screen === 'sync' && <SyncStep app={app} />}
+      {screen === 'widgets' && <WidgetsStep app={app} />}
+      {screen === 'export' && <ExportStep app={app} />}
 
-        <aside className="w-[430px] flex flex-col min-h-0" style={{ background: 'var(--panel)', borderLeft: '1px solid var(--border)' }}>
-          <nav className="flex" style={{ borderBottom: '1px solid var(--border)' }}>
-            {TABS.map(([k, l]) => {
-              const disabled = locked && k !== 'export';
-              return (
-                <div key={k} className={'tab ' + (tab === k ? 'tab-active' : '') + (disabled ? ' tab-disabled' : '')} title={disabled ? 'Locked while exporting' : ''} onClick={() => !disabled && setTab(k)}>
-                  {TAB_ICONS[k]}
-                  {l}
-                  {k === 'export' && locked && <span className="chip chip-accent ml-1">●</span>}
-                </div>
-              );
-            })}
-          </nav>
-          <div className="flex-1 overflow-y-auto p-3 min-h-0">
-            {tab === 'files' && (
-              <FilesPanel
-                video={video}
-                openVideo={openVideo}
-                removeVideo={removeVideo}
-                makeProxy={makeProxy}
-                proxyProgress={proxyProgress}
-                cancelProxy={() => window.api.cancelProxy()}
-                decodeBlackbox={decodeBlackbox}
-                decoding={decoding}
-                busy={busy}
-                bbOptions={bbOptions}
-                setBbOptions={setBbOptions}
-                store={store}
-                storeVersion={storeVersion}
-                addCsvFiles={addCsvFiles}
-                updateSource={updateSource}
-                removeSource={removeSource}
-                removeAllSources={removeAllSources}
-              />
-            )}
-            {tab === 'widgets' && (
-              <WidgetsPanel
-                widgets={widgets}
-                selected={selected}
-                setSelectedId={setSelectedId}
-                addWidget={addWidget}
-                updateWidget={updateWidget}
-                removeWidget={removeWidget}
-                setWidgets={setWidgets}
-                columnNames={columnNames}
-                store={store}
-                time={time}
-                sync={sync}
-                env={widgetEnv}
-                openEditor={() => setEditorOpen(true)}
-                saveToLibrary={saveToLibrary}
-                layoutName={layoutName}
-                setLayoutName={setLayoutName}
-                saveLayout={saveLayout}
-                layoutsCount={layouts.length}
-              />
-            )}
-            {tab === 'layouts' && <LayoutsPanel layouts={layouts} setLayouts={setLayouts} applyLayout={applyLayout} setStatus={setStatus} confirm={confirm} />}
-            {tab === 'library' && <LibraryPanel library={library} setLibrary={setLibrary} addWidget={addWidget} editWidget={setLibEditId} setStatus={setStatus} confirm={confirm} />}
-            {tab === 'export' && <ExportPanel video={video} widgets={widgets} job={job} setJobOption={setJobOption} startExport={startExport} cancelExport={cancelExport} range={range} />}
-          </div>
-        </aside>
-      </div>
-
-      <footer className="statusbar">
-        {locked && job.progress && <span className="chip chip-accent">export {Math.round((100 * job.progress.frame) / job.progress.total)}%</span>}
+      <footer className="bottombar">
+        {locked && job.progress && <span className="chip chip-sm chip-accent">export {Math.round((100 * job.progress.frame) / job.progress.total)}%</span>}
         {busy && (
           <div className="progress" style={{ width: 90, flex: 'none' }} title={busy}>
             <div className="indet" />
           </div>
         )}
-        <span className="truncate" style={{ flex: 1, minWidth: 0, color: locked ? 'var(--accent)' : undefined }}>{busy || status}</span>
+        <span className="status" style={{ color: locked ? 'var(--primary)' : undefined }}>
+          {busy || status}
+        </span>
         {video && (
           <span className="readout">
             {video.width}×{video.height} · {video.fps.toFixed(2)} fps · {video.codec}
           </span>
         )}
         {store.sources.length > 0 && (
-          <span className="readout" style={{ color: 'var(--tele)' }} title="Loaded telemetry sources">
-            {store.sources.length} src
+          <span className="readout tele" title="Loaded telemetry sources">
+            <b>{store.sources.length}</b> src
           </span>
         )}
         <span className="readout" title="Telemetry time = video time × (1 + drift) + offset">
           t <b>{toTele(time, sync).toFixed(3)}</b> s
         </span>
-        <span className="readout" title="Telemetry offset — adjust in the sync bar or with [ and ] keys">
+        <span className="readout" title="Telemetry offset — set in the Sync step">
           offset <b>{offset.toFixed(3)}</b> s
         </span>
         {drift !== 0 && (
@@ -807,43 +741,50 @@ export default function App() {
             drift <b>{drift.toFixed(2)}</b> ms/s
           </span>
         )}
+        <div className="bottombar-nav">
+          <button className="btn btn-text" onClick={() => goStep(STEP_IDS[stepIndex - 1])} disabled={locked || stepIndex <= 0}>
+            <Icon name="back" />
+            Back
+          </button>
+          {stepIndex < STEP_IDS.length - 1 && (
+            <button className="btn btn-tonal" onClick={() => goStep(STEP_IDS[stepIndex + 1])} disabled={locked}>
+              {STEPS[stepIndex + 1].label}
+              <Icon name="forward" />
+            </button>
+          )}
+        </div>
       </footer>
 
-      {editorOpen && selected && (
-        <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} sync={sync} columnNames={columnNames} ColumnsInput={ColumnsInput} env={widgetEnv} />
-      )}
-      {libEdit && <CodeEditorModal widget={libEdit} updateWidget={updateLibraryWidget} onClose={() => setLibEditId(null)} store={store} time={time} sync={sync} columnNames={columnNames} ColumnsInput={ColumnsInput} env={widgetEnv} title="Library widget" />}
+      {editorOpen && selected && <CodeEditorModal widget={selected} updateWidget={updateWidget} onClose={() => setEditorOpen(false)} store={store} time={time} sync={sync} columnNames={columnNames} env={widgetEnv} />}
+      {libEdit && <CodeEditorModal widget={libEdit} updateWidget={updateLibraryWidget} onClose={() => setLibEditId(null)} store={store} time={time} sync={sync} columnNames={columnNames} env={widgetEnv} title="Library widget" />}
 
-      {startup && <StartupDialog project={startup} onContinue={continueSession} onNew={newSession} />}
-      {autoSyncOpen && video && (
-        <AutoSyncDialog video={video} store={store} storeVersion={storeVersion} columnNames={columnNames} sync={sync} setOffset={setOffset} setDrift={setDrift} time={time} onClose={() => setAutoSyncOpen(false)} setStatus={setStatus} />
-      )}
       {confirmDialog}
       {playError && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(5,8,11,.72)' }} onMouseDown={(e) => e.target === e.currentTarget && setPlayError(null)}>
-          <div className="rounded-lg p-5 flex flex-col gap-4" style={{ width: 'min(92vw, 560px)', background: 'var(--panel)', border: '1px solid var(--border-strong)', boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}>
-            <div className="font-semibold text-base">Video playback problem</div>
-            <div className="text-sm" style={{ color: 'var(--muted)' }}>{playError}</div>
-            <div className="flex flex-wrap gap-2 justify-end">
+        <Dialog
+          title="Video playback problem"
+          icon="warning"
+          onClose={() => setPlayError(null)}
+          actions={
+            <>
               {video && !video.proxy && proxyProgress == null && (
                 <>
                   <button
-                    className="btn btn-primary"
+                    className="btn btn-filled"
                     title="Same resolution, frame rate and bit depth, re-encoded on the GPU (NVENC)"
                     onClick={() => {
                       setPlayError(null);
-                      setTab('files');
+                      setScreen('files');
                       makeProxy('full');
                     }}
                   >
-                    Create full-quality proxy (GPU)
+                    Create full-quality proxy
                   </button>
                   <button
-                    className="btn"
+                    className="btn btn-tonal"
                     title="1080p / 30 fps H.264 — small and fast, for weaker machines"
                     onClick={() => {
                       setPlayError(null);
-                      setTab('files');
+                      setScreen('files');
                       makeProxy('light');
                     }}
                   >
@@ -851,12 +792,14 @@ export default function App() {
                   </button>
                 </>
               )}
-              <button className="btn" onClick={() => setPlayError(null)}>
+              <button className="btn btn-text" onClick={() => setPlayError(null)}>
                 Close
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          {playError}
+        </Dialog>
       )}
     </div>
   );
