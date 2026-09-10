@@ -1,17 +1,21 @@
 // Example widgets shown read-only in the Library tab (Examples section). Every example starts
 // with a SETTINGS block whose values come from the widget's settings (the `settings` definition
 // below, editable in the editor's "Settings definition" tab; the app renders a form from it).
-// They are read straight from this file, so they are always current.
+// They are read straight from this file, so they are always current. Each carries an icon and
+// tags (categories) for the widget picker, and every settings group names its icon (icons.js).
 import { defsToSource as defs } from './widgetSettings.js';
+import { WIDGET_ICONS, groupIcon as gi } from './icons.js';
 
 export const EXAMPLE_WIDGETS = [
   {
     name: 'Example: Big number',
+    icon: WIDGET_ICONS.big_number,
+    tags: ['library', 'value', 'speed'],
     columns: 'GPS_speed (m/s)',
     w: 320,
     h: 110,
     settings: defs([
-      { group: { name: 'Value', items: [
+      { group: { name: 'Value', icon: gi('Value'), items: [
         { name: 'Label', type: 'text', default: 'SPEED', description: "small caption above the value ('' = none)" },
         { name: 'Unit', type: 'text', default: 'km/h', description: 'unit text after the value' },
         { name: 'Multiplier', type: 'number', default: 3.6, step: 0.1, description: 'value * MULTIPLIER (m/s -> km/h = 3.6; 1 = as is)' },
@@ -19,7 +23,7 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Show max', type: 'bool', default: false, description: 'show whole-flight maximum under the value' },
         { name: 'Smoothing ms', type: 'int', default: 300, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
       ] } },
-      { group: { name: 'Text', items: [
+      { group: { name: 'Text', icon: gi('Text'), items: [
         { name: 'Color', type: 'color_picker', default: '#ffffff', description: 'text color' },
         { name: 'Label color', type: 'color_picker', default: 'rgba(255,255,255,.75)' },
         { name: 'Font', type: 'text', default: 'Arial, sans-serif', description: 'font family' },
@@ -27,7 +31,7 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Shadow', type: 'text', default: '0 0 8px rgba(0,0,0,.9)', description: "CSS text shadow ('' = none)" },
         { name: 'Align', type: 'select', default: 'left', values: ['left', 'center', 'right'], description: "'left' | 'center' | 'right'" },
       ] } },
-      { group: { name: 'Box', items: [
+      { group: { name: 'Box', icon: gi('Box'), items: [
         { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.25)', description: 'box background; alpha 0 = no box' },
         { name: 'Radius', type: 'int', default: 8, min: 0, description: 'box corner radius at the default size; scales with the widget' },
       ] } },
@@ -71,11 +75,13 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: Bar gauge',
+    icon: WIDGET_ICONS.bar_gauge,
+    tags: ['library', 'gauge', 'bar', 'throttle'],
     columns: 'rcCommand[3]',
     w: 300,
     h: 40,
     settings: defs([
-      { group: { name: 'Range', items: [
+      { group: { name: 'Range', icon: gi('Range'), items: [
         { name: 'Auto range', type: 'bool', default: false, description: '0 % / 100 % = whole-flight minimum / maximum instead of Min / Max' },
         { name: 'Min', type: 'int', default: 1000, description: 'value that maps to 0 %' },
         { name: 'Max', type: 'int', default: 2000, description: 'value that maps to 100 %' },
@@ -83,19 +89,19 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Digits', type: 'int', default: 0, min: 0, max: 6 },
         { name: 'Smoothing ms', type: 'int', default: 300, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
       ] } },
-      { group: { name: 'Bar', items: [
+      { group: { name: 'Bar', icon: gi('Bar'), items: [
         { name: 'Bar color', type: 'text', default: 'linear-gradient(90deg,#3f3,#ff3,#f33)', description: 'CSS color or gradient of the fill (for vertical direction use 0deg)' },
         { name: 'Gradient span', type: 'select', default: 'gauge', values: { gauge: 'gauge (the fill reveals the gradient)', fill: 'fill (gradient squeezed into the filled part)' }, description: "'gauge' = gradient spans the whole gauge and the fill just reveals it; 'fill' = gradient squeezes into the filled part" },
         { name: 'Direction', type: 'select', default: 'horizontal', values: ['horizontal', 'vertical'], description: "'horizontal' | 'vertical'" },
       ] } },
-      { group: { name: 'Text', items: [
+      { group: { name: 'Text', icon: gi('Text'), items: [
         { name: 'Label', type: 'text', default: 'THR', description: "label text ('' = none)" },
         { name: 'Text color', type: 'color_picker', default: '#fff' },
         { name: 'Font', type: 'text', default: 'Arial', description: 'font family' },
         { name: 'Font size', type: 'int', default: 18, min: 6, description: 'text size at the default 300x40 size; scales with the widget' },
         { name: 'Font bold', type: 'bool', default: true },
       ] } },
-      { group: { name: 'Box', items: [
+      { group: { name: 'Box', icon: gi('Box'), items: [
         { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.5)' },
         { name: 'Border color', type: 'color_picker', default: '#fff' },
         { name: 'Border width', type: 'int', default: 2, min: 0, description: 'at the default 300x40 size; scales with the widget' },
@@ -154,11 +160,13 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: Line graph (history)',
+    icon: WIDGET_ICONS.line_graph,
+    tags: ['library', 'graph', 'history', 'altitude'],
     columns: 'BaroAlt (m)',
     w: 400,
     h: 150,
     settings: defs([
-      { group: { name: 'Data', items: [
+      { group: { name: 'Data', icon: gi('Data'), items: [
         { name: 'Window ms', type: 'int', default: 20000, min: 500, description: 'how much history to show (ms)' },
         { name: 'Clip to range', type: 'bool', default: false, description: 'draw nothing outside the export range (sync bar in/out points)' },
         { name: 'Smoothing ms', type: 'int', default: 300, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
@@ -167,18 +175,18 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Digits', type: 'int', default: 1, min: 0, max: 6 },
         { name: 'Unit', type: 'text', default: 'm' },
       ] } },
-      { group: { name: 'Axis', items: [
+      { group: { name: 'Axis', icon: gi('Axis'), items: [
         { name: 'Scale', type: 'select', default: 'flight', values: { flight: 'flight (fixed axis from whole-flight min/max)', window: 'window (autoscale to the visible history)', fixed: 'fixed (Min / Max)' }, description: 'vertical axis scaling' },
         { name: 'Min', type: 'int', default: 0, description: "axis minimum when Scale = 'fixed'" },
         { name: 'Max', type: 'int', default: 100, description: "axis maximum when Scale = 'fixed'" },
         { name: 'Show grid', type: 'bool', default: true },
       ] } },
-      { group: { name: 'Line', items: [
+      { group: { name: 'Line', icon: gi('Line'), items: [
         { name: 'Line color', type: 'color_picker', default: '#00ff00', description: 'line color below the first threshold (thresholds are set in the code)' },
         { name: 'Line width', type: 'number', default: 2, min: 0, step: 0.5, description: 'at the default 400x150 size; scales with the widget' },
         { name: 'Fill alpha', type: 'number', default: 0.15, min: 0, max: 1, step: 0.05, description: 'opacity of the area under the line (0 = no area)' },
       ] } },
-      { group: { name: 'Text & box', items: [
+      { group: { name: 'Text & box', icon: gi('Text & box'), items: [
         { name: 'Text color', type: 'color_picker', default: '#fff' },
         { name: 'Font size', type: 'int', default: 14, min: 6, description: 'text size at the default 400x150 size; scales with the widget' },
         { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.4)' },
@@ -291,11 +299,13 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: Flight graph (whole flight)',
+    icon: WIDGET_ICONS.flight_graph,
+    tags: ['library', 'graph', 'flight', 'speed'],
     columns: 'GPS_speed (km/h)',
     w: 520,
     h: 160,
     settings: defs([
-      { group: { name: 'Data', items: [
+      { group: { name: 'Data', icon: gi('Data'), items: [
         { name: 'Unit', type: 'text', default: 'km/h' },
         { name: 'Multiplier', type: 'number', default: 1, step: 0.1, description: 'value scaling (3.6 = m/s -> km/h, 0.01 = cm -> m)' },
         { name: 'Digits', type: 'int', default: 1, min: 0, max: 6 },
@@ -303,7 +313,7 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Smoothing ms', type: 'int', default: 1000, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
         { name: 'Clip to range', type: 'bool', default: false, description: 'show only the export range (sync bar in/out points) instead of the whole flight' },
       ] } },
-      { group: { name: 'Axis', items: [
+      { group: { name: 'Axis', icon: gi('Axis'), items: [
         { name: 'Baseline', type: 'select', default: 'zero', values: { zero: 'zero (axis starts at 0)', min: 'min (axis starts at the flight minimum)' }, description: "'zero' = axis starts at 0, 'min' = at flight minimum" },
         { name: 'Fixed axis', type: 'bool', default: false, description: 'use Min / Max for the axis instead of the flight' },
         { name: 'Min', type: 'int', default: 0, description: 'axis minimum when Fixed axis is on' },
@@ -312,19 +322,19 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Grid color', type: 'color_picker', default: 'rgba(255,255,255,.6)' },
         { name: 'Axis labels', type: 'bool', default: true, description: 'numbers on the left' },
       ] } },
-      { group: { name: 'Curve', items: [
+      { group: { name: 'Curve', icon: gi('Curve'), items: [
         { name: 'Fill color', type: 'color_picker', default: 'rgba(80,160,255,.85)' },
         { name: 'Line color', type: 'color_picker', default: 'rgba(255,255,255,.9)' },
         { name: 'Line width', type: 'number', default: 1, min: 0, step: 0.5, description: 'at the default 520x160 size; scales with the widget (like all sizes below)' },
       ] } },
-      { group: { name: 'Marker', items: [
+      { group: { name: 'Marker', icon: gi('Marker'), items: [
         { name: 'Marker color', type: 'color_picker', default: '#e03030', description: 'vertical bar at current time' },
         { name: 'Marker width', type: 'int', default: 4, min: 0 },
         { name: 'Dot', type: 'bool', default: true, description: 'dot on the curve at current time' },
         { name: 'Dot color', type: 'color_picker', default: '#ffffff' },
         { name: 'Dot size', type: 'int', default: 5, min: 0 },
       ] } },
-      { group: { name: 'Text & box', items: [
+      { group: { name: 'Text & box', icon: gi('Text & box'), items: [
         { name: 'Title', type: 'text', default: 'Speed vs Time', description: "caption under the chart ('' = none)" },
         { name: 'Text color', type: 'color_picker', default: '#ffffff' },
         { name: 'Font', type: 'text', default: 'Arial' },
@@ -442,11 +452,13 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: Altitude profile',
+    icon: WIDGET_ICONS.altitude_profile,
+    tags: ['library', 'graph', 'altitude', 'flight'],
     columns: 'BaroAlt (m)',
     w: 520,
     h: 140,
     settings: defs([
-      { group: { name: 'Data', items: [
+      { group: { name: 'Data', icon: gi('Data'), items: [
         { name: 'Multiplier', type: 'number', default: 1, step: 0.1, description: 'value scaling (0.01 = cm -> m)' },
         { name: 'Unit', type: 'text', default: 'm' },
         { name: 'Digits', type: 'int', default: 0, min: 0, max: 6 },
@@ -454,17 +466,17 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Smoothing ms', type: 'int', default: 1000, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
         { name: 'Clip to range', type: 'bool', default: false, description: 'show only the export range (sync bar in/out points) instead of the whole flight' },
       ] } },
-      { group: { name: 'Profile', items: [
+      { group: { name: 'Profile', icon: gi('Profile'), items: [
         { name: 'Fill top', type: 'color_picker', default: 'rgba(120,200,120,.9)', description: 'gradient top color' },
         { name: 'Fill bottom', type: 'color_picker', default: 'rgba(40,90,40,.6)', description: 'gradient bottom color' },
         { name: 'Line color', type: 'color_picker', default: '#ffffff' },
         { name: 'Line width', type: 'number', default: 1.5, min: 0, step: 0.5, description: 'at the default 520x140 size; scales with the widget (like all sizes below)' },
       ] } },
-      { group: { name: 'Marker', items: [
+      { group: { name: 'Marker', icon: gi('Marker'), items: [
         { name: 'Dot color', type: 'color_picker', default: '#ff3030' },
         { name: 'Dot size', type: 'int', default: 6, min: 0 },
       ] } },
-      { group: { name: 'Text & box', items: [
+      { group: { name: 'Text & box', icon: gi('Text & box'), items: [
         { name: 'Label', type: 'text', default: 'ALT', description: "caption in the top-left corner ('' = none)" },
         { name: 'Text color', type: 'color_picker', default: '#ffffff' },
         { name: 'Font', type: 'text', default: 'Arial' },
@@ -563,11 +575,13 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: RC sticks',
+    icon: WIDGET_ICONS.rc_sticks,
+    tags: ['library', 'rc', 'sticks'],
     columns: 'rcCommand[0], rcCommand[1], rcCommand[2], rcCommand[3]',
     w: 260,
     h: 130,
     settings: defs([
-      { group: { name: 'Sticks', items: [
+      { group: { name: 'Sticks', icon: gi('Sticks'), items: [
         { name: 'Mode', type: 'select', default: 2, values: { '1': 'Mode 1 (left stick = pitch/yaw, right = throttle/roll)', '2': 'Mode 2 (left stick = throttle/yaw, right = pitch/roll)' }, description: 'transmitter mode' },
         { name: 'Min', type: 'int', default: -500, description: 'stick range minimum for roll/pitch/yaw (INAV rcCommand is -500..500)' },
         { name: 'Max', type: 'int', default: 500, description: 'stick range maximum for roll/pitch/yaw' },
@@ -578,7 +592,7 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Invert roll', type: 'bool', default: false },
         { name: 'Invert yaw', type: 'bool', default: false },
       ] } },
-      { group: { name: 'Look', items: [
+      { group: { name: 'Look', icon: gi('Look'), items: [
         { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.45)' },
         { name: 'Border', type: 'color_picker', default: 'rgba(255,255,255,.6)' },
         { name: 'Grid', type: 'color_picker', default: 'rgba(255,255,255,.2)' },
@@ -587,12 +601,12 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Radius', type: 'int', default: 8, min: 0, description: 'corner radius at the default size; scales with the widget' },
         { name: 'Gap', type: 'int', default: 10, min: 0, description: 'gap between the two boxes at the default size; scales with the widget' },
       ] } },
-      { group: { name: 'Trail', items: [
+      { group: { name: 'Trail', icon: gi('Trail'), items: [
         { name: 'Trail', type: 'bool', default: true, description: 'short trail of the stick movement' },
         { name: 'Trail ms', type: 'int', default: 600, min: 0, description: 'trail length in ms' },
         { name: 'Trail color', type: 'color_picker', default: 'rgba(242,169,59,.5)' },
       ] } },
-      { group: { name: 'Labels', items: [
+      { group: { name: 'Labels', icon: gi('Labels'), items: [
         { name: 'Labels', type: 'bool', default: true, description: 'T/Y/P/R labels' },
         { name: 'Label color', type: 'color_picker', default: 'rgba(255,255,255,.7)' },
         { name: 'Label size', type: 'int', default: 10, min: 4, description: 'label font size at the default 260x130 size; scales with the widget' },
@@ -670,11 +684,13 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: GPS map',
+    icon: WIDGET_ICONS.gps_map,
+    tags: ['library', 'map', 'gps', 'navigation'],
     columns: 'GPS_coord[0], GPS_coord[1], heading',
     w: 300,
     h: 300,
     settings: defs([
-      { group: { name: 'Map', items: [
+      { group: { name: 'Map', icon: gi('Map'), items: [
         { name: 'Map style', type: 'select', default: 'osm', values: { osm: 'OpenStreetMap', 'carto-dark': 'CARTO dark', 'carto-light': 'CARTO light', none: 'no map' }, description: 'tile provider (CARTO may show "API key required" tiles for some networks)' },
         { name: 'Map opacity', type: 'number', default: 0.55, min: 0, max: 1, step: 0.05, description: 'map tile opacity – keep low to be unobtrusive' },
         { name: 'Map grayscale', type: 'bool', default: true, description: 'desaturate the map' },
@@ -685,14 +701,14 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Show attribution', type: 'bool', default: true, description: 'tile providers require attribution' },
         { name: 'Clip to range', type: 'bool', default: false, description: 'show only the export range (sync bar in/out points) instead of the whole flight' },
       ] } },
-      { group: { name: 'Track', items: [
+      { group: { name: 'Track', icon: gi('Track'), items: [
         { name: 'Track color', type: 'color_picker', default: 'rgba(255,255,255,.9)' },
         { name: 'Track width', type: 'number', default: 2, min: 0, step: 0.5 },
         { name: 'Trail color', type: 'color_picker', default: '#00ffff', description: "already-flown part of the track ('' = same as the track)" },
         { name: 'Trail width', type: 'number', default: 3, min: 0, step: 0.5 },
         { name: 'Smoothing ms', type: 'int', default: 500, min: 0, description: 'smoothing window in ms for position & heading (0 = off)' },
       ] } },
-      { group: { name: 'Aircraft', items: [
+      { group: { name: 'Aircraft', icon: gi('Aircraft'), items: [
         { name: 'Arrow style', type: 'select', default: 'dot', values: ['arrow', 'plane', 'chevron', 'dot'], description: "'arrow' | 'plane' | 'chevron' | 'dot'" },
         { name: 'Arrow size', type: 'int', default: 25, min: 2 },
         { name: 'Arrow color', type: 'color_picker', default: '#ff3030' },
@@ -700,7 +716,7 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Heading unit', type: 'select', default: 'deg', values: ['deg', 'decideg', 'rad'], description: "unit of the heading column ('decideg' = value / 10, INAV attitude[2])" },
         { name: 'Heading offset', type: 'int', default: -90, description: 'degrees added if the arrow points the wrong way' },
       ] } },
-      { group: { name: 'Box', items: [
+      { group: { name: 'Box', icon: gi('Box'), items: [
         { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.45)' },
         { name: 'Radius', type: 'int', default: 10, min: 0 },
         { name: 'Border width', type: 'int', default: 1, min: 0 },
@@ -864,17 +880,19 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: Compass / heading',
+    icon: WIDGET_ICONS.compass,
+    tags: ['library', 'compass', 'heading', 'navigation'],
     columns: 'heading',
     w: 220,
     h: 60,
     settings: defs([
-      { group: { name: 'Heading', items: [
+      { group: { name: 'Heading', icon: gi('Heading'), items: [
         { name: 'Heading unit', type: 'select', default: 'deg', values: ['deg', 'decideg', 'rad'], description: "unit of the heading column ('decideg' = value / 10, INAV attitude[2])" },
         { name: 'Heading offset', type: 'int', default: -90, description: 'degrees added if the compass points the wrong way' },
         { name: 'Style', type: 'select', default: 'tape', values: { tape: 'tape (sliding ribbon)', rose: 'rose (rotating rose)' }, description: "'tape' (sliding ribbon) | 'rose' (rotating rose)" },
         { name: 'Degrees per px', type: 'number', default: 1, min: 0.1, step: 0.1, description: 'tape: degrees per pixel at the default size (smaller = wider view)' },
       ] } },
-      { group: { name: 'Look', items: [
+      { group: { name: 'Look', icon: gi('Look'), items: [
         { name: 'Color', type: 'color_picker', default: '#fff' },
         { name: 'Accent', type: 'color_picker', default: '#ff3030', description: 'needle / center mark' },
         { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.45)' },
@@ -928,22 +946,24 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: Compass 3D',
+    icon: WIDGET_ICONS.compass_3d,
+    tags: ['library', 'compass', 'heading', '3d'],
     columns: 'heading',
     w: 280,
     h: 170,
     settings: defs([
-      { group: { name: 'Heading', items: [
+      { group: { name: 'Heading', icon: gi('Heading'), items: [
         { name: 'Heading unit', type: 'select', default: 'deg', values: ['deg', 'decideg', 'rad'], description: "unit of the heading column ('decideg' = value / 10, INAV attitude[2])" },
         { name: 'Heading offset', type: 'int', default: -90, description: 'degrees added if the ring points the wrong way' },
         { name: 'Invert', type: 'bool', default: false, description: 'flip rotation direction if the ring turns the wrong way' },
         { name: 'Smoothing ms', type: 'int', default: 300, min: 0, description: 'heading smoothing window (ms, 0 = off; wrap-safe)' },
       ] } },
-      { group: { name: 'View', items: [
+      { group: { name: 'View', icon: gi('View'), items: [
         { name: 'Tilt degrees', type: 'int', default: 30, min: 10, max: 80, description: 'camera angle above the ring plane (10 = flat/edge-on, 80 = top-down)' },
         { name: 'Depth', type: 'number', default: 3.2, min: 1.5, max: 10, step: 0.1, description: 'perspective strength (2 = strong, 6 = almost none)' },
         { name: 'Show readout', type: 'bool', default: true, description: 'big degrees + cardinal in the middle' },
       ] } },
-      { group: { name: 'Look', items: [
+      { group: { name: 'Look', icon: gi('Look'), items: [
         { name: 'Color', type: 'color_picker', default: '#ffffff', description: 'ticks / labels / rim' },
         { name: 'North color', type: 'color_picker', default: '#ff5050', description: 'N label' },
         { name: 'Accent', type: 'color_picker', default: '#ff3030', description: 'fixed front marker' },
@@ -1041,24 +1061,26 @@ export const EXAMPLE_WIDGETS = [
   },
   {
     name: 'Example: Attitude horizon',
+    icon: WIDGET_ICONS.attitude_horizon,
+    tags: ['library', 'attitude', 'horizon'],
     columns: 'attitude[0], attitude[1]',
     w: 240,
     h: 240,
     settings: defs([
-      { group: { name: 'Angles', items: [
+      { group: { name: 'Angles', icon: gi('Angles'), items: [
         { name: 'Angle unit', type: 'select', default: 'decideg', values: ['deg', 'decideg', 'rad'], description: "unit of the roll/pitch columns ('decideg' = value / 10, INAV attitude[])" },
         { name: 'Invert roll', type: 'bool', default: false, description: 'flip roll if the horizon tilts the wrong way' },
         { name: 'Invert pitch', type: 'bool', default: false, description: 'flip pitch direction' },
         { name: 'Smoothing ms', type: 'int', default: 200, min: 0, description: 'smoothing window for roll & pitch (ms, 0 = off)' },
       ] } },
-      { group: { name: 'Ladder', items: [
+      { group: { name: 'Ladder', icon: gi('Ladder'), items: [
         { name: 'Degrees per px', type: 'number', default: 0.45, min: 0.05, step: 0.05, description: 'pitch ladder density (deg per pixel at the default 240x240 size)' },
         { name: 'Ladder step', type: 'int', default: 10, min: 5, max: 90, description: 'degrees between numbered ladder lines' },
         { name: 'Line color', type: 'color_picker', default: '#ffffff', description: 'horizon + ladder lines' },
         { name: 'Font size', type: 'int', default: 11, min: 6, description: 'ladder / readout text at the default size; scales' },
         { name: 'Show values', type: 'bool', default: true, description: 'numeric roll/pitch readout at the bottom' },
       ] } },
-      { group: { name: 'Colors', items: [
+      { group: { name: 'Colors', icon: gi('Colors'), items: [
         { name: 'Sky top', type: 'color_picker', default: '#2f6fb2', description: 'sky gradient top' },
         { name: 'Sky horizon', type: 'color_picker', default: '#7db4e0', description: 'sky at the horizon' },
         { name: 'Ground horizon', type: 'color_picker', default: '#9a6b3f', description: 'ground at the horizon' },

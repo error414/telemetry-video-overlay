@@ -1,5 +1,6 @@
 import { toTele } from './time.js';
 import { parseSettings, settingsFor, defsToSource } from './widgetSettings.js';
+import { WIDGET_ICONS, GROUP_ICONS, safeIconSvg } from './icons.js';
 /**
  * Widget API
  * ----------
@@ -249,10 +250,25 @@ export const byName = (items, key = (x) => x.name) => items.slice().sort((a, b) 
 /** Unique id for widgets, library entries and layouts. */
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
+/** Tags (categories) of a widget: lower-case, trimmed, unique; accepts an array or a comma-separated string. */
+export function normalizeTags(tags) {
+  const list = Array.isArray(tags) ? tags : typeof tags === 'string' ? tags.split(',') : [];
+  const out = [];
+  for (const t of list) {
+    const s = String(t == null ? '' : t)
+      .trim()
+      .toLowerCase()
+      .replace(/^#/, '');
+    if (s && !out.includes(s)) out.push(s);
+  }
+  return out;
+}
+
 /**
  * Normalise a widget record coming from storage, a project file, an import or the examples:
- * drops fields of older versions (css, opacity), guarantees settings (string) and config (object).
- * The id is kept as is (callers decide about ids).
+ * drops fields of older versions (css, opacity), guarantees settings (string), config (object),
+ * tags (array of lower-case strings) and icon (SVG string or ''). The id is kept as is (callers
+ * decide about ids).
  */
 export function cleanWidget(w) {
   // eslint-disable-next-line no-unused-vars
@@ -261,6 +277,8 @@ export function cleanWidget(w) {
     ...rest,
     settings: typeof rest.settings === 'string' ? rest.settings : '',
     config: rest.config && typeof rest.config === 'object' && !Array.isArray(rest.config) ? rest.config : {},
+    tags: normalizeTags(rest.tags),
+    icon: safeIconSvg(rest.icon) || '',
   };
 }
 
@@ -279,8 +297,28 @@ export function newWidget(partial = {}) {
     ...rest,
     // a widget with its own code but no definition (older library entries) simply has no settings
     settings: partial.settings != null ? rest.settings : partial.code == null ? DEFAULT_SETTINGS : '',
+    // the blank widget shows a number, so it starts with the "big number" icon; own code without an icon gets none (the UI shows a generic one)
+    icon: rest.icon || (partial.code == null ? WIDGET_ICONS.big_number : ''),
     id: uid(),
   };
+}
+
+/** Text search over a widget: name, columns and tags; `#tag` / `tag:x` words in the query match tags only. */
+export function widgetMatches(w, query, tags = []) {
+  const words = String(query || '')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  const wt = w.tags || [];
+  for (const t of tags) if (!wt.includes(t)) return false;
+  const hay = ((w.name || '') + ' ' + (w.columns || '') + ' ' + wt.join(' ')).toLowerCase();
+  for (const word of words) {
+    const m = /^(?:#|tag:)(.+)$/.exec(word);
+    if (m) {
+      if (!wt.some((t) => t.includes(m[1]))) return false;
+    } else if (!hay.includes(word)) return false;
+  }
+  return true;
 }
 
 export const DEFAULT_CODE = `function (settings, time, ctx) {
@@ -295,6 +333,8 @@ export const DEFAULT_CODE = `function (settings, time, ctx) {
 
 /** Settings definition of a new widget (the form for DEFAULT_CODE). */
 export const DEFAULT_SETTINGS = defsToSource([
-  { name: 'Color', type: 'color_picker', default: '#ffffff', description: 'text color' },
-  { name: 'Size', type: 'int', default: 40, min: 8, max: 400, description: 'font size in px' },
+  { group: { name: 'Text', icon: GROUP_ICONS.text, items: [
+    { name: 'Color', type: 'color_picker', default: '#ffffff', description: 'text color' },
+    { name: 'Size', type: 'int', default: 40, min: 8, max: 400, description: 'font size in px' },
+  ] } },
 ]);
