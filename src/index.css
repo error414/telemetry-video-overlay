@@ -2037,13 +2037,13 @@ button.chip.on {
 }
 .marker-swatches {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   flex: 1;
   flex-wrap: wrap;
 }
 .marker-swatch {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   padding: 0;
   border: 2px solid transparent;
   border-radius: 50%;
@@ -2059,7 +2059,7 @@ button.chip.on {
 .marker-pop {
   position: absolute;
   bottom: calc(100% + 10px);
-  width: 320px;
+  width: 344px;
   padding: 12px 14px;
   z-index: 61;
   background: var(--surface-container-high);

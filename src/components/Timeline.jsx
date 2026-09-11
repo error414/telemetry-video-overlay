@@ -352,7 +352,7 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
           </div>
         ))}
         {editing && (
-          <div className="marker-pop" style={{ left: Math.max(0, Math.min((editing.t / span) * wrapW - 160, Math.max(0, wrapW - 320))) }} onPointerDown={(e) => e.stopPropagation()}>
+          <div className="marker-pop" style={{ left: Math.max(0, Math.min((editing.t / span) * wrapW - 172, Math.max(0, wrapW - 344))) }} onPointerDown={(e) => e.stopPropagation()}>
             <div className="popover-head">
               <Icon name="flag" />
               Marker
@@ -383,7 +383,7 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
                   <button key={c} type="button" className={'marker-swatch' + (markerColor(editing) === c ? ' on' : '')} style={{ background: c }} onClick={() => updateMarker(editing.id, { color: c })} title={c} aria-label={'Colour ' + c} />
                 ))}
               </div>
-              <div style={{ width: 118 }}>
+              <div style={{ width: 132 }}>
                 <ColorInput value={markerColor(editing)} onChange={(v) => updateMarker(editing.id, { color: parseColor(v) ? rgbaString(parseColor(v)) : v })} />
               </div>
             </div>
