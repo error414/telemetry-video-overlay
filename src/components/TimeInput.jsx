@@ -15,8 +15,8 @@ export default function TimeInput({ value, onCommit, disabled, title, width = 84
   };
   return (
     <input
-      className="input mono"
-      style={{ width, padding: '2px 6px', color: 'var(--accent)' }}
+      className="input mono input-sm"
+      style={{ width, color: 'var(--primary)' }}
       value={text}
       disabled={disabled}
       title={title}

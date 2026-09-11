@@ -8,7 +8,8 @@ description: Create or modify an overlay widget for this "Blackbox overlay for I
 This file is the complete contract. Do **not** read the app source to build a widget — everything
 the runtime provides and expects is documented here. (`src/widgetRuntime.js` and `src/examples.js`
 exist if you ever need to go deeper, but a widget built purely from this file is correct.)
-The companion `blackbox-fields.md` (same folder) explains what every INAV column **means** and
+The companion `icons.md` (same folder) holds the ready-made SVG icons for settings groups and the
+built-in widgets plus the drawing rules for new ones. `blackbox-fields.md` explains what every INAV column **means** and
 holds the bit tables for `flightModeFlags`, `activeFlightModeFlags`, `stateFlags`, `navFlags`,
 `navState`, `failsafePhase` and `hwHealthStatus` — read it whenever a widget shows flight
 modes, nav / failsafe state, sensor health, or an estimator field you are unsure about.
@@ -32,20 +33,20 @@ function (settings, time, ctx) {
 Arrow functions and bare bodies (using `settings`/`time`/`ctx`) also compile, but the
 `function (settings, time, ctx) { … }` form is the house style.
 
-**Every widget you write comes as two pieces: the code and its settings definition.** The
-definition is a JSON array; the app renders a form from it (Widgets tab and editor) so the pilot
-changes colours, units, sizes and modes without touching the code, and hands the values to the
-function as `settings`:
+**Every widget you write comes as four pieces: the code, its settings definition, an icon and
+tags.** The definition is a JSON array; the app renders a form from it (Widgets step and editor)
+so the pilot changes colours, units, sizes and modes without touching the code, and hands the
+values to the function as `settings`:
 
 ```json
 [
-  { "group": { "name": "Sticks", "items": [
+  { "group": { "name": "Sticks", "icon": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"7\" cy=\"12\" r=\"4\"/><circle cx=\"17\" cy=\"12\" r=\"4\"/><path d=\"M7 8v8M3 12h8M17 8v8M13 12h8\"/></svg>", "items": [
     { "name": "Mode",       "type": "select", "values": { "1": "Mode 1", "2": "Mode 2" }, "default": 2,
       "description": "Mode 2: left stick = throttle/yaw, right = pitch/roll" },
     { "name": "Min",        "type": "int",    "default": -500, "description": "stick range (INAV rcCommand is -500..500)" },
     { "name": "Multiplier", "type": "number", "default": 3.6, "step": 0.1 }
   ] } },
-  { "group": { "name": "Labels", "items": [
+  { "group": { "name": "Labels", "icon": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12V4h8l10 10-8 8z\"/><circle cx=\"7\" cy=\"8\" r=\"1.2\" fill=\"currentColor\" stroke=\"none\"/></svg>", "items": [
     { "name": "Labels",     "type": "bool",   "default": true },
     { "name": "Label font", "type": "text",   "default": "Arial", "description": "label font family" },
     { "name": "Color",      "type": "color_picker", "default": "#ffffff", "description": "text color" }
@@ -53,11 +54,37 @@ function as `settings`:
 ]
 ```
 
-**Groups:** `{ "group": { "name": "…", "items": [ …settings… ] } }` makes a collapsible section of
-the form (all collapsed by default, so the form stays short). **Put every setting of a widget into
-a group** — 3–5 groups by topic (`Data`, `Axis`, `Look`, `Labels`, `Box`, …), the most important
-group first; a few settings at the top level (outside any group) are allowed only when the widget
-has fewer than ~6 settings in total. Keys are unique across the whole definition.
+**Groups:** `{ "group": { "name": "…", "icon": "<svg…>", "items": [ …settings… ] } }` makes a
+collapsible section of the form (all collapsed by default, so the form stays short) headed by its
+icon. **Put every setting of a widget into a group** — 3–5 groups by topic (`Data`, `Axis`, `Look`,
+`Labels`, `Box`, …), the most important group first; a few settings at the top level (outside any
+group) are allowed only when the widget has fewer than ~6 settings in total. **Every group has an
+`icon`** (mandatory — the test runner warns when one is missing): a single-colour inline SVG on a
+24×24 grid; take the ready-made one for the group's topic from `icons.md` (same folder: `data`,
+`value`, `range`, `text`, `labels`, `box`, `axis`, `scale`, `line`, `marker`, `look`, `bar`,
+`sticks`, `map`, `aircraft`, `view`, `ladder`, `heading`, `angles`, `gauge`, `peak`, `idle`,
+`arrows`, `border`, `position`, `animation`) or draw a new one in the same style for a topic that
+has none. Keys are unique across the whole definition. The pilot can search the form, so names
+and descriptions should use the words a pilot would type (`speed`, `colour`, `font`, `smooth`).
+
+## Icon and tags — every widget carries both
+
+- **`icon`** (mandatory): one inline SVG string that shows *what the widget draws* — a dial, a
+  vertical tape, a polyline, a map pin, a horizon circle. Same rules as the group icons
+  (`viewBox="0 0 24 24"`, `stroke="currentColor"`, `stroke-width="1.8"`, no size, colours, `xmlns`,
+  scripts or external references; ≤ ~6 path commands — it is shown at 18–26 px). The built-in
+  icons in `icons.md` set the level of detail; reuse one when the new widget is a variant of an
+  existing shape (a second dial, another tape), otherwise draw a new one. Shown in the widget list
+  of the Widgets step, in the "Add widget" grid and in the editor.
+- **`tags`** (mandatory, 2–4 entries): lower-case categories used by the "Add widget" search and
+  its tag-filter chips; a widget can carry several. Use the shared vocabulary first — `gauge`,
+  `bar`, `dial`, `tape`, `graph`, `history`, `flight`, `value`, `text`, `map`, `navigation`,
+  `compass`, `heading`, `attitude`, `horizon`, `3d`, `rc`, `sticks`, `speed`, `altitude`,
+  `throttle`, `motor`, `rpm`, `power`, `battery`, `signal`, `gps`, `flags`, `flight mode` —
+  and add a family tag for a themed set (`airbus`). The built-in examples all carry the tag
+  `library`; do not use it for a new widget unless it is added to `src/examples.js`.
+- Both are ordinary fields of the widget record (next to `name`, before `columns`), so an import
+  JSON and the library carry them; the pilot can edit both in the editor's **Icon & tags** tab.
 
 | field | meaning |
 |---|---|
@@ -76,6 +103,8 @@ Widget record (what the library / project JSON stores):
 | field | meaning |
 |---|---|
 | `name` | display name; built-in examples are prefixed `Example: ` |
+| `icon` | inline SVG string, single colour — see *Icon and tags* |
+| `tags` | array of lower-case categories — see *Icon and tags* |
 | `columns` | comma-separated CSV header names → `ctx.values[0], ctx.values[1], …` |
 | `x, y, w, h` | box in **layout-reference pixels** (usually 1920×1080; the whole layout auto-scales to other video resolutions) |
 | `settings` | the settings definition **as a string** (JSON text; a JS array literal with comments also parses) |
@@ -327,18 +356,26 @@ marker text stays put while the value moves should be the holds right after a re
 Use this as the skeleton for any "value + label" widget; it demonstrates every convention
 (settings definition + SETTINGS block, scale, guards, panel, hierarchy, shadows):
 
-Settings definition:
+Widget record fields besides the code and definition (see *Icon and tags*):
+
+```json
+"icon": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 9l2-1.2V16M10 9.5a2 2 0 0 1 4 .3c0 2-4 3.8-4 6.2h4M17 8h4l-2.2 3.2a2.2 2.2 0 1 1-1.8 3.6\"/></svg>",
+"tags": ["value", "speed"]
+```
+
+Settings definition (the `icon` strings are the `value`, `text` and `box` rows of `icons.md`,
+shortened here to `…` for readability — paste the full strings):
 
 ```json
 [
-  { "group": { "name": "Value", "items": [
+  { "group": { "name": "Value", "icon": "<svg viewBox=\"0 0 24 24\" …><path d=\"M9 4L7 20M17 4l-2 16M4 9h16M4 15h16\"/></svg>", "items": [
     { "name": "Label", "type": "text", "default": "SPEED", "description": "small caption above the value ('' = none)" },
     { "name": "Unit", "type": "text", "default": "km/h", "description": "unit text after the value" },
     { "name": "Multiplier", "type": "number", "default": 3.6, "step": 0.1, "description": "value * multiplier (m/s -> km/h = 3.6; 1 = as is)" },
     { "name": "Digits", "type": "int", "default": 0, "min": 0, "max": 6, "description": "decimal places" },
     { "name": "Show max", "type": "bool", "default": false, "description": "show whole-flight maximum under the value" }
   ] } },
-  { "group": { "name": "Text", "items": [
+  { "group": { "name": "Text", "icon": "<svg viewBox=\"0 0 24 24\" …><path d=\"M5 7V5h14v2M12 5v14M9 19h6\"/></svg>", "items": [
     { "name": "Color", "type": "color_picker", "default": "#ffffff", "description": "value color" },
     { "name": "Label color", "type": "color_picker", "default": "rgba(255,255,255,.75)" },
     { "name": "Font", "type": "text", "default": "Arial, sans-serif", "description": "font family" },
@@ -346,7 +383,7 @@ Settings definition:
     { "name": "Shadow", "type": "text", "default": "0 0 8px rgba(0,0,0,.9)", "description": "CSS text shadow ('' = none)" },
     { "name": "Align", "type": "select", "values": ["left", "center", "right"], "default": "left" }
   ] } },
-  { "group": { "name": "Box", "items": [
+  { "group": { "name": "Box", "icon": "<svg viewBox=\"0 0 24 24\" …><rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"3\"/></svg>", "items": [
     { "name": "Background", "type": "color_picker", "default": "rgba(0,0,0,0)", "description": "box background; alpha 0 = no box" },
     { "name": "Radius", "type": "int", "default": 8, "min": 0, "description": "corner radius at the default size; scales with the widget" },
     { "name": "Opacity", "type": "number", "default": 1, "min": 0, "max": 1, "step": 0.05, "description": "whole-widget opacity 0..1 (1 = opaque)" }
@@ -393,7 +430,7 @@ function (settings, time, ctx) {
 }
 ```
 
-The built-in examples (Library tab / `src/examples.js`, each with its `settings` definition)
+The built-in examples ("Add widget" dialog of the Widgets step / `src/examples.js`, each with its `settings` definition)
 cover more shapes if the user asks to mimic one: bar gauge (gradient fill, `GRADIENT_SPAN`), line graph (scrolling window),
 flight graph & altitude profile (whole flight + current-time marker), RC sticks (two SVG boxes
 + trail), GPS map (Web-Mercator tiles via `ctx.image`), compass (tape/rose).
@@ -583,7 +620,7 @@ Betaflight logs differ.
 Every other column is dumped **raw with no suffix** — e.g. `attitude[2]` stays in decidegrees
 and is never converted by the decoder.
 
-**Decoder unit options** (Files tab exposes some of these; defaults marked):
+**Decoder unit options** (the Files step exposes some of these; defaults marked):
 
 | option | values (default first) | raw unit in log | conversion |
 |---|---|---|---|
@@ -663,15 +700,20 @@ Columns field with autocomplete.
 
 ## Where to put the widget
 
-- **One-off for the user:** give them two blocks — the code (paste into *Edit code* → **Code**
-  tab) and the settings definition (paste into the **Settings definition** tab) — or write an
-  importable JSON file (Library → Import…):
-  `{"app":"telemetry-overlay","type":"widgets","version":1,"widgets":[{name, columns, w, h, settings, code}]}`
-  where `settings` is the definition **as a JSON string** (`JSON.stringify` of the array).
+- **One-off for the user:** write an importable JSON file (Widgets step → **Add widget** → the
+  import button in the dialog's header):
+  `{"app":"telemetry-overlay","type":"widgets","version":1,"widgets":[{name, icon, tags, columns, w, h, settings, code}]}`
+  where `settings` is the definition **as a JSON string** (`JSON.stringify` of the array, group
+  icons included) and `icon` the SVG string. Only when the pilot asks for code to paste give the
+  four blocks separately — code (*Edit code* → **Code** tab), settings definition (**Settings
+  definition** tab), icon and tags (**Icon & tags** tab).
 - **Built-in example:** add an entry to `EXAMPLE_WIDGETS` in `src/examples.js` (name prefixed
-  `Example: `, `settings: defs([...])` with the array literal — `defs` serialises it). Examples
-  are read straight from that file; widgets already placed on a video are independent copies and
-  are not updated.
+  `Example: `, `icon: WIDGET_ICONS.<key>` with a new key drawn in `src/icons.js`, `tags`
+  including `'library'`, `settings: defs([...])` with the array literal — `defs` serialises it —
+  and `icon: gi('Group name')` in every group, which resolves the standard group icon by name).
+  Run `node .claude/skills/widget/icons-md.mjs` after adding an icon so `icons.md` stays in step.
+  Examples are read straight from that file; widgets already placed on a video are independent
+  copies and are not updated.
 
 ## Verify before handing over (always)
 
@@ -680,8 +722,10 @@ a fake `ctx` and the `settings` built from the definition defaults (plus `clip_t
 at several times **including out-of-range** and at two widget sizes, and fails on exceptions,
 non-string/empty output, http URLs in the output, a definition that does not parse, or a
 `settings.<key>` in the code that the definition lacks; it also warns when the definition has no
-`opacity` setting (mandatory for every new widget, see Design language) or no `smooth_ms` setting
-(mandatory for every widget showing a numeric column, see Sizing, smoothing, caching):
+`opacity` setting (mandatory for every new widget, see Design language), no `smooth_ms` setting
+(mandatory for every widget showing a numeric column, see Sizing, smoothing, caching), when the
+widget has no valid `icon` or no `tags`, or when a settings group has no `icon` (see Icon and
+tags) — every one of those warnings must be gone before handing over:
 
 ```
 node .claude/skills/widget/test-widgets.mjs                                # all src/examples.js entries
@@ -767,6 +811,10 @@ the "loading map…" note disappears in the app.
   bar); rename nothing the pilot already knows. Preview each variant separately (the preview tool
   renders the first widget of a JSON — write per-variant JSONs from the build script).
 - **Deliverable for a one-off widget is the import JSON** (`widgets/<family>/<name>.json` in the repo, e.g. `widgets/bars/`,
-  when the user asks to "save it to a file"); regenerate it from the code + definition with a
-  script rather than editing the escaped string by hand, and remind the user that widgets already
-  on the stage are copies — re-import and re-apply their settings.
+  when the user asks to "save it to a file"); regenerate it from the code + definition + icon +
+  tags with a script rather than editing the escaped string by hand, and remind the user that
+  widgets already on the stage are copies — re-import and re-apply their settings.
+- **Icons and tags are part of the widget, not an afterthought.** The picker groups and filters
+  by them; a widget without an icon shows a generic placeholder and one without tags is found by
+  name only. When modifying an older widget that lacks them, add both (and the group icons) in
+  the same change.

@@ -1,43 +1,88 @@
-import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
-import { settingValue } from '../widgetSettings.js';
+import React, { useMemo, useState } from 'react';
+import { settingValue, coerce } from '../widgetSettings.js';
 import ColorInput from './ColorInput.jsx';
+import Icon, { SvgIcon } from './Icon.jsx';
+
+/** True when a (coerced) value is the definition default — colours compare case-insensitively, numbers by value. */
+function isDefault(def, v) {
+  if (v === undefined) return true;
+  const a = coerce(def, v);
+  const b = def.default;
+  if (def.type === 'color_picker' || def.type === 'text') return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+  return a === b;
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function highlight(text, q) {
+  if (!q || !text) return text;
+  const parts = String(text).split(new RegExp('(' + escapeRe(q) + ')', 'gi'));
+  if (parts.length === 1) return text;
+  return parts.map((p, i) => (i % 2 ? <mark key={i}>{p}</mark> : p));
+}
 
 /**
  * Form generated from a widget's settings definition (see widgetSettings.js). Shown in the
- * Widgets tab (Selected widget) and in the editor. sections = parseSettings().sections: groups
- * render as collapsible blocks (collapsed by default), top-level settings as plain rows.
- * onChange(key, value); value undefined = back to the definition default. Rows are top-level
- * components: the app re-renders every animation frame during playback and an inline component
- * would remount each frame (its inputs would lose focus).
+ * Widgets step (Selected widget) and in the editor. sections = parseSettings().sections: groups
+ * render as collapsible blocks with their icon (collapsed by default), top-level settings as
+ * plain rows. A search field filters the settings by name / description and opens the groups
+ * that hold a match. onChange(key, value); value undefined = back to the definition default.
+ * Rows are top-level components: the app re-renders every animation frame during playback and
+ * an inline component would remount each frame (its inputs would lose focus).
  */
-export default function SettingsForm({ defs, sections, config, error, onChange, onReset }) {
+export default function SettingsForm({ defs, sections, config, error, onChange, onReset, searchable = true }) {
   const [open, setOpen] = useState({}); // group name -> expanded
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  // a value typed back to the default counts as unchanged (and is dropped from config below)
+  const isChanged = (d) => !!config && !isDefault(d, config[d.key]);
+  const matchesQ = (d) => !q || (d.name + ' ' + (d.description || '') + ' ' + d.key).toLowerCase().includes(q);
+  const shown = useMemo(() => {
+    const secs = sections && sections.length ? sections : [{ name: null, icon: '', defs }];
+    return secs.map((s) => ({ ...s, defs: s.defs.filter(matchesQ) })).filter((s) => s.defs.length);
+  }, [sections, defs, q]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (error)
     return (
-      <div className="text-xs mt-2" style={{ color: 'var(--bad)' }}>
-        Settings definition error: {error}
+      <div className="banner error">
+        <Icon name="warning" />
+        <span>Settings definition error: {error}</span>
       </div>
     );
-  if (!defs.length) return <div className="hint mt-2">No settings. Define them in the editor (Settings definition tab); the form appears here.</div>;
-  const isChanged = (d) => !!config && config[d.key] !== undefined;
+  if (!defs.length) return <div className="hint">No settings. Define them in the editor (Settings definition tab); the form appears here.</div>;
   const changed = defs.some(isChanged);
-  const rows = (list) => list.map((d) => <SettingRow key={d.key} def={d} value={settingValue(d, config)} changed={isChanged(d)} onChange={(v) => onChange(d.key, v)} />);
+  const rows = (list) => list.map((d) => <SettingRow key={d.key} def={d} value={settingValue(d, config)} changed={isChanged(d)} q={q} onChange={(v) => onChange(d.key, isDefault(d, v) ? undefined : v)} />);
   return (
     <div className="settings-form">
-      {(sections || [{ name: null, defs }]).map((sec, i) =>
+      {searchable && defs.length > 4 && (
+        <div className="search settings-search">
+          <Icon name="search" />
+          <input className="input input-sm" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search settings…" spellCheck={false} />
+          {query && (
+            <button className="btn btn-icon sm clear" onClick={() => setQuery('')} aria-label="Clear search">
+              <Icon name="close" />
+            </button>
+          )}
+        </div>
+      )}
+      {shown.length === 0 && <div className="hint">No setting matches “{query.trim()}”.</div>}
+      {shown.map((sec, i) =>
         sec.name === null ? (
-          <React.Fragment key={'top' + i}>{rows(sec.defs)}</React.Fragment>
+          <div key={'top' + i} className="setting-group open">
+            <div className="setting-group-body" style={{ paddingTop: 2 }}>
+              {rows(sec.defs)}
+            </div>
+          </div>
         ) : (
-          <SettingGroup key={sec.name} name={sec.name} open={!!open[sec.name]} onToggle={() => setOpen((o) => ({ ...o, [sec.name]: !o[sec.name] }))} changedCount={sec.defs.filter(isChanged).length}>
+          <SettingGroup key={sec.name} name={sec.name} icon={sec.icon} open={q ? true : !!open[sec.name]} onToggle={() => !q && setOpen((o) => ({ ...o, [sec.name]: !o[sec.name] }))} changedCount={sec.defs.filter(isChanged).length} q={q}>
             {rows(sec.defs)}
           </SettingGroup>
         )
       )}
       {onReset && changed && (
         <div className="flex justify-end mt-1">
-          <button className="btn btn-xs" onClick={onReset} title="Forget every changed value and use the definition defaults">
-            Reset to defaults
+          <button className="btn btn-text btn-sm" onClick={onReset} title="Forget every changed value and use the definition defaults">
+            <Icon name="reset" />
+            Reset all to defaults
           </button>
         </div>
       )}
@@ -45,70 +90,43 @@ export default function SettingsForm({ defs, sections, config, error, onChange, 
   );
 }
 
-/** Collapsible group of settings; the header shows how many values inside differ from the defaults. */
-function SettingGroup({ name, open, onToggle, changedCount, children }) {
+/** Collapsible group of settings with its icon; the header shows how many values inside differ from the defaults. */
+function SettingGroup({ name, icon, open, onToggle, changedCount, children, q }) {
   return (
     <div className={'setting-group' + (open ? ' open' : '')}>
-      <div className="setting-group-head" onClick={onToggle} title={open ? 'Collapse' : 'Expand'}>
-        <svg className="bay-chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-          <path d="M3.5 1.5 7 5l-3.5 3.5" />
-        </svg>
-        <span className="setting-group-name">{name}</span>
-        {changedCount > 0 && <span className="chip chip-accent">{changedCount} changed</span>}
-      </div>
+      <button type="button" className="setting-group-head" onClick={onToggle} aria-expanded={open}>
+        <span className="setting-group-icon">
+          <SvgIcon svg={icon} fallback="tune" />
+        </span>
+        <span className="setting-group-name">{highlight(name, q)}</span>
+        {changedCount > 0 && <span className="chip chip-sm chip-accent">{changedCount} changed</span>}
+        <Icon name="chevronDown" className="chev" />
+      </button>
       {open && <div className="setting-group-body">{children}</div>}
     </div>
   );
 }
 
-function SettingRow({ def, value, changed, onChange }) {
+function SettingRow({ def, value, changed, onChange, q }) {
   return (
-    <div className="setting">
-      <div className="setting-row">
-        <span className="setting-name" style={changed ? { color: 'var(--accent)' } : undefined}>
-          <span className="setting-name-text">{def.name}</span>
-          {def.description && <HelpMark text={def.description} />}
-        </span>
-        <SettingControl def={def} value={value} onChange={onChange} />
-        {changed ? (
-          <button className="btn btn-xs btn-icon" onClick={() => onChange(undefined)} title="Back to default">
-            ↺
-          </button>
-        ) : (
-          <span style={{ width: 22 }} />
+    <div className={'setting' + (changed ? ' changed' : '')}>
+      <div className="setting-name">
+        <span className="setting-name-text">{highlight(def.name, q)}</span>
+        {def.description && (
+          <span className="setting-desc" title={def.description}>
+            {highlight(def.description, q)}
+          </span>
         )}
       </div>
+      <SettingControl def={def} value={value} onChange={onChange} />
+      {changed ? (
+        <button className="btn btn-icon sm" onClick={() => onChange(undefined)} title="Back to default">
+          <Icon name="undo" />
+        </button>
+      ) : (
+        <span />
+      )}
     </div>
-  );
-}
-
-const TIP_WIDTH = 260;
-
-/**
- * "?" after a setting name; hovering it shows the description. The tip is rendered through a
- * portal in a fixed position because every ancestor (.bay, drawers, group bodies) clips overflow.
- */
-function HelpMark({ text }) {
-  const [pos, setPos] = useState(null);
-  const show = (e) => {
-    // to the right of the mark and a bit below it, so the pointer never covers the text
-    const r = e.currentTarget.getBoundingClientRect();
-    const left = Math.max(4, Math.min(r.right + 10, window.innerWidth - TIP_WIDTH - 4));
-    setPos({ left, top: r.bottom + 6 });
-  };
-  return (
-    <>
-      <span className="setting-help" onMouseEnter={show} onMouseLeave={() => setPos(null)} aria-label={text}>
-        ?
-      </span>
-      {pos &&
-        createPortal(
-          <div className="setting-tip" style={{ left: pos.left, top: pos.top, maxWidth: TIP_WIDTH }}>
-            {text}
-          </div>,
-          document.body
-        )}
-    </>
   );
 }
 
@@ -116,8 +134,9 @@ function SettingControl({ def, value, onChange }) {
   switch (def.type) {
     case 'bool':
       return (
-        <label className="flex items-center" style={{ height: 24 }}>
+        <label className={'switch justify-end' + (value ? ' on' : '')}>
           <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
+          <span className="track" />
         </label>
       );
     case 'int':

@@ -102,7 +102,7 @@ export function ColorPopover({ anchorRect, color, onChange, onClose }) {
           <span style={{ background: rgbaString(color) }} />
         </span>
         <input
-          className="input mono flex-1"
+          className="input input-sm mono flex-1"
           value={text}
           spellCheck={false}
           onFocus={() => setEditing(true)}

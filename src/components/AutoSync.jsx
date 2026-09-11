@@ -3,7 +3,8 @@ import { fmtTime, toVideo } from '../time.js';
 import { SYNC_METHODS } from '../sync/methods.js';
 import { rateMagnitude, activeWindows, planWindows } from '../sync/gyroSignal.js';
 import { runSyncInWorker, runSyncJob, cancelSync } from '../sync/syncClient.js';
-import { ColumnsInput } from './WidgetsPanel.jsx';
+import { ColumnsInput } from './ColumnsInput.jsx';
+import Icon from './Icon.jsx';
 
 const PREFS_KEY = 'telemetry-overlay.autoSync.v1';
 const ANALYSIS_WIDTH = 480; // frames are decoded at this width — plenty for global motion, cheap to track
@@ -117,8 +118,8 @@ function PairPlot({ pair }) {
       }
       g.stroke();
     };
-    trace(pair.gyro, '#4fc3c7');
-    trace(pair.video, '#f2a93b');
+    trace(pair.gyro, '#5fd8dc');
+    trace(pair.video, '#ffb95c');
   }, [pair]);
   return <canvas ref={ref} className="timeline" style={{ width: '100%', height: 84, display: 'block' }} />;
 }
@@ -153,7 +154,7 @@ function CurvePlot({ curve, offset }) {
       else g.moveTo(x, y);
     }
     g.stroke();
-    g.strokeStyle = '#f2a93b';
+    g.strokeStyle = '#ffb95c';
     g.lineWidth = 2 * dpr;
     const px = ((offset - o0) / span) * W;
     g.beginPath();
@@ -164,45 +165,14 @@ function CurvePlot({ curve, offset }) {
   return <canvas ref={ref} className="timeline" style={{ width: '100%', height: 48, display: 'block' }} />;
 }
 
-/** Shared modal frame (backdrop + panel). Also used by the startup dialog. */
-export function Frame({ width = 660, onBackdrop, children }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(5,8,11,.72)' }} onMouseDown={(e) => e.target === e.currentTarget && onBackdrop && onBackdrop()}>
-      <div role="dialog" aria-modal="true" className="rounded-lg p-5 flex flex-col gap-3" style={{ width: `min(92vw, ${width}px)`, maxHeight: '92vh', overflowY: 'auto', background: 'var(--panel)', border: '1px solid var(--border-strong)', boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/** One tall option in a "pick one" dialog: coloured label on top, explanation under it. */
-export function ChoiceButton({ label, hint, available = true, onClick, badge }) {
-  return (
-    <button
-      className="btn"
-      style={{ justifyContent: 'flex-start', alignItems: 'flex-start', flexDirection: 'column', gap: 2, padding: '10px 12px', textAlign: 'left', opacity: available ? 1 : 0.6 }}
-      onClick={onClick}
-      title={hint}
-    >
-      <span style={{ color: available ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>
-        {label}
-        {badge && <span className="chip ml-2">{badge}</span>}
-      </span>
-      <span className="hint" style={{ whiteSpace: 'normal' }}>{hint}</span>
-    </button>
-  );
-}
-
 /**
- * Automatic sync dialog. Opens with the choice of method:
- *   - "video motion × gyro" analyses six windows spread over the video (optical flow);
- *   - "Gyroflow project" takes the camera's own IMU from a .gyroflow file.
- * Both yield local offsets per window; a line through them gives offset + drift and
- * the user applies the result. The manual controls stay as they are — this is an
- * extra way to get the numbers.
+ * Automatic sync panel of the Sync step, for one method:
+ *   - "video" analyses six windows spread over the video (optical flow × gyro);
+ *   - "gyroflow" takes the camera's own IMU from a .gyroflow project file.
+ * Both yield local offsets per window; a line through them gives offset + drift and the user
+ * applies the result. The manual controls stay as they are — this is an extra way to get the numbers.
  */
-export default function AutoSyncDialog({ video, store, storeVersion, columnNames, sync, setOffset, setDrift, time, onClose, setStatus }) {
-  const [method, setMethod] = useState(null); // null = ask first
+export default function AutoSync({ method, video, store, storeVersion, columnNames, sync, setOffset, setDrift, time, setStatus, onApplied }) {
   const prefs = useMemo(loadPrefs, []);
   const dur = video ? video.duration : 0;
   const isGf = method === 'gyroflow';
@@ -224,6 +194,11 @@ export default function AutoSyncDialog({ video, store, storeVersion, columnNames
   useEffect(() => {
     localStorage.setItem(PREFS_KEY, JSON.stringify({ axes }));
   }, [axes]);
+  // switching the method drops the previous result
+  useEffect(() => {
+    setResult(null);
+    setError(null);
+  }, [method]);
 
   const clampStart = (s) => Math.max(0, Math.min(Math.max(0, dur - len), s));
 
@@ -289,12 +264,6 @@ export default function AutoSyncDialog({ video, store, storeVersion, columnNames
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGf, video]);
-
-  const selectMethod = (id) => {
-    setMethod(id);
-    setResult(null);
-    setError(null);
-  };
 
   const run = async () => {
     setResult(null);
@@ -380,40 +349,8 @@ export default function AutoSyncDialog({ video, store, storeVersion, columnNames
     setOffset(+fit.offset0.toFixed(3));
     if (fit.n >= 2) setDrift(+fit.drift.toFixed(3));
     setStatus(`Auto sync: offset ${fit.offset0.toFixed(3)} s` + (fit.n >= 2 ? `, drift ${fit.drift.toFixed(3)} ms/s from ${fit.n} windows` : ` from one window (drift unchanged)`));
-    onClose();
+    onApplied && onApplied();
   };
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        if (running) cancel();
-        else onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  });
-
-  // ---- step 1: which method ----
-  if (!method) {
-    return (
-      <Frame width={520} onBackdrop={onClose}>
-        <div className="font-semibold text-base">Auto sync</div>
-        <div className="hint">How should the telemetry be aligned with the video?</div>
-        <div className="flex flex-col gap-2">
-          {SYNC_METHODS.map((m) => (
-            <ChoiceButton key={m.id} label={m.label} hint={m.hint} available={m.available} badge={m.available ? null : 'soon'} onClick={() => selectMethod(m.id)} />
-          ))}
-        </div>
-        <div className="flex gap-2 justify-end">
-          <button className="btn btn-ghost" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </Frame>
-    );
-  }
 
   const methodInfo = SYNC_METHODS.find((m) => m.id === method) || SYNC_METHODS[0];
   const fit = result && result.fit;
@@ -422,130 +359,124 @@ export default function AutoSyncDialog({ video, store, storeVersion, columnNames
   const videoName = video ? baseName(video.path) : '';
   const gfMismatch = gf && gf.videofile && stripExt(baseName(gf.videofile)).toLowerCase() !== stripExt(videoName).toLowerCase();
   const gfDurationOff = gf && gf.duration && dur && Math.abs(gf.duration - dur) > 1;
-  const canRun = !!video && (!isGf || (!!gf && !gfLoading));
+  const canRun = !!video && columnNames.length > 0 && (!isGf || (!!gf && !gfLoading));
 
   return (
-    <Frame onBackdrop={() => !running && onClose()}>
-      <div className="flex items-center gap-3">
-        <div className="font-semibold text-base">Auto sync</div>
-        <span className="chip chip-accent">{methodInfo.label}</span>
-        {!running && (
-          <button className="btn btn-xs btn-ghost ml-auto" onClick={() => selectMethod(null)} title="Choose a different method">
-            Method…
-          </button>
-        )}
-      </div>
+    <div className="stack">
       <div className="hint">{methodInfo.hint}</div>
+      {!methodInfo.available && (
+        <div className="banner warn">
+          <Icon name="warning" />
+          <span>This method is not available yet.</span>
+        </div>
+      )}
 
       {isGf && (
-        <section className="bay bay-amber" style={{ marginBottom: 0 }}>
-          <header className="bay-head">
-            <span className="bay-tick" />
-            Gyroflow project
-            <span className="bay-note">.gyroflow saved with the gyro data</span>
-          </header>
-          <div className="bay-body flex flex-col gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button className="btn btn-xs" onClick={pickGyroflow} disabled={running || !!gfLoading}>
-                Open…
-              </button>
-              {gfLoading ? (
-                <span className="hint">reading {gfLoading}…</span>
-              ) : gf ? (
-                <span className="mono text-xs" style={{ color: 'var(--accent)' }} title={gf.path}>
-                  {baseName(gf.path)}
-                </span>
-              ) : (
-                <span className="hint">Open the video in Gyroflow (it reads the camera's gyro from the file), save the project — File → Export project — and pick it here.</span>
-              )}
+        <div className="card card-high">
+          <div className="card-head accent" style={{ marginBottom: 8 }}>
+            <Icon name="gyro" />
+            <span className="card-title">Gyroflow project</span>
+            <span className="card-meta">.gyroflow with gyro data</span>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button className="btn btn-tonal btn-sm" onClick={pickGyroflow} disabled={running || !!gfLoading}>
+              <Icon name="open" />
+              Open…
+            </button>
+            {gfLoading ? (
+              <span className="hint">reading {gfLoading}…</span>
+            ) : gf ? (
+              <span className="mono text-xs" style={{ color: 'var(--primary)' }} title={gf.path}>
+                {baseName(gf.path)}
+              </span>
+            ) : (
+              <span className="hint">Open the video in Gyroflow (it reads the camera's gyro from the file), save the project — File → Export project — and pick it here.</span>
+            )}
+          </div>
+          {gf && (
+            <div className="hint mt-2">
+              {gf.source || 'camera'} · {gf.camera.kind === 'imu' ? 'gyro rates' : 'orientation'} at {Math.round(gf.camera.rate)} Hz · {fmtTime(gf.camera.t[0])} – {fmtTime(gf.camera.t[gf.camera.t.length - 1])}
+              {gf.syncPoints ? ` · ${gf.syncPoints} Gyroflow sync point${gf.syncPoints > 1 ? 's' : ''} applied` : ''}
             </div>
-            {gf && (
-              <div className="hint">
-                {gf.source || 'camera'} · {gf.camera.kind === 'imu' ? 'gyro rates' : 'orientation'} at {Math.round(gf.camera.rate)} Hz · {fmtTime(gf.camera.t[0])} – {fmtTime(gf.camera.t[gf.camera.t.length - 1])}
-                {gf.syncPoints ? ` · ${gf.syncPoints} Gyroflow sync point${gf.syncPoints > 1 ? 's' : ''} applied` : ''}
-              </div>
-            )}
-            {gfMismatch && (
-              <span className="chip chip-warn" style={{ alignSelf: 'flex-start' }} title={`Project video: ${gf.videofile}\nLoaded video: ${video.path}`}>
-                project is for {baseName(gf.videofile)}, not {videoName}
-              </span>
-            )}
-            {gf && !gfMismatch && gfDurationOff && (
-              <span className="chip chip-warn" style={{ alignSelf: 'flex-start' }}>
-                project video lasts {fmtTime(gf.duration)}, this one {fmtTime(dur)}
-              </span>
-            )}
-          </div>
-        </section>
-      )}
-
-      <section className="bay bay-tele" style={{ marginBottom: 0 }}>
-        <header className="bay-head">
-          <span className="bay-tick" />
-          Gyro rate columns
-          <span className="bay-note">any order · any unit</span>
-        </header>
-        <div className="bay-body flex flex-col gap-2">
-          <div className="grid grid-cols-3 gap-2">
-            {axes.map((a, i) => (
-              <ColumnsInput
-                key={i}
-                single
-                value={a}
-                onChange={(v) => setAxes((ax) => ax.map((x, k) => (k === i ? v : x)))}
-                columnNames={columnNames}
-                style={{ '--input-color': 'var(--tele)', padding: '3px 8px' }}
-                disabled={running}
-                placeholder={`axis ${i + 1}`}
-              />
-            ))}
-          </div>
-          <div className="hint">Three angular-rate columns of the same sensor (INAV: gyroADC[0..2]). Only the magnitude of the rotation is compared, so the axis order and the camera mounting do not matter.</div>
-          <div className="hint">
-            Windows to analyse:{' '}
-            {plan.length
-              ? plan.map((p) => fmtTime(p[0].start)).join(' · ')
-              : isGf
-                ? gf
-                  ? 'none — the project holds no camera motion inside this video'
-                  : 'open the Gyroflow project first'
-                : `${fmtTime(clampStart(time))} (playhead — no strong gyro motion lands inside the video with the current offset)`}
-          </div>
-        </div>
-      </section>
-
-      {phase && (
-        <div className="flex items-center gap-3 text-xs">
-          <div className="progress" style={{ flex: 1 }}>
-            <div style={{ width: `${Math.round((phase.fraction || 0) * 100)}%` }} />
-          </div>
-          <span className="hint" style={{ minWidth: 240 }}>{phase.text}</span>
+          )}
+          {gfMismatch && (
+            <span className="chip chip-warn mt-2" title={`Project video: ${gf.videofile}\nLoaded video: ${video.path}`}>
+              project is for {baseName(gf.videofile)}, not {videoName}
+            </span>
+          )}
+          {gf && !gfMismatch && gfDurationOff && <span className="chip chip-warn mt-2">project video lasts {fmtTime(gf.duration)}, this one {fmtTime(dur)}</span>}
         </div>
       )}
+
+      <div>
+        <span className="label mt-0" style={{ color: 'var(--secondary)' }}>
+          Gyro rate columns — any order, any unit
+        </span>
+        <div className="grid grid-cols-3 gap-2">
+          {axes.map((a, i) => (
+            <ColumnsInput key={i} single small value={a} onChange={(v) => setAxes((ax) => ax.map((x, k) => (k === i ? v : x)))} columnNames={columnNames} style={{ '--input-color': 'var(--secondary)' }} disabled={running} placeholder={`axis ${i + 1}`} />
+          ))}
+        </div>
+        <div className="hint mt-2">Three angular-rate columns of the same sensor (INAV: gyroADC[0..2]). Only the magnitude of the rotation is compared, so the axis order and the camera mounting do not matter.</div>
+        <div className="hint mt-1">
+          Windows to analyse:{' '}
+          {plan.length
+            ? plan.map((p) => fmtTime(p[0].start)).join(' · ')
+            : isGf
+              ? gf
+                ? 'none — the project holds no camera motion inside this video'
+                : 'open the Gyroflow project first'
+              : columnNames.length
+                ? `${fmtTime(clampStart(time))} (playhead — no strong gyro motion lands inside the video with the current offset)`
+                : 'load telemetry first'}
+        </div>
+      </div>
+
+      <div className="flex gap-2 items-center flex-wrap">
+        {!running ? (
+          <button className={'btn ' + (result || error ? 'btn-tonal' : 'btn-filled')} onClick={run} disabled={!canRun || !methodInfo.available}>
+            <Icon name="auto" />
+            {result || error ? 'Analyse again' : 'Analyse'}
+          </button>
+        ) : (
+          <button className="btn btn-danger" onClick={cancel}>
+            Cancel
+          </button>
+        )}
+        {phase && (
+          <div className="flex items-center gap-3 flex-1" style={{ minWidth: 200 }}>
+            <div className="progress" style={{ flex: 1 }}>
+              <div style={{ width: `${Math.round((phase.fraction || 0) * 100)}%` }} />
+            </div>
+            <span className="hint">{phase.text}</span>
+          </div>
+        )}
+      </div>
       {error && (
-        <div className="text-xs" style={{ color: 'var(--bad)' }}>
-          {error}
+        <div className="banner error">
+          <Icon name="warning" />
+          <span>{error}</span>
         </div>
       )}
 
       {result && fit && plotted && (
-        <section className="bay bay-mixed" style={{ marginBottom: 0 }}>
-          <header className="bay-head">
-            <span className="bay-tick" />
-            Result
-            <span className="bay-note">
+        <div className="card card-high">
+          <div className="card-head" style={{ marginBottom: 8 }}>
+            <Icon name="circleCheck" />
+            <span className="card-title">Result</span>
+            <span className="card-meta">
               {result.windows.length} window{result.windows.length > 1 ? 's' : ''}
               {plotted.hfov ? ` · lens ≈ ${plotted.hfov}° hfov` : ''}
             </span>
-          </header>
-          <div className="bay-body flex flex-col gap-2">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="mono" style={{ fontSize: 22, fontWeight: 600, color: 'var(--accent)' }} title="Offset at the start of the video">
+          </div>
+          <div className="stack">
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="mono" style={{ fontSize: 24, fontWeight: 500, color: 'var(--primary)' }} title="Offset at the start of the video">
                 {fit.offset0 >= 0 ? '+' : ''}
                 {fit.offset0.toFixed(3)} s
               </span>
               {fit.n >= 2 && (
-                <span className="mono" style={{ fontSize: 16, fontWeight: 600, color: 'var(--accent)' }} title="Clock drift — milliseconds of telemetry gained per second of video">
+                <span className="mono" style={{ fontSize: 16, fontWeight: 500, color: 'var(--primary)' }} title="Clock drift — milliseconds of telemetry gained per second of video">
                   drift {fit.drift >= 0 ? '+' : ''}
                   {fit.drift.toFixed(3)} ms/s
                 </span>
@@ -560,61 +491,43 @@ export default function AutoSyncDialog({ video, store, storeVersion, columnNames
                 </span>
               )}
             </div>
-            <table className="text-xs" style={{ borderCollapse: 'collapse' }}>
-              <tbody>
-                {result.windows.map((w, i) => (
-                  <tr key={i} className={'row' + (i === plotIdx ? ' row-active' : '')} style={{ cursor: 'pointer' }} onClick={() => setPlotIdx(i)} title="Show this window's traces below">
-                    <td className="mono" style={{ padding: '2px 8px' }}>
-                      {fmtTime(w.start)} – {fmtTime(w.start + w.len)}
-                    </td>
-                    <td className="mono" style={{ padding: '2px 8px', color: 'var(--accent)' }}>
-                      offset {w.offset.toFixed(3)} s
-                    </td>
-                    <td style={{ padding: '2px 8px' }}>
-                      <span className={'chip mono ' + scoreClass(w.score)}>match {w.score.toFixed(3)}</span>
-                    </td>
-                    <td className="hint" style={{ padding: '2px 8px' }}>
-                      {w.motions ? `${w.motions.tracked}/${w.motions.total} frames` : `runner-up ${w.second.toFixed(2)}`}
-                      {w.score < USABLE_SCORE ? ' · not used in the fit' : ''}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="list">
+              {result.windows.map((w, i) => (
+                <div key={i} className={'list-item' + (i === plotIdx ? ' active' : '')} style={{ minHeight: 40, padding: '4px 10px' }} onClick={() => setPlotIdx(i)} title="Show this window's traces below">
+                  <span className="mono text-xs" style={{ width: 118 }}>
+                    {fmtTime(w.start)} – {fmtTime(w.start + w.len)}
+                  </span>
+                  <span className="mono text-xs" style={{ color: 'var(--primary)', width: 110 }}>
+                    offset {w.offset.toFixed(3)} s
+                  </span>
+                  <span className={'chip chip-sm mono ' + scoreClass(w.score)}>match {w.score.toFixed(3)}</span>
+                  <span className="hint">
+                    {w.motions ? `${w.motions.tracked}/${w.motions.total} frames` : `runner-up ${w.second.toFixed(2)}`}
+                    {w.score < USABLE_SCORE ? ' · not used in the fit' : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
             {ambiguous && (
-              <span className="chip chip-warn" style={{ alignSelf: 'flex-start' }} title={`Another offset scores ${plotted.second.toFixed(2)} for this window — the flight may repeat the same manoeuvre`}>
+              <span className="chip chip-warn self-start" title={`Another offset scores ${plotted.second.toFixed(2)} for this window — the flight may repeat the same manoeuvre`}>
                 this window is ambiguous
               </span>
             )}
             <PairPlot pair={plotted.pair} />
             <div className="hint">
-              <span style={{ color: 'var(--accent)' }}>amber</span> = {isGf ? 'camera gyro from the Gyroflow project' : 'rotation seen in the video'}, <span style={{ color: 'var(--tele)' }}>teal</span> = blackbox gyro at the found offset. The two should follow the same shape.
+              <span style={{ color: 'var(--primary)' }}>amber</span> = {isGf ? 'camera gyro from the Gyroflow project' : 'rotation seen in the video'}, <span style={{ color: 'var(--secondary)' }}>teal</span> = blackbox gyro at the found offset. The two should follow the same shape.
             </div>
             <CurvePlot curve={plotted.curve} offset={plotted.offset} />
             <div className="hint">Match score over the searched offsets ({plotted.curve.offsets[0].toFixed(1)} … {plotted.curve.offsets[plotted.curve.offsets.length - 1].toFixed(1)} s) — one clear spike means a reliable result.</div>
+            {!running && (
+              <button className="btn btn-filled self-start" onClick={apply}>
+                <Icon name="check" />
+                {fit.n >= 2 ? `Apply offset ${fit.offset0.toFixed(3)} s + drift ${fit.drift.toFixed(3)} ms/s` : `Apply offset ${fit.offset0.toFixed(3)} s`}
+              </button>
+            )}
           </div>
-        </section>
+        </div>
       )}
-
-      <div className="flex gap-2 justify-end items-center">
-        {result && fit && !running && (
-          <button className="btn btn-primary" onClick={apply}>
-            {fit.n >= 2 ? `Apply offset ${fit.offset0.toFixed(3)} s + drift ${fit.drift.toFixed(3)} ms/s` : `Apply offset ${fit.offset0.toFixed(3)} s`}
-          </button>
-        )}
-        {!running ? (
-          <button className="btn" onClick={run} disabled={!canRun}>
-            {result || error ? 'Analyse again' : 'Analyse'}
-          </button>
-        ) : (
-          <button className="btn btn-danger" onClick={cancel}>
-            Cancel
-          </button>
-        )}
-        <button className="btn btn-ghost" onClick={onClose} disabled={running}>
-          Close
-        </button>
-      </div>
-    </Frame>
+    </div>
   );
 }

@@ -17,7 +17,8 @@
 //     { "name": "Background", "type": "color_picker", "default": "rgba(255,255,255,.7)" }
 //   ]
 //
-// Settings may sit at the top level or inside groups ({ "group": { "name", "items": [...] } });
+// Settings may sit at the top level or inside groups ({ "group": { "name", "icon", "items": [...] } };
+// icon = single-colour SVG markup shown next to the group name, see icons.js);
 // the form shows groups as collapsible sections (collapsed by default). Keys are unique across
 // the whole definition.
 //
@@ -97,7 +98,7 @@ const cache = new Map();
 
 /**
  * Parse a settings definition (JSON or a JS array literal). Never throws:
- * returns { defs: [all normalized definitions, flat], sections: [{ name: null | group name, defs }],
+ * returns { defs: [all normalized definitions, flat], sections: [{ name: null | group name, icon, defs }],
  * error: null | message }. Cached per source string.
  */
 export function parseSettings(src) {
@@ -131,7 +132,9 @@ export function parseSettings(src) {
           const name = String(g.name == null ? '' : g.name).trim();
           if (!name) throw new Error('group #' + (i + 1) + ' has no name');
           if (!Array.isArray(g.items)) throw new Error('group "' + name + '" needs an "items" array');
-          const section = { name, defs: [] };
+          // a group carries an icon (SVG markup, see icons.js) shown next to its name in the form
+          const icon = typeof g.icon === 'string' && /^\s*<svg[\s>]/i.test(g.icon) ? g.icon.trim() : '';
+          const section = { name, icon, defs: [] };
           sections.push(section);
           g.items.forEach((item, j) => add(item, j, section));
         } else {

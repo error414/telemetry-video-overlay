@@ -8,11 +8,13 @@ No editing, trimming or effects.
 
 ## Workflow
 
-1. **Open video** – any common format; a preview proxy is made automatically.
-2. **Open blackbox** – CSV or raw `.txt` / `.bbl` log (decoded with `blackbox_decode`), several files can be combined.
-3. **Synchronise** – set offset and drift by hand, or use auto sync (optical flow or a Gyroflow project).
-4. **Add and edit widgets** – start from an example or write your own code in the editor, adjust its settings in the form, place it on the video.
-5. **Export** – burn the overlay into a video with ffmpeg, or write a PNG frame sequence.
+The app guides you through four steps (the stepper at the top; you can go back and forth at any time):
+
+1. **Start** – continue the previous session, start a new project or open a project file.
+2. **Files** – open the video (any common format; a preview proxy can be made when playback struggles) and the blackbox: CSV or raw `.txt` / `.bbl` log (decoded with `blackbox_decode`), several files can be combined.
+3. **Sync** – set offset and drift by hand, or automatically from the camera motion in the footage or a Gyroflow project.
+4. **Widgets** – **Add widget** opens a searchable grid of examples and your library; adjust the settings in the form, place the widget on the video, edit its code, save layouts.
+5. **Export** – choose the range and burn the overlay into a video with ffmpeg, or write a PNG frame sequence.
 
 Manuals: [Creating widgets](manual/widgets.md) · [Synchronising video and blackbox](manual/synchronisation.md)
 
@@ -23,7 +25,9 @@ Expect rough edges, use at your own risk.
 
 ## Screenshot
 
-![Blackbox overlay for INAV](images/Screenshot_1.png)
+The **Widgets** step: a motor RPM gauge placed over DJI footage with the goggles OSD, the timeline with the throttle trace and two named markers under the video, the widget's settings on the right.
+
+![Blackbox overlay for INAV — Widgets step](images/Screenshot_1.png)
 
 ## License
 

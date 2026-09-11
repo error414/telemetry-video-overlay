@@ -11,6 +11,7 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', '..', '..');
 const { parseSettings, buildSettings } = await import(pathToFileURL(path.join(root, 'src', 'widgetSettings.js')).href);
+const { safeIconSvg } = await import(pathToFileURL(path.join(root, 'src', 'icons.js')).href);
 
 let widgets;
 if (process.argv[2] && process.argv[2].endsWith('.js')) {
@@ -103,6 +104,12 @@ for (const w of variants) {
   if (!settings.opacity && !/\[clip_to_range\]$/.test(w.name)) console.log(`  ! ${w.name}: no "Opacity" setting (every widget should offer whole-widget opacity, key "opacity")`);
   // every widget showing a numeric column offers "Smooth ms" (see SKILL.md, Sizing, smoothing, caching) — warn only (text / flag / map widgets are exempt)
   if (!settings.smooth_ms && !/\[clip_to_range\]$/.test(w.name)) console.log(`  ! ${w.name}: no "Smooth ms" setting (every widget showing a numeric column should offer smoothing, key "smooth_ms"; text/flag/map widgets are exempt)`);
+  // icon + tags of the widget and an icon per settings group (see SKILL.md, Icon and tags; icons.md) — warn, do not fail
+  if (!/\[clip_to_range\]$/.test(w.name)) {
+    if (!safeIconSvg(w.icon)) console.log(`  ! ${w.name}: no valid "icon" (an inline single-colour <svg viewBox="0 0 24 24"> string; scripts, colours and external references are rejected)`);
+    if (!Array.isArray(w.tags) || !w.tags.length) console.log(`  ! ${w.name}: no "tags" (array of lower-case categories for the Add widget search, e.g. ["gauge", "speed"])`);
+    for (const sec of parseSettings(w.settings).sections) if (sec.name !== null && !safeIconSvg(sec.icon)) console.log(`  ! ${w.name}: settings group "${sec.name}" has no "icon" (take the matching SVG from icons.md)`);
+  }
   // every settings.<key> the code reads must exist in the definition
   for (const m of (w.code || '').matchAll(/settings\.([a-z0-9_]+)/g)) if (!settings[m[1]]) failures.push(`${w.name}: code reads settings.${m[1]} but the definition has no such setting`);
   const cols = (w.columns || '')
