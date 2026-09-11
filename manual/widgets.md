@@ -28,7 +28,8 @@ Anything a browser can draw, a widget can draw. There is no fixed list of widget
 3. Set **Columns** to the blackbox columns the widget reads; the code receives them as `ctx.values[0]`, `ctx.values[1]`, ...
    The **?** mark opens the INAV field reference, which doubles as a column picker.
 4. Drag and resize the widget on the video (switch **Edit** on above the video; **Snap** and **Grid** help with
-   alignment). Its size is available to the code, so draw relative to it.
+   alignment). Its size is available to the code, so draw relative to it. The timeline shows the trace column and
+   your markers here too, so you can jump to a manoeuvre and check the widget against it.
 5. **Edit code** (or a double-click on the widget) opens the editor: the **Code** tab is the function, the
    **Settings definition** tab is the list the form is generated from (name, type, default, description, group
    icons), **Icon & tags** holds the icon SVG and the categories, the **API reference** tab lists everything the code

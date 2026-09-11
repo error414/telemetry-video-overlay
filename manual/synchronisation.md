@@ -13,11 +13,15 @@ It is the **Sync** step of the workflow, after the video and the log are open.
 
 Both are stored in the project and shown in the **Method** card of the Sync step and in the bar at the bottom of the window.
 
+## Markers on the timeline
+
+The flag button right of the timeline adds a named **marker** at the playhead (arming, launch, a hard turn); click its green label to rename it, move it to the playhead or delete it. Markers are saved with the project and shown in every step. With the magnet button on, dragging the playhead or an export flag close to a marker snaps onto it, so you land on the same frame every time you compare.
+
 ## Manual sync
 
 Choose **Manual** in the **Method** card.
 
-1. Find a moment visible in both sources: arming, the take-off, a sharp turn. The timeline under the video draws one telemetry column (**Trace column**, gear icon right of the timeline) to help; the widgets on the video follow the current sync too.
+1. Find a moment visible in both sources: arming, the take-off, a sharp turn, and put a marker on it. The timeline under the video draws one telemetry column (**Trace column**, gear icon right of the timeline) to help; the video itself is shown without widgets here, the **Widgets** step shows them following the current sync.
 2. Seek the video to that moment and set the offset with the stepper (±0.01 / ±0.1 / ±1 s, or the `[` and `]` keys) until the widgets match the picture.
 3. **Start = here** sets the offset so that the blackbox starts at the current frame; useful when the log begins with arming.
 4. Check a moment near the end of the video. If the widgets lag or lead there, adjust **Drift** until both ends match.

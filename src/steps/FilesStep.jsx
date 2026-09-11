@@ -149,7 +149,7 @@ export default function FilesStep({ app }) {
                       <div style={{ width: proxyProgress * 100 + '%' }} />
                     </div>
                     <span className="mono text-xs">{Math.round(proxyProgress * 100)}%</span>
-                    <button className="btn btn-danger btn-sm" onClick={() => window.api.cancelProxy()}>
+                    <button className="btn btn-danger btn-xs" onClick={() => window.api.cancelProxy()}>
                       Cancel
                     </button>
                   </div>
@@ -157,10 +157,10 @@ export default function FilesStep({ app }) {
                 </div>
               ) : (
                 <div className="flex gap-2 mt-3 flex-wrap">
-                  <button className={'btn btn-sm ' + (heavy && !video.proxy ? 'btn-filled' : 'btn-tonal')} onClick={() => makeProxy('full')} title="Same resolution, frame rate and bit depth, re-encoded on the GPU (NVENC). ~1.5 min for 3.5 min of 4K/120; the preview plays during creation.">
+                  <button className={'btn btn-xs ' + (heavy && !video.proxy ? 'btn-filled' : 'btn-tonal')} onClick={() => makeProxy('full')} title="Same resolution, frame rate and bit depth, re-encoded on the GPU (NVENC). ~1.5 min for 3.5 min of 4K/120; the preview plays during creation.">
                     {video.proxy ? 'Re-create' : 'Create'} full-quality proxy
                   </button>
-                  <button className="btn btn-sm btn-outlined" onClick={() => makeProxy('light')} title="1080p / 30 fps H.264 — small and fast, for weaker machines">
+                  <button className="btn btn-xs btn-outlined" onClick={() => makeProxy('light')} title="1080p / 30 fps H.264 — small and fast, for weaker machines">
                     Light proxy (1080p/30)
                   </button>
                 </div>

@@ -158,6 +158,7 @@ export default function WidgetsStep({ app }) {
     <StepScreen
       app={app}
       editMode={editMode}
+      trace
       tools={tools}
       empty={
         <div className="empty-state">

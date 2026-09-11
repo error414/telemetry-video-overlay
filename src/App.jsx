@@ -90,6 +90,7 @@ export default function App() {
   const [drift, setDrift] = useState(0); // ms of telemetry per second of video the two clocks drift apart (see time.js)
   const sync = useMemo(() => ({ offset, drift }), [offset, drift]);
   const [range, setRange] = useState({ start: 0, end: null }); // exported part of the video in seconds; end null = to the end
+  const [markers, setMarkers] = useState([]); // named marks on the timeline, video seconds: [{id, t, name}]
   const [widgets, setWidgets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [library, setLibrary] = useState(loadLibrary);
@@ -295,7 +296,8 @@ export default function App() {
       const info = await probeVideo(p);
       setVideo(info);
       setPlaybackBlocked(false);
-      setRange({ start: 0, end: null }); // in/out points belong to the previous video
+      setRange({ start: 0, end: null }); // in/out points and markers belong to the previous video
+      setMarkers([]);
       // widgets follow the video size: rescale them from the size they are laid out in now
       // (no size yet = they were placed on the empty stage)
       const from = layout && layout.w ? layout : widgets.length ? EMPTY_STAGE : null;
@@ -318,6 +320,7 @@ export default function App() {
     setPlayError(null);
     setTime(0);
     setRange({ start: 0, end: null });
+    setMarkers([]);
     setStatus('Video removed from the project');
   }, [proxyProgress, confirm]);
 
@@ -450,6 +453,7 @@ export default function App() {
           offset,
           drift,
           range,
+          markers,
           widgets,
           layoutName,
           step: STEP_IDS.includes(screen) ? screen : undefined,
@@ -459,7 +463,7 @@ export default function App() {
       ),
     // storeVersion: store is a stable instance — source add/remove/edit only bumps the version,
     // and without it here the autosave effect below never sees those changes
-    [video, store, storeVersion, layout, offset, drift, range, widgets, layoutName, screen]
+    [video, store, storeVersion, layout, offset, drift, range, markers, widgets, layoutName, screen]
   );
 
   const saveProject = useCallback(async () => {
@@ -481,6 +485,7 @@ export default function App() {
     setOffset(0);
     setDrift(0);
     setRange({ start: 0, end: null });
+    setMarkers([]);
     setWidgets([]);
     setSelectedId(null);
     setLayout(null);
@@ -502,6 +507,7 @@ export default function App() {
       setDrift(typeof j.drift === 'number' && Number.isFinite(j.drift) ? j.drift : 0);
       const r = j.range || {};
       setRange({ start: typeof r.start === 'number' && r.start > 0 ? r.start : 0, end: typeof r.end === 'number' ? r.end : null });
+      setMarkers((Array.isArray(j.markers) ? j.markers : []).filter((m) => m && typeof m.t === 'number' && Number.isFinite(m.t)).map((m) => ({ id: m.id || uid(), t: m.t, name: typeof m.name === 'string' ? m.name : '' })));
       const seen = new Set();
       let ws = (j.widgets || []).map((w) => {
         const id = w.id && !seen.has(w.id) ? w.id : uid();
@@ -629,6 +635,8 @@ export default function App() {
     setDrift,
     range,
     setRange,
+    markers,
+    setMarkers,
     widgets,
     setWidgets,
     selected,

@@ -1,21 +1,28 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { toTele, toVideo } from '../time.js';
+import { fmtTime, toTele, toVideo } from '../time.js';
+import { uid } from '../widgetRuntime.js';
 import { ColumnsInput } from './ColumnsInput.jsx';
 import Icon from './Icon.jsx';
 import { isTyping } from './player.js';
 
 const EMPTY_RANGE = { start: 0, end: null };
 const HANDLE_HIT = 7; // px around an in/out marker that grabs it instead of scrubbing
+const SNAP_PX = 9; // px around a named marker that pulls the playhead / a range flag onto it
 const TRACE_KEY = 'telemetry-overlay.traceColumn';
+const SNAP_KEY = 'telemetry-overlay.snapMarkers';
 
 /**
  * The timeline canvas is the scrubber: click or drag to seek. Optionally draws one telemetry
  * column as a teal trace (trace = true, with the gear to pick the column) and the export range
- * as amber in/out flags (range = 'show' | 'edit'; 'edit' also drags the flags and binds I / O).
+ * as amber in/out flags (rangeMode = 'show' | 'edit'; 'edit' also drags the flags and binds I / O).
+ * Named markers (green, `markers` = [{id, t, name}] in video seconds) sit on top; the flag button
+ * adds one at the playhead, its chip renames / deletes it, and with the magnet on, dragging the
+ * playhead or a range flag close to a marker snaps onto it.
  */
-export default function Timeline({ player, store, storeVersion, columnNames, sync, range = EMPTY_RANGE, setRange, trace = false, rangeMode = 'none', height = 72 }) {
+export default function Timeline({ player, store, storeVersion, columnNames, sync, range = EMPTY_RANGE, setRange, trace = false, rangeMode = 'none', markers = [], setMarkers, height = 72 }) {
   const { video, dur, limit, frame, time, seek, pause, disabled } = player;
   const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState(0);
   useEffect(() => {
     const c = canvasRef.current;
@@ -48,12 +55,31 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
     }
   }, [columnNames]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // snap to markers: remembered between sessions
+  const [snap, setSnapState] = useState(() => {
+    try {
+      return localStorage.getItem(SNAP_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const setSnap = (v) => {
+    setSnapState(v);
+    try {
+      localStorage.setItem(SNAP_KEY, v ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  };
+
   const showRange = rangeMode !== 'none' && dur > 0;
   const editRange = rangeMode === 'edit' && !!setRange;
   const inT = Math.max(0, Math.min(dur, range.start || 0));
   const outT = range.end == null ? dur : Math.max(inT, Math.min(dur, range.end));
   const fullRange = inT <= 0 && range.end == null;
   const rangeLocked = disabled || !dur || !editRange;
+  const span = dur || store.duration() || 1;
+  const canMark = !!setMarkers && dur > 0 && !disabled;
 
   // move the in or out point; both are capped to the encoded part exactly like seeking,
   // and they keep at least one frame between them
@@ -80,6 +106,53 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
     return () => window.removeEventListener('keydown', h);
   });
 
+  // ---- markers ----
+  const [editId, setEditId] = useState(null); // marker whose popover is open
+  const nameRef = useRef(null);
+  const addMarker = () => {
+    if (!canMark) return;
+    const m = { id: uid(), t: +time.toFixed(3), name: 'Marker ' + (markers.length + 1) };
+    setMarkers((ms) => [...(ms || []), m].sort((a, b) => a.t - b.t));
+    setEditId(m.id);
+  };
+  const updateMarker = (id, patch) => setMarkers((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  const removeMarker = (id) => {
+    setMarkers((ms) => ms.filter((m) => m.id !== id));
+    setEditId(null);
+  };
+  useEffect(() => {
+    if (!editId) return undefined;
+    const el = nameRef.current;
+    if (el) {
+      el.focus();
+      el.select();
+    }
+    const onDown = (e) => {
+      const pop = wrapRef.current && wrapRef.current.querySelector('.marker-pop');
+      if (pop && !pop.contains(e.target) && !(e.target.closest && e.target.closest('.tl-chip'))) setEditId(null);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setEditId(null);
+    };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [editId]);
+  // pull a time onto the nearest marker when it is within SNAP_PX on screen
+  const snapTime = (t, widthPx) => {
+    if (!snap || !markers.length || !widthPx) return t;
+    const tol = (SNAP_PX / widthPx) * span;
+    let best = null;
+    for (const m of markers) {
+      const d = Math.abs(m.t - t);
+      if (d <= tol && (!best || d < best.d)) best = { d, t: m.t };
+    }
+    return best ? best.t : t;
+  };
+
   // draw
   useEffect(() => {
     const c = canvasRef.current;
@@ -89,7 +162,6 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
     const W = (c.width = c.clientWidth * dpr);
     const H = (c.height = c.clientHeight * dpr);
     g.clearRect(0, 0, W, H);
-    const span = dur || store.duration() || 1;
     const pts = trace && graphCol && store.columns[graphCol] ? store.range(graphCol, toTele(0, sync), toTele(span, sync), Math.floor(W)) : [];
     let min = Infinity;
     let max = -Infinity;
@@ -123,8 +195,8 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
     if (trace && graphCol) {
       g.fillStyle = Number.isFinite(min) ? 'rgba(95,216,220,.75)' : 'rgba(95,216,220,.35)';
       g.font = `500 ${10.5 * dpr}px "Roboto Mono", ui-monospace, monospace`;
-      g.textBaseline = 'top';
-      g.fillText(graphCol, 12 * dpr, 5 * dpr);
+      g.textBaseline = 'bottom';
+      g.fillText(graphCol, 12 * dpr, H - 5 * dpr);
     }
     // grey out the part a live proxy has not encoded yet (not seekable)
     if (limit < span - 0.5) {
@@ -159,6 +231,16 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
       g.closePath();
       g.fill();
     }
+    // named markers: thin green lines (the label chips are HTML over the canvas)
+    g.strokeStyle = 'rgba(142,215,162,.8)';
+    g.lineWidth = dpr;
+    for (const m of markers) {
+      const x = Math.round((m.t / span) * W) + 0.5;
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x, H);
+      g.stroke();
+    }
     // playhead
     g.strokeStyle = '#ffb95c';
     g.lineWidth = 2 * dpr;
@@ -167,13 +249,13 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
     g.moveTo(px, 0);
     g.lineTo(px, H);
     g.stroke();
-  }, [graphCol, trace, sync, time, dur, limit, inT, outT, fullRange, showRange, store, storeVersion, canvasSize]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [graphCol, trace, sync, time, dur, limit, inT, outT, fullRange, showRange, markers, store, storeVersion, canvasSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // pointer: scrub, or drag an in/out marker
   const dragRef = useRef(null); // null | 'scrub' | 'in' | 'out'
   const timeFromEvent = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    return ((e.clientX - r.left) / r.width) * (dur || store.duration());
+    return snapTime(((e.clientX - r.left) / r.width) * span, r.width);
   };
   const hitHandle = (e) => {
     if (rangeLocked) return null;
@@ -227,36 +309,93 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
     'Click or drag to seek.',
     trace ? 'Teal trace = telemetry column over the video timeline (moves with the offset).' : '',
     editRange ? 'Drag the amber flags to set the export range (I / O keys at the playhead).' : '',
+    markers.length ? 'Green lines = your markers; click a label to rename or delete it.' : '',
   ]
     .filter(Boolean)
     .join(' ');
+  const editing = editId ? markers.find((m) => m.id === editId) : null;
+  const wrapW = wrapRef.current ? wrapRef.current.clientWidth : 0;
 
   return (
     <div className="graph-well flex-1 min-w-0" style={{ height }}>
-      <div className="flex-1 min-w-0 h-full" title={tip}>
+      <div ref={wrapRef} className="tl-wrap flex-1 min-w-0" title={tip}>
         <canvas ref={canvasRef} className="timeline" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
+        {markers.map((m) => (
+          <div key={m.id} className="tl-marker" style={{ left: `${(m.t / span) * 100}%` }}>
+            <span
+              className={'tl-chip' + (editId === m.id ? ' on' : '')}
+              title={`${m.name || 'Marker'} · ${fmtTime(m.t)} — click to jump here and rename`}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                pause();
+                seek(m.t);
+                setEditId(m.id);
+              }}
+            >
+              {m.name || fmtTime(m.t)}
+            </span>
+          </div>
+        ))}
+        {editing && (
+          <div className="marker-pop" style={{ left: Math.max(0, Math.min((editing.t / span) * wrapW - 130, Math.max(0, wrapW - 260))) }} onPointerDown={(e) => e.stopPropagation()}>
+            <div className="popover-head">
+              <Icon name="flag" />
+              Marker
+              <span className="card-meta">{fmtTime(editing.t)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                ref={nameRef}
+                className="input input-sm flex-1"
+                value={editing.name}
+                placeholder="name"
+                spellCheck={false}
+                onChange={(e) => updateMarker(editing.id, { name: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') setEditId(null);
+                }}
+              />
+              <button className="btn btn-icon sm" onClick={() => updateMarker(editing.id, { t: +time.toFixed(3) })} title="Move the marker to the playhead">
+                <Icon name="in" />
+              </button>
+              <button className="btn btn-icon sm btn-danger" onClick={() => removeMarker(editing.id)} title="Delete this marker">
+                <Icon name="delete" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-      {trace && (
-        <div className="graph-rail" ref={popRef}>
+      <div className="graph-rail" ref={popRef}>
+        {trace && (
           <button className={'btn btn-icon sm' + (pickerOpen ? ' on' : '')} onClick={() => setPickerOpen((o) => !o)} aria-expanded={pickerOpen} aria-label="Trace column" title={'Trace column: ' + (graphCol || 'none')}>
             <Icon name="gear" />
           </button>
-          {pickerOpen && (
-            <div className="popover" role="dialog" aria-label="Trace column">
-              <div className="popover-head">
-                <Icon name="telemetry" />
-                Trace column
-                <span className="card-meta">{columnNames.length ? columnNames.length + ' columns' : 'no telemetry'}</span>
-              </div>
-              <ColumnsInput single value={graphCol} onChange={setGraphCol} columnNames={columnNames} style={{ width: '100%', '--input-color': 'var(--secondary)' }} title="Telemetry column drawn on the timeline" />
-              <div className="hint" style={{ marginTop: 8 }}>
-                Pick a column with a visible event — throttle, launch, a hard turn — and line it up with the same moment in the footage.
-              </div>
+        )}
+        {setMarkers && (
+          <>
+            <button className="btn btn-icon sm" onClick={addMarker} disabled={!canMark} title="Add a named marker at the playhead">
+              <Icon name="flag" />
+            </button>
+            <button className={'btn btn-icon sm' + (snap ? ' on' : '')} onClick={() => setSnap(!snap)} aria-pressed={snap} disabled={!markers.length} title={snap ? 'Snap to markers: on — dragging the playhead or a range flag near a marker lands on it' : 'Snap to markers: off'}>
+              <Icon name="magnet" />
+            </button>
+          </>
+        )}
+        {pickerOpen && (
+          <div className="popover" role="dialog" aria-label="Trace column">
+            <div className="popover-head">
+              <Icon name="telemetry" />
+              Trace column
+              <span className="card-meta">{columnNames.length ? columnNames.length + ' columns' : 'no telemetry'}</span>
             </div>
-          )}
-        </div>
-      )}
-      {video && !fullRange && showRange && null}
+            <ColumnsInput single value={graphCol} onChange={setGraphCol} columnNames={columnNames} style={{ width: '100%', '--input-color': 'var(--secondary)' }} title="Telemetry column drawn on the timeline" />
+            <div className="hint" style={{ marginTop: 8 }}>
+              Pick a column with a visible event — throttle, launch, a hard turn — and line it up with the same moment in the footage.
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

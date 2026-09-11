@@ -11,7 +11,7 @@ import { usePlayer } from '../components/player.js';
  * decided per step through props, so every step only carries what it needs.
  */
 export default function StepScreen({ app, tools, children, editMode = false, showWidgets = true, trace = false, rangeMode = 'none', tail = null, empty = null }) {
-  const { video, videoRef, time, setTime, playbackBlocked, proxyProgress, showPlayError, store, storeVersion, sync, range, setRange, columnNames } = app;
+  const { video, videoRef, time, setTime, playbackBlocked, proxyProgress, showPlayError, store, storeVersion, sync, range, setRange, markers, setMarkers, columnNames } = app;
   const player = usePlayer({
     video,
     videoRef,
@@ -52,7 +52,7 @@ export default function StepScreen({ app, tools, children, editMode = false, sho
         </div>
         <div className="player">
           <Transport player={player} lockTitle={lockTitle} />
-          <Timeline player={player} store={store} storeVersion={storeVersion} columnNames={columnNames} sync={sync} range={range} setRange={setRange} trace={trace} rangeMode={rangeMode} />
+          <Timeline player={player} store={store} storeVersion={storeVersion} columnNames={columnNames} sync={sync} range={range} setRange={setRange} trace={trace} rangeMode={rangeMode} markers={markers} setMarkers={setMarkers} />
           {(tail || player.disabled || (player.limit < player.dur - 0.5 && !player.disabled)) && (
             <div className="player-tail">
               {player.limit < player.dur - 0.5 && !player.disabled && <span className="hint">encoded to {Math.floor(player.limit / 60)}:{String(Math.floor(player.limit % 60)).padStart(2, '0')}</span>}

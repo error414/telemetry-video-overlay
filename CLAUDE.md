@@ -90,9 +90,11 @@ project is debounced 500 ms, wait before reading it back. Dialogs (`.dialog`) ar
 `ExportStep.jsx`. Every step is built on `steps/StepScreen.jsx`: stage + play deck + timeline on
 the left (`Stage.jsx`, `Transport.jsx`, `Timeline.jsx`, playback state from the `usePlayer` hook in
 `components/player.js`), the step's cards in the side panel on the right. What the stage shows is
-decided per step through props: Files = plain video, no widgets; Sync = widgets read-only + teal
-trace on the timeline; Widgets = edit mode, grid toggles; Export = widgets read-only + editable
-export range on the timeline. Keyboard shortcuts follow the same rule (space/arrows/M in the
+decided per step through props: widgets are drawn only in the Widgets step (edit mode, grid
+toggles, trace); Files / Sync / Export show the plain video, Sync adds the teal trace, Export the
+editable export range. Named markers (`markers` in App state and the project JSON, video
+seconds) are drawn in every step; `Timeline.jsx` adds / renames / deletes them and snaps the
+playhead and range flags onto them (magnet toggle, `telemetry-overlay.snapMarkers`). Keyboard shortcuts follow the same rule (space/arrows/M in the
 player hook everywhere, `[` `]` only while `SyncControls` is mounted, I/O only while the timeline
 range is editable). The Sync step hosts the manual controls (`SyncControls.jsx`) and the inline
 auto sync panel (`AutoSync.jsx`, method chosen with a segmented button, registry in

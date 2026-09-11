@@ -24,7 +24,7 @@ export default function ExportStep({ app }) {
   const scaleOptions = pngScaleOptions(video);
   const visibleCount = widgets.filter((w) => w.visible !== false).length;
   return (
-    <StepScreen app={app} rangeMode="edit">
+    <StepScreen app={app} rangeMode="edit" showWidgets={false}>
       {(player) => (
         <>
           {(!video || !visibleCount) && (

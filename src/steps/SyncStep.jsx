@@ -29,7 +29,7 @@ export default function SyncStep({ app }) {
   const ready = !!video && columnNames.length > 0;
   const current = METHODS.find((m) => m.id === method) || METHODS[0];
   return (
-    <StepScreen app={app} trace tail={null}>
+    <StepScreen app={app} trace showWidgets={false}>
       {!ready && (
         <div className="banner warn" style={{ marginBottom: 16 }}>
           <Icon name="warning" />
@@ -69,7 +69,7 @@ export default function SyncStep({ app }) {
           <span className="card-title">How the numbers are used</span>
         </div>
         <div className="hint">
-          telemetry time = video time × (1 + drift / 1000) + offset. The teal trace on the timeline is one telemetry column drawn on the video clock — it moves with the offset, so a visible event (throttle, launch, a turn) should sit under the same moment in the footage. Widgets on the video follow the current sync, so scrub to a manoeuvre and compare. {current.id !== 'manual' ? 'Auto sync writes both numbers; fine-tune them afterwards in Manual if needed.' : ''}
+          telemetry time = video time × (1 + drift / 1000) + offset. The teal trace on the timeline is one telemetry column drawn on the video clock — it moves with the offset, so a visible event (throttle, launch, a turn) should sit under the same moment in the footage. Add a marker on the timeline at a moment you recognise in the footage (flag button right of it) and jump back to it while comparing. {current.id !== 'manual' ? 'Auto sync writes both numbers; fine-tune them afterwards in Manual if needed.' : ''}
         </div>
       </div>
     </StepScreen>
