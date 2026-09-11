@@ -1,7 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { settingValue } from '../widgetSettings.js';
+import { settingValue, coerce } from '../widgetSettings.js';
 import ColorInput from './ColorInput.jsx';
 import Icon, { SvgIcon } from './Icon.jsx';
+
+/** True when a (coerced) value is the definition default — colours compare case-insensitively, numbers by value. */
+function isDefault(def, v) {
+  if (v === undefined) return true;
+  const a = coerce(def, v);
+  const b = def.default;
+  if (def.type === 'color_picker' || def.type === 'text') return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+  return a === b;
+}
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function highlight(text, q) {
@@ -24,7 +33,8 @@ export default function SettingsForm({ defs, sections, config, error, onChange, 
   const [open, setOpen] = useState({}); // group name -> expanded
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
-  const isChanged = (d) => !!config && config[d.key] !== undefined;
+  // a value typed back to the default counts as unchanged (and is dropped from config below)
+  const isChanged = (d) => !!config && !isDefault(d, config[d.key]);
   const matchesQ = (d) => !q || (d.name + ' ' + (d.description || '') + ' ' + d.key).toLowerCase().includes(q);
   const shown = useMemo(() => {
     const secs = sections && sections.length ? sections : [{ name: null, icon: '', defs }];
@@ -40,7 +50,7 @@ export default function SettingsForm({ defs, sections, config, error, onChange, 
     );
   if (!defs.length) return <div className="hint">No settings. Define them in the editor (Settings definition tab); the form appears here.</div>;
   const changed = defs.some(isChanged);
-  const rows = (list) => list.map((d) => <SettingRow key={d.key} def={d} value={settingValue(d, config)} changed={isChanged(d)} q={q} onChange={(v) => onChange(d.key, v)} />);
+  const rows = (list) => list.map((d) => <SettingRow key={d.key} def={d} value={settingValue(d, config)} changed={isChanged(d)} q={q} onChange={(v) => onChange(d.key, isDefault(d, v) ? undefined : v)} />);
   return (
     <div className="settings-form">
       {searchable && defs.length > 4 && (
