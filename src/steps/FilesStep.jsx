@@ -87,7 +87,7 @@ function SourceItem({ s, store, updateSource, removeSource }) {
 
 /** Step 1 — open the video and the blackbox log(s). The stage shows the plain video (no widgets) so the file can be checked and a proxy made when playback fails. */
 export default function FilesStep({ app }) {
-  const { video, openVideo, removeVideo, makeProxy, proxyProgress, decodeBlackbox, decoding, busy, bbOptions, setBbOptions, store, addCsvFiles, updateSource, removeSource, removeAllSources } = app;
+  const { video, openVideo, removeVideo, makeProxy, proxyProgress, decodeBlackbox, decoding, busy, bbOptions, setBbOptions, store, updateSource, removeSource, removeAllSources } = app;
   const [optionsOpen, setOptionsOpen] = useState(false);
   const heavy = video && (video.codec === 'hevc' || video.width > 1920 || video.fps > 60);
   return (
@@ -190,17 +190,12 @@ export default function FilesStep({ app }) {
         </div>
         <div className="stack">
           <div className="hint">
-            A raw <code>.TXT</code> / <code>.BBL</code> log is decoded with the bundled <code>blackbox_decode</code>; the CSV is written next to it and loaded. A log with several flights gives one file per flight — remove the ones you don't need. An already decoded CSV can be added directly.
+            A raw <code>.TXT</code> / <code>.BBL</code> log is decoded with the bundled <code>blackbox_decode</code>; the CSV is written next to it and loaded. A log with several flights gives one file per flight — remove the ones you don't need.
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <button className={'btn ' + (store.sources.length ? 'btn-tonal' : 'btn-filled')} onClick={decodeBlackbox} disabled={decoding || busy != null}>
-              <Icon name="open" />
-              {decoding ? 'Decoding…' : 'Decode blackbox log…'}
-            </button>
-            <button className="btn btn-outlined" onClick={async () => addCsvFiles(await window.api.openCsv())} disabled={busy != null}>
-              Add CSV…
-            </button>
-          </div>
+          <button className={'btn self-start ' + (store.sources.length ? 'btn-tonal' : 'btn-filled')} onClick={decodeBlackbox} disabled={decoding || busy != null}>
+            <Icon name="open" />
+            {decoding ? 'Decoding…' : store.sources.length ? 'Decode another log…' : 'Decode blackbox log…'}
+          </button>
           {busy && (
             <div>
               <div className="progress">

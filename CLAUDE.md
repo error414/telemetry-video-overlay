@@ -35,8 +35,9 @@ step, a stepper in the app bar, Back / next-step buttons in the bottom bar; ever
 only what it needs, see "Screens" below):
 
 0. Start screen: continue the previous session, new project, or open a project file.
-1. Files: open video (ffprobe, preview proxy) and blackbox (`.csv` or raw `.txt`/`.bbl`/`.bfl`/`.log`
-   decoded by `blackbox_decode`; multiple files allowed).
+1. Files: open video (ffprobe, preview proxy) and blackbox (raw `.txt`/`.bbl`/`.bfl`/`.log`
+   decoded by `blackbox_decode`; multiple files allowed; a CSV enters only through a project
+   file — there is no "Add CSV" button). Sync and the later steps are disabled until both are loaded.
 2. Sync: manual (offset/drift steppers), video motion or Gyroflow project (`src/sync/`).
 3. Widgets: add from the Add widget dialog (examples + own library, search + tag filter), arrange
    on the stage, tune settings, edit code, manage the library and layouts.
