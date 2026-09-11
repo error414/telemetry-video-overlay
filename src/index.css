@@ -2032,12 +2032,34 @@ button.chip.on {
 }
 .tl-chip:hover,
 .tl-chip.on {
-  background: #aef2c0;
+  filter: brightness(1.15);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55), 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.marker-swatches {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.marker-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.12s var(--ease), border-color 0.12s var(--ease);
+}
+.marker-swatch:hover {
+  transform: scale(1.15);
+}
+.marker-swatch.on {
+  border-color: var(--on-surface);
 }
 .marker-pop {
   position: absolute;
   bottom: calc(100% + 10px);
-  width: 260px;
+  width: 320px;
   padding: 12px 14px;
   z-index: 61;
   background: var(--surface-container-high);

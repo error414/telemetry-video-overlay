@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { fmtTime, toTele, toVideo } from '../time.js';
 import { uid } from '../widgetRuntime.js';
 import { ColumnsInput } from './ColumnsInput.jsx';
+import ColorInput, { parseColor, rgbaString } from './ColorInput.jsx';
 import Icon from './Icon.jsx';
 import { isTyping } from './player.js';
 
@@ -10,6 +11,18 @@ const HANDLE_HIT = 7; // px around an in/out marker that grabs it instead of scr
 const SNAP_PX = 9; // px around a named marker that pulls the playhead / a range flag onto it
 const TRACE_KEY = 'telemetry-overlay.traceColumn';
 const SNAP_KEY = 'telemetry-overlay.snapMarkers';
+export const MARKER_COLOR = '#8ed7a2';
+// preset marker colours (the popover swatches); any CSS colour works through the picker
+const MARKER_COLORS = ['#8ed7a2', '#ffb95c', '#5fd8dc', '#ff7a6e', '#c7a4ff', '#7fb2ff', '#ff8fd2', '#f5f5f5'];
+/** Marker colour as a usable CSS string (the stored value may be anything the pilot typed). */
+export function markerColor(m) {
+  return m && parseColor(m.color) ? m.color : MARKER_COLOR;
+}
+/** Dark or light text for a chip on the given colour. */
+function inkFor(color) {
+  const c = parseColor(color) || { r: 142, g: 215, b: 162 };
+  return (c.r * 299 + c.g * 587 + c.b * 114) / 1000 > 140 ? '#101418' : '#f4f6f8';
+}
 
 /**
  * The timeline canvas is the scrubber: click or drag to seek. Optionally draws one telemetry
@@ -111,7 +124,7 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
   const nameRef = useRef(null);
   const addMarker = () => {
     if (!canMark) return;
-    const m = { id: uid(), t: +time.toFixed(3), name: 'Marker ' + (markers.length + 1) };
+    const m = { id: uid(), t: +time.toFixed(3), name: 'Marker ' + (markers.length + 1), color: MARKER_COLORS[markers.length % MARKER_COLORS.length] };
     setMarkers((ms) => [...(ms || []), m].sort((a, b) => a.t - b.t));
     setEditId(m.id);
   };
@@ -129,7 +142,7 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
     }
     const onDown = (e) => {
       const pop = wrapRef.current && wrapRef.current.querySelector('.marker-pop');
-      if (pop && !pop.contains(e.target) && !(e.target.closest && e.target.closest('.tl-chip'))) setEditId(null);
+      if (pop && !pop.contains(e.target) && !(e.target.closest && e.target.closest('.tl-chip, .color-pop'))) setEditId(null);
     };
     const onKey = (e) => {
       if (e.key === 'Escape') setEditId(null);
@@ -231,10 +244,10 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
       g.closePath();
       g.fill();
     }
-    // named markers: thin green lines (the label chips are HTML over the canvas)
-    g.strokeStyle = 'rgba(142,215,162,.8)';
+    // named markers: thin lines in the marker's colour (the label chips are HTML over the canvas)
     g.lineWidth = dpr;
     for (const m of markers) {
+      g.strokeStyle = markerColor(m);
       const x = Math.round((m.t / span) * W) + 0.5;
       g.beginPath();
       g.moveTo(x, 0);
@@ -324,6 +337,7 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
           <div key={m.id} className="tl-marker" style={{ left: `${(m.t / span) * 100}%` }}>
             <span
               className={'tl-chip' + (editId === m.id ? ' on' : '')}
+              style={{ background: markerColor(m), color: inkFor(markerColor(m)) }}
               title={`${m.name || 'Marker'} · ${fmtTime(m.t)} — click to jump here and rename`}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
@@ -338,7 +352,7 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
           </div>
         ))}
         {editing && (
-          <div className="marker-pop" style={{ left: Math.max(0, Math.min((editing.t / span) * wrapW - 130, Math.max(0, wrapW - 260))) }} onPointerDown={(e) => e.stopPropagation()}>
+          <div className="marker-pop" style={{ left: Math.max(0, Math.min((editing.t / span) * wrapW - 160, Math.max(0, wrapW - 320))) }} onPointerDown={(e) => e.stopPropagation()}>
             <div className="popover-head">
               <Icon name="flag" />
               Marker
@@ -362,6 +376,16 @@ export default function Timeline({ player, store, storeVersion, columnNames, syn
               <button className="btn btn-icon sm btn-danger" onClick={() => removeMarker(editing.id)} title="Delete this marker">
                 <Icon name="delete" />
               </button>
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              <div className="marker-swatches">
+                {MARKER_COLORS.map((c) => (
+                  <button key={c} type="button" className={'marker-swatch' + (markerColor(editing) === c ? ' on' : '')} style={{ background: c }} onClick={() => updateMarker(editing.id, { color: c })} title={c} aria-label={'Colour ' + c} />
+                ))}
+              </div>
+              <div style={{ width: 118 }}>
+                <ColorInput value={markerColor(editing)} onChange={(v) => updateMarker(editing.id, { color: parseColor(v) ? rgbaString(parseColor(v)) : v })} />
+              </div>
             </div>
           </div>
         )}

@@ -507,7 +507,7 @@ export default function App() {
       setDrift(typeof j.drift === 'number' && Number.isFinite(j.drift) ? j.drift : 0);
       const r = j.range || {};
       setRange({ start: typeof r.start === 'number' && r.start > 0 ? r.start : 0, end: typeof r.end === 'number' ? r.end : null });
-      setMarkers((Array.isArray(j.markers) ? j.markers : []).filter((m) => m && typeof m.t === 'number' && Number.isFinite(m.t)).map((m) => ({ id: m.id || uid(), t: m.t, name: typeof m.name === 'string' ? m.name : '' })));
+      setMarkers((Array.isArray(j.markers) ? j.markers : []).filter((m) => m && typeof m.t === 'number' && Number.isFinite(m.t)).map((m) => ({ id: m.id || uid(), t: m.t, name: typeof m.name === 'string' ? m.name : '', color: typeof m.color === 'string' ? m.color : undefined })));
       const seen = new Set();
       let ws = (j.widgets || []).map((w) => {
         const id = w.id && !seen.has(w.id) ? w.id : uid();

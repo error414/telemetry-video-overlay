@@ -15,7 +15,7 @@ Both are stored in the project and shown in the **Method** card of the Sync step
 
 ## Markers on the timeline
 
-The flag button right of the timeline adds a named **marker** at the playhead (arming, launch, a hard turn); click its green label to rename it, move it to the playhead or delete it. Markers are saved with the project and shown in every step. With the magnet button on, dragging the playhead or an export flag close to a marker snaps onto it, so you land on the same frame every time you compare.
+The flag button right of the timeline adds a named **marker** at the playhead (arming, launch, a hard turn); click its label to rename it, pick its colour (swatches or any colour through the picker), move it to the playhead or delete it. Markers are saved with the project and shown in every step. With the magnet button on, dragging the playhead or an export flag close to a marker snaps onto it, so you land on the same frame every time you compare.
 
 ## Manual sync
 

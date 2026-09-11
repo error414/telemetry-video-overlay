@@ -92,7 +92,7 @@ the left (`Stage.jsx`, `Transport.jsx`, `Timeline.jsx`, playback state from the 
 `components/player.js`), the step's cards in the side panel on the right. What the stage shows is
 decided per step through props: widgets are drawn only in the Widgets step (edit mode, grid
 toggles, trace); Files / Sync / Export show the plain video, Sync adds the teal trace, Export the
-editable export range. Named markers (`markers` in App state and the project JSON, video
+editable export range. Named markers (`markers` = `{id, t, name, color}` in App state and the project JSON, video
 seconds) are drawn in every step; `Timeline.jsx` adds / renames / deletes them and snaps the
 playhead and range flags onto them (magnet toggle, `telemetry-overlay.snapMarkers`). Keyboard shortcuts follow the same rule (space/arrows/M in the
 player hook everywhere, `[` `]` only while `SyncControls` is mounted, I/O only while the timeline
