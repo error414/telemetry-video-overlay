@@ -25,7 +25,9 @@ Expect rough edges, use at your own risk.
 
 ## Screenshot
 
-![Blackbox overlay for INAV](images/Screenshot_1.png)
+The **Widgets** step: a motor RPM gauge placed over DJI footage with the goggles OSD, the timeline with the throttle trace and two named markers under the video, the widget's settings on the right.
+
+![Blackbox overlay for INAV — Widgets step](images/Screenshot_1.png)
 
 ## License
 
