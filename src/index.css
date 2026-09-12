@@ -1152,6 +1152,10 @@ button.chip.on {
 .workspace {
   display: flex;
   min-height: 0;
+  /* a grid item defaults to min-width:auto = the stage content width: the side panel would be
+     pushed off-screen and slide in as the stage shrinks frame by frame */
+  min-width: 0;
+  overflow: hidden;
   background: var(--surface);
 }
 .workspace-main {
@@ -1183,6 +1187,7 @@ button.chip.on {
 .stage-well {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   position: relative;
   display: flex;
   align-items: center;

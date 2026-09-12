@@ -2,7 +2,7 @@ import React from 'react';
 import StepScreen from './StepScreen.jsx';
 import RangeControls from '../components/RangeControls.jsx';
 import Icon from '../components/Icon.jsx';
-import { exportSpan, pngScaleOptions } from '../export.js';
+import { exportSpan, pngScaleOptions, PNG_FPS_OPTIONS } from '../export.js';
 import { fmtTime } from '../time.js';
 
 export const EXPORT_MODES = [
@@ -24,7 +24,7 @@ export default function ExportStep({ app }) {
   const scaleOptions = pngScaleOptions(video);
   const visibleCount = widgets.filter((w) => w.visible !== false).length;
   return (
-    <StepScreen app={app} rangeMode="edit" showWidgets={false}>
+    <StepScreen app={app} rangeMode="edit">
       {(player) => (
         <>
           {(!video || !visibleCount) && (
@@ -98,23 +98,36 @@ export default function ExportStep({ app }) {
               )}
               {mode === 'png' && (
                 <>
-                  <label className="block">
-                    <span className="label mt-0">Image size</span>
-                    <select className="input input-sm" value={scaleOptions.includes(job.pngScale) ? job.pngScale : 1} disabled={running || !video} onChange={(e) => setJobOption({ pngScale: Number(e.target.value) })}>
-                      {scaleOptions.map((k) => (
-                        <option key={k} value={k}>
-                          {video ? `${video.width * k}×${video.height * k}` : 'video size'}
-                          {k === 1 ? ' (same as video)' : ` (${k}×)`}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label>
+                      <span className="label mt-0">Image size</span>
+                      <select className="input input-sm" value={scaleOptions.includes(job.pngScale) ? job.pngScale : 1} disabled={running || !video} onChange={(e) => setJobOption({ pngScale: Number(e.target.value) })}>
+                        {scaleOptions.map((k) => (
+                          <option key={k} value={k}>
+                            {video ? `${video.width * k}×${video.height * k}` : 'video size'}
+                            {k === 1 ? ' (same as video)' : ` (${k}×)`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="label mt-0">Frame rate</span>
+                      <select className="input input-sm" value={PNG_FPS_OPTIONS.some((o) => o.fps === job.pngFps) ? job.pngFps : 0} disabled={running} onChange={(e) => setJobOption({ pngFps: Number(e.target.value) })}>
+                        <option value={0}>Same as video{video ? ` (${video.fps.toFixed(2)})` : ''}</option>
+                        {PNG_FPS_OPTIONS.map((o) => (
+                          <option key={o.str} value={o.fps}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                   <label className="flex items-center gap-3 cursor-pointer text-sm">
                     <input type="checkbox" checked={!!job.perWidget} disabled={running} onChange={(e) => setJobOption({ perWidget: e.target.checked })} />
                     Each widget separately (a sub-folder per widget)
                   </label>
                   <div className="hint">
-                    8-bit RGBA PNG @ {video ? `${video.fps.toFixed(3)} fps` : 'source frame rate'}; widgets are rendered natively at the chosen size (multiples of the video up to 4K UHD). Files are numbered by the source frame index (frame 0 = video start), so a cut export starts at the in point's frame number. Widgets sharing a name get _1, _2, _3 folders.
+                    8-bit RGBA PNG, one file per frame at the chosen frame rate; widgets are rendered natively at the chosen size (multiples of the video up to 4K UHD). Pick the frame rate of your editing timeline (DaVinci Resolve needs the sequence at the timeline rate, e.g. 60 fps on a 60 fps timeline). Files are numbered by the frame index at that rate (frame 0 = video start), so a cut export starts at the in point's frame number. Widgets sharing a name get _1, _2, _3 folders.
                   </div>
                 </>
               )}

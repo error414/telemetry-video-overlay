@@ -219,6 +219,7 @@ export default function App() {
       csvWorker.remove(id);
       store.rebuild();
       bump();
+      if (!store.sources.length) setScreen('files');
     },
     [store, confirm]
   );
@@ -229,6 +230,7 @@ export default function App() {
     store.sources = [];
     store.rebuild();
     bump();
+    setScreen('files');
     setStatus('All telemetry files removed');
   }, [store, confirm]);
 
@@ -321,6 +323,7 @@ export default function App() {
     setTime(0);
     setRange({ start: 0, end: null });
     setMarkers([]);
+    setScreen('files');
     setStatus('Video removed from the project');
   }, [proxyProgress, confirm]);
 
@@ -390,7 +393,7 @@ export default function App() {
   );
 
   // ---- Export job (lives here so it survives step switches) ----
-  const [job, setJob] = useState({ mode: 'video', quality: 'bitrate', encoder: 'auto', overlayFps: 30, perWidget: false, pngScale: 1, running: false, progress: null, log: '', result: null, out: null, setup: null });
+  const [job, setJob] = useState({ mode: 'video', quality: 'bitrate', encoder: 'auto', overlayFps: 30, perWidget: false, pngScale: 1, pngFps: 0, running: false, progress: null, log: '', result: null, out: null, setup: null });
   const cancelRef = useRef(false);
   const setJobOption = useCallback((patch) => setJob((j) => ({ ...j, ...patch })), []);
   useEffect(() => window.api.onExportLog((s) => setJob((j) => ({ ...j, log: (j.log + s).slice(-4000) }))), []);
@@ -426,6 +429,7 @@ export default function App() {
         overlayFps: job.overlayFps,
         perWidget: job.perWidget,
         pngScale: job.pngScale,
+        pngFps: job.pngFps,
         range,
         onStart: (setup) => setJob((j) => ({ ...j, setup })),
         onProgress: (p) => setJob((j) => ({ ...j, progress: p })),
@@ -437,7 +441,7 @@ export default function App() {
       setJob((j) => ({ ...j, running: false, result: 'error', log: j.log + '\n' + e.message }));
       setStatus('Export failed — see the Export step');
     }
-  }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, job.perWidget, job.pngScale, widgets, store, sync, range]);
+  }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, job.perWidget, job.pngScale, job.pngFps, widgets, store, sync, range]);
   const cancelExport = useCallback(() => (cancelRef.current = true), []);
 
   // ---- Project save/load ----
@@ -609,12 +613,17 @@ export default function App() {
   const locked = job.running;
 
   // ---- steps ----
+  // Sync and everything after it need both a video and a blackbox log: until then the stepper,
+  // the next-step button and any programmatic step change stay on Files
+  const ready = !!video && store.sources.length > 0;
   const stepIndex = STEP_IDS.indexOf(screen);
   const steps = STEPS.map((s) => ({
     ...s,
-    done: s.id === 'files' ? !!video && store.sources.length > 0 : s.id === 'sync' ? !!video && store.sources.length > 0 && (offset !== 0 || drift !== 0) : s.id === 'widgets' ? widgets.length > 0 : job.result === 'ok',
+    done: s.id === 'files' ? ready : s.id === 'sync' ? ready && (offset !== 0 || drift !== 0) : s.id === 'widgets' ? widgets.length > 0 : job.result === 'ok',
+    disabled: s.id !== 'files' && !ready,
+    hint: s.id !== 'files' && !ready ? 'Open a video and a blackbox log first' : s.hint,
   }));
-  const goStep = useCallback((id) => setScreen(id), []);
+  const goStep = useCallback((id) => setScreen(id !== 'files' && !ready ? 'files' : id), [ready]);
 
   const app = {
     video,
@@ -755,7 +764,7 @@ export default function App() {
             Back
           </button>
           {stepIndex < STEP_IDS.length - 1 && (
-            <button className="btn btn-tonal" onClick={() => goStep(STEP_IDS[stepIndex + 1])} disabled={locked}>
+            <button className="btn btn-tonal" onClick={() => goStep(STEP_IDS[stepIndex + 1])} disabled={locked || !ready} title={ready ? undefined : 'Open a video and a blackbox log first'}>
               {STEPS[stepIndex + 1].label}
               <Icon name="forward" />
             </button>

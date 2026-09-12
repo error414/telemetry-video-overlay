@@ -35,8 +35,9 @@ step, a stepper in the app bar, Back / next-step buttons in the bottom bar; ever
 only what it needs, see "Screens" below):
 
 0. Start screen: continue the previous session, new project, or open a project file.
-1. Files: open video (ffprobe, preview proxy) and blackbox (`.csv` or raw `.txt`/`.bbl`/`.bfl`/`.log`
-   decoded by `blackbox_decode`; multiple files allowed).
+1. Files: open video (ffprobe, preview proxy) and blackbox (raw `.txt`/`.bbl`/`.bfl`/`.log`
+   decoded by `blackbox_decode`; multiple files allowed; a CSV enters only through a project
+   file — there is no "Add CSV" button). Sync and the later steps are disabled until both are loaded.
 2. Sync: manual (offset/drift steppers), video motion or Gyroflow project (`src/sync/`).
 3. Widgets: add from the Add widget dialog (examples + own library, search + tag filter), arrange
    on the stage, tune settings, edit code, manage the library and layouts.
@@ -90,9 +91,9 @@ project is debounced 500 ms, wait before reading it back. Dialogs (`.dialog`) ar
 `ExportStep.jsx`. Every step is built on `steps/StepScreen.jsx`: stage + play deck + timeline on
 the left (`Stage.jsx`, `Transport.jsx`, `Timeline.jsx`, playback state from the `usePlayer` hook in
 `components/player.js`), the step's cards in the side panel on the right. What the stage shows is
-decided per step through props: widgets are drawn only in the Widgets step (edit mode, grid
-toggles, trace); Files / Sync / Export show the plain video, Sync adds the teal trace, Export the
-editable export range. Named markers (`markers` = `{id, t, name, color}` in App state and the project JSON, video
+decided per step through props: widgets are drawn in the Widgets step (edit mode, grid
+toggles, trace) and, read-only, in the Export step (preview of what gets rendered); Files / Sync
+show the plain video, Sync adds the teal trace, Export the editable export range. Named markers (`markers` = `{id, t, name, color}` in App state and the project JSON, video
 seconds) are drawn in every step; `Timeline.jsx` adds / renames / deletes them and snaps the
 playhead and range flags onto them (magnet toggle, `telemetry-overlay.snapMarkers`). Keyboard shortcuts follow the same rule (space/arrows/M in the
 player hook everywhere, `[` `]` only while `SyncControls` is mounted, I/O only while the timeline
@@ -180,10 +181,14 @@ after touching `src/icons.js`, `node .claude/skills/widget/icons-md.mjs` (regene
 
 ### Export (src/export.js)
 
+Frames are rendered in the renderer, so the window has `backgroundThrottling: false` plus the
+`disable-renderer-backgrounding` switch (export keeps running at full speed while minimised) and the
+main process holds a `powerSaveBlocker` for the duration of a job.
 `runExport` renders only the union rectangle of visible widgets (`widgetRegion`), optionally at
 a lower overlay fps than the video, pipelines up to 3 frames in flight, and streams RGBA to
 ffmpeg in the main process (`buildArgs` in main.cjs picks NVENC/CUDA or CPU codecs). PNG mode
-writes a numbered per-frame sequence (optionally one folder per widget, integer upscale up to 4K).
+writes a numbered per-frame sequence (optionally one folder per widget, integer upscale up to 4K)
+at the source rate or at a chosen NLE timeline rate (`PNG_FPS_OPTIONS`, frame numbers follow that rate).
 
 ## UI conventions (src/index.css)
 
