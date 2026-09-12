@@ -393,7 +393,7 @@ export default function App() {
   );
 
   // ---- Export job (lives here so it survives step switches) ----
-  const [job, setJob] = useState({ mode: 'video', quality: 'bitrate', encoder: 'auto', overlayFps: 30, perWidget: false, pngScale: 1, running: false, progress: null, log: '', result: null, out: null, setup: null });
+  const [job, setJob] = useState({ mode: 'video', quality: 'bitrate', encoder: 'auto', overlayFps: 30, perWidget: false, pngScale: 1, pngFps: 0, running: false, progress: null, log: '', result: null, out: null, setup: null });
   const cancelRef = useRef(false);
   const setJobOption = useCallback((patch) => setJob((j) => ({ ...j, ...patch })), []);
   useEffect(() => window.api.onExportLog((s) => setJob((j) => ({ ...j, log: (j.log + s).slice(-4000) }))), []);
@@ -429,6 +429,7 @@ export default function App() {
         overlayFps: job.overlayFps,
         perWidget: job.perWidget,
         pngScale: job.pngScale,
+        pngFps: job.pngFps,
         range,
         onStart: (setup) => setJob((j) => ({ ...j, setup })),
         onProgress: (p) => setJob((j) => ({ ...j, progress: p })),
@@ -440,7 +441,7 @@ export default function App() {
       setJob((j) => ({ ...j, running: false, result: 'error', log: j.log + '\n' + e.message }));
       setStatus('Export failed — see the Export step');
     }
-  }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, job.perWidget, job.pngScale, widgets, store, sync, range]);
+  }, [video, job.running, job.mode, job.quality, job.encoder, job.overlayFps, job.perWidget, job.pngScale, job.pngFps, widgets, store, sync, range]);
   const cancelExport = useCallback(() => (cancelRef.current = true), []);
 
   // ---- Project save/load ----

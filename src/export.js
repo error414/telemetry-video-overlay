@@ -68,6 +68,22 @@ export function widgetFolderNames(widgets) {
   });
 }
 
+/**
+ * Frame rates the PNG export can be written at besides the source rate: the timeline rates of the
+ * usual NLEs (DaVinci Resolve refuses to conform a 30 fps sequence onto a 60 fps timeline cleanly).
+ * fps = numeric rate used for frame timing / numbering, str = exact ffmpeg rate string.
+ */
+export const PNG_FPS_OPTIONS = [
+  { fps: 60, str: '60', label: '60 fps' },
+  { fps: 60000 / 1001, str: '60000/1001', label: '59.94 fps' },
+  { fps: 50, str: '50', label: '50 fps' },
+  { fps: 30, str: '30', label: '30 fps' },
+  { fps: 30000 / 1001, str: '30000/1001', label: '29.97 fps' },
+  { fps: 25, str: '25', label: '25 fps' },
+  { fps: 24, str: '24', label: '24 fps' },
+  { fps: 24000 / 1001, str: '24000/1001', label: '23.976 fps' },
+];
+
 /** Largest "common" output the PNG export offers: UHD 4K. */
 export const PNG_MAX = { w: 3840, h: 2160 };
 
@@ -130,11 +146,13 @@ export function pngScaleOptions(info) {
  * perWidget: PNG mode only — one pass per visible widget into out/<widget folder>/
  * pngScale: PNG mode only — integer multiple of the video size (see pngScaleOptions); widgets are
  *   rendered natively at that size (no upscaling), 8-bit RGBA PNG
+ * pngFps: PNG mode only — frame rate of the sequence (a PNG_FPS_OPTIONS rate, the NLE timeline rate);
+ *   0 / undefined = the source frame rate
  *
- * PNG sequences always run at the source frame rate and are numbered by the source frame index
- * (frame 0 = video start), so a cut export starts at the index of the in point.
+ * PNG sequences are numbered by the frame index at the sequence rate (frame 0 = video start), so a
+ * cut export starts at the index of the in point on that grid.
  */
-export async function runExport({ mode, out, info, widgets, store, sync, quality, onProgress, isCancelled, overlayFps, encoder, onStart, lt = IDENTITY_LT, range, perWidget, pngScale = 1 }) {
+export async function runExport({ mode, out, info, widgets, store, sync, quality, onProgress, isCancelled, overlayFps, encoder, onStart, lt = IDENTITY_LT, range, perWidget, pngScale = 1, pngFps = 0 }) {
   const scale = mode === 'png' && pngScaleOptions(info).includes(pngScale) ? pngScale : 1;
   const width = Math.round(info.width * scale);
   const height = Math.round(info.height * scale);
@@ -142,11 +160,12 @@ export async function runExport({ mode, out, info, widgets, store, sync, quality
   if (scale !== 1) lt = { sx: lt.sx * scale, sy: lt.sy * scale, k: lt.k * scale };
   const fullFps = info.fps;
   const useLowerFps = mode === 'video' && overlayFps && overlayFps < fullFps;
-  const fps = useLowerFps ? overlayFps : fullFps;
-  const fpsStr = useLowerFps ? String(overlayFps) : info.fpsStr;
+  const pngRate = mode === 'png' && pngFps > 0 ? PNG_FPS_OPTIONS.find((o) => o.fps === pngFps) || { fps: pngFps, str: String(pngFps) } : null;
+  const fps = pngRate ? pngRate.fps : useLowerFps ? overlayFps : fullFps;
+  const fpsStr = pngRate ? pngRate.str : useLowerFps ? String(overlayFps) : info.fpsStr;
   const span = exportSpan(range, info.duration, fullFps);
   const totalFrames = Math.max(1, Math.round((span.end - span.start) * fps));
-  const startNumber = mode === 'png' ? Math.round(span.start * fullFps) : 0;
+  const startNumber = mode === 'png' ? Math.round(span.start * fps) : 0;
   // Only the video mode may crop: transparent overlay-only exports must keep the full frame size.
   const region = mode === 'video' ? widgetRegion(widgets, width, height, 16, lt) : { x: 0, y: 0, w: width, h: height };
   const canvas = document.createElement('canvas');

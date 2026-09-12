@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -11,6 +11,9 @@ const ffprobePath = fixAsar(require('ffprobe-static').path);
 
 // webSecurity is intentionally off (local file:// video from the dev server); hide the dev-only warnings.
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+// The export renders its frames in the renderer process: never drop it to background priority
+// (Windows "efficiency mode") when the window is minimised or covered (see also backgroundThrottling).
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
 
 let win = null;
 
@@ -27,6 +30,9 @@ function createWindow() {
       nodeIntegration: false,
       // Allows the http://localhost renderer to play local file:// videos.
       webSecurity: false,
+      // Keep timers, requestAnimationFrame and the Page Visibility API running while the window is
+      // minimised or covered: the export renders its frames in this renderer and would stall otherwise.
+      backgroundThrottling: false,
     },
   });
   win.setMenuBarVisibility(false);
@@ -426,6 +432,8 @@ ipcMain.handle('export:start', async (_e, opts) => {
     if (win) win.webContents.send('export:log', s);
   });
   proc.stdin.on('error', () => {}); // EPIPE on cancel
+  // the export runs unattended (window minimised, user away): keep the system from sleeping until it ends
+  exp.blocker = powerSaveBlocker.start('prevent-app-suspension');
   return { args, gpu };
 });
 
@@ -449,12 +457,18 @@ ipcMain.on('export:port', (e) => {
   port.start();
 });
 
+function releaseBlocker(cur) {
+  if (cur.blocker != null && powerSaveBlocker.isStarted(cur.blocker)) powerSaveBlocker.stop(cur.blocker);
+  cur.blocker = null;
+}
+
 ipcMain.handle('export:finish', async () => {
   if (!exp) return { code: 0, log: '' };
   const cur = exp;
   cur.proc.stdin.end();
   const code = await cur.done;
   exp = null;
+  releaseBlocker(cur);
   return { code, log: cur.error };
 });
 
@@ -462,6 +476,7 @@ ipcMain.handle('export:cancel', async () => {
   if (!exp) return;
   const cur = exp;
   exp = null;
+  releaseBlocker(cur);
   try {
     cur.proc.stdin.destroy();
     cur.proc.kill();
