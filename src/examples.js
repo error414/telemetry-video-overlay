@@ -10,7 +10,7 @@ export const EXAMPLE_WIDGETS = [
   {
     name: 'Example: Big number',
     icon: WIDGET_ICONS.big_number,
-    tags: ['library', 'value', 'speed'],
+    tags: ['library', 'value', 'speed', 'icon'],
     columns: 'GPS_speed (m/s)',
     w: 320,
     h: 110,
@@ -23,13 +23,20 @@ export const EXAMPLE_WIDGETS = [
         { name: 'Show max', type: 'bool', default: false, description: 'show whole-flight maximum under the value' },
         { name: 'Smoothing ms', type: 'int', default: 300, min: 0, description: 'moving-average window in ms that filters out quick small jumps (0 = off)' },
       ] } },
+      { group: { name: 'Icon', icon: gi('Icon'), items: [
+        { name: 'Show icon', type: 'bool', default: true, description: 'draw a pictogram at one edge of the box' },
+        { name: 'Icon side', type: 'select', default: 'right', values: ['left', 'right'], description: 'edge of the box the icon sits at (independent of Align)' },
+        { name: 'Icon', type: 'select', default: 'speed', values: { battery: 'Battery (vbat, sagCompensatedVBat)', current: 'Current (amperage)', power: 'Power (W)', altitude: 'Altitude (BaroAlt, navPos[2], GPS_altitude)', vario: 'Vertical speed (navVel[2])', speed: 'Ground speed (GPS_speed)', airspeed: 'Airspeed (AirSpeed)', wind: 'Wind (wind[])', gyro: 'Gyro (gyroADC)', accel: 'Accelerometer (accSmooth)', vibration: 'Vibration (accVib)', attitude: 'Attitude (attitude[0], attitude[1])', heading: 'Heading (attitude[2], GPS_ground_course)', rssi: 'RSSI (rssi)', link: 'RC link (rxUpdateRate)', satellites: 'Satellites (GPS_numSat)', accuracy: 'GPS accuracy (GPS_hdop, navEPH)', throttle: 'Throttle (rcCommand[3])', motor: 'Motor / RPM (motor[], escRPM)', temperature: 'Temperature (IMUTemperature, escTemperature)', home: 'Home / distance', rangefinder: 'Height above ground (surfaceRaw, navSurf)', time: 'Time', plane: 'Aircraft / flight mode', waypoint: 'Waypoint (activeWpNumber, navState)', magnet: 'Compass raw (magADC)' }, description: 'which pictogram; the brackets name the blackbox columns it fits' },
+        { name: 'Icon size', type: 'int', default: 56, min: 8, description: 'icon height at the default 320x110 size; scales with the widget' },
+        { name: 'Icon color', type: 'color_picker', default: '#ffffff', description: 'icon colour; the grey parts are the same colour at 45 %' },
+      ] } },
       { group: { name: 'Text', icon: gi('Text'), items: [
         { name: 'Color', type: 'color_picker', default: '#ffffff', description: 'text color' },
         { name: 'Label color', type: 'color_picker', default: 'rgba(255,255,255,.75)' },
         { name: 'Font', type: 'text', default: 'Arial, sans-serif', description: 'font family' },
         { name: 'Size', type: 'int', default: 64, min: 8, description: 'value font size at the default 320x110 size; scales with the widget' },
-        { name: 'Shadow', type: 'text', default: '0 0 8px rgba(0,0,0,.9)', description: "CSS text shadow ('' = none)" },
-        { name: 'Align', type: 'select', default: 'left', values: ['left', 'center', 'right'], description: "'left' | 'center' | 'right'" },
+        { name: 'Shadow', type: 'text', default: '0 0 8px rgba(0,0,0,.9)', description: "CSS text shadow ('' = none); the icon gets a matching soft shadow" },
+        { name: 'Align', type: 'select', default: 'left', values: ['left', 'center', 'right'], description: 'text left, centred or right; the icon keeps its own side (Icon side)' },
       ] } },
       { group: { name: 'Box', icon: gi('Box'), items: [
         { name: 'Background', type: 'color_picker', default: 'rgba(0,0,0,.25)', description: 'box background; alpha 0 = no box' },
@@ -42,17 +49,52 @@ export const EXAMPLE_WIDGETS = [
   var UNIT        = settings.unit.value;         // unit text after the value
   var MULTIPLIER  = settings.multiplier.value;   // value * MULTIPLIER (m/s -> km/h = 3.6; 1 = as is)
   var DIGITS      = settings.digits.value;       // decimal places
+  var SHOW_MAX    = settings.show_max.value;     // show whole-flight maximum under the value
+  var SMOOTH_MS   = settings.smoothing_ms.value; // moving-average window (ms) that filters out quick small jumps of the value (0 = off)
+  var SHOW_ICON   = settings.show_icon.value;    // draw a pictogram at one edge of the box
+  var ICON_SIDE   = settings.icon_side.value;    // 'left' | 'right' edge of the box (independent of ALIGN)
+  var ICON        = settings.icon.value;         // key into ICONS below (battery, current, altitude, speed, gyro, ...)
+  var ICON_SIZE   = settings.icon_size.value;    // icon height at the default 320x110 size; scales with the widget
+  var ICON_COLOR  = settings.icon_color.value;   // icon colour; the grey parts are the same colour at 45 %
   var COLOR       = settings.color.value;        // text color
   var LABEL_COLOR = settings.label_color.value;
   var FONT        = settings.font.value;
   var SIZE        = settings.size.value;         // value font size at the default 320x110 size; scales with the widget
-  var SHADOW      = settings.shadow.value;       // text shadow ('' = none)
+  var SHADOW      = settings.shadow.value;       // text shadow ('' = none); the icon gets a matching soft shadow
+  var ALIGN       = settings.align.value;        // 'left' | 'center' | 'right' (text only; the icon keeps its own side)
   var BG          = settings.background.value;   // box background color + transparency (last number: 0 = invisible, 1 = solid; 'transparent' = none)
   var RADIUS      = settings.radius.value;       // box corner radius at the default size; scales with the widget
-  var ALIGN       = settings.align.value;        // 'left' | 'center' | 'right'
-  var SHOW_MAX    = settings.show_max.value;     // show whole-flight maximum under the value
-  var SMOOTH_MS   = settings.smoothing_ms.value; // moving-average window (ms) that filters out quick small jumps of the value (0 = off)
   // -------------------------------
+  // Monochrome pictograms for the usual blackbox values, 24x24 grid: currentColor strokes, the
+  // secondary parts in the same colour at 45 % (grey), transparent background.
+  var ICONS = {
+    battery:     '<rect x="2.5" y="7" width="16" height="10" rx="2"/><path d="M21.5 10.5v3"/><rect x="5" y="9.5" width="7" height="5" rx="1" fill="currentColor" stroke="none" opacity=".45"/>',
+    current:     '<path d="M13.5 2.5L5.5 13.5h6l-1 8 8-11h-6z" fill="currentColor" fill-opacity=".45"/>',
+    power:       '<circle cx="12" cy="12" r="9"/><path d="M13 6.5l-4.5 6.5h4l-1 4.5 4.5-6.5h-4z" fill="currentColor" fill-opacity=".45"/>',
+    altitude:    '<path d="M2.5 19.5l6-10.5 4 6 2.5-3.5 6.5 8z" fill="currentColor" fill-opacity=".45"/><path d="M18 3v6M15.5 5.5L18 3l2.5 2.5"/>',
+    vario:       '<path d="M8 20V4.5M4 8.5l4-4 4 4"/><path d="M16 4v15.5M12 15.5l4 4 4-4" opacity=".45"/>',
+    speed:       '<path d="M4 16.5a8 8 0 1 1 16 0"/><path d="M4 16.5a8 8 0 0 1 3.3-6.5l4.7 6.5z" fill="currentColor" stroke="none" opacity=".45"/><path d="M12 16.5l4.5-6"/><circle cx="12" cy="16.5" r="1.6" fill="currentColor" stroke="none"/>',
+    airspeed:    '<path d="M16.5 3.5v5M14 3.5h5"/><rect x="7.5" y="8.5" width="13.5" height="4" rx="2" fill="currentColor" fill-opacity=".45"/><path d="M1.5 8.5h4M1 10.5h4.5M1.5 12.5h4"/><path d="M4 16.5h13M13.5 14l3.5 2.5-3.5 2.5" opacity=".45"/>',
+    wind:        '<path d="M4 21V3"/><path d="M4 6l16 2.5v4L4 15z" fill="currentColor" fill-opacity=".45"/><path d="M9.5 6.9v7.3M14.5 7.7v5.8"/>',
+    gyro:        '<ellipse cx="12" cy="12" rx="9" ry="3.5"/><ellipse cx="12" cy="12" rx="3.5" ry="9" opacity=".45"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>',
+    accel:       '<circle cx="9.5" cy="12" r="3.5" fill="currentColor" fill-opacity=".45"/><path d="M15 12h6.5M18.5 9l3 3-3 3"/><path d="M2 9h2.5M1.5 12h3M2 15h2.5" opacity=".45"/>',
+    vibration:   '<path d="M2 12h20" opacity=".35"/><path d="M2 12h2l2-6 3 12 3-12 3 12 3-12 2 6h2"/>',
+    attitude:    '<circle cx="12" cy="12" r="9"/><path d="M3 12a9 9 0 0 0 18 0z" fill="currentColor" stroke="none" opacity=".45"/><path d="M6 12h4M14 12h4"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>',
+    heading:     '<circle cx="12" cy="12" r="9"/><path d="M12 4.5l2.3 7.5h-4.6z" fill="currentColor" stroke="none"/><path d="M12 19.5l2.3-7.5h-4.6z" fill="currentColor" stroke="none" opacity=".45"/>',
+    rssi:        '<path d="M4 20v-3M9 20v-7.5M14 20V8" stroke-width="2.6"/><path d="M19 20V3.5" stroke-width="2.6" opacity=".45"/>',
+    link:        '<path d="M12 21v-9"/><circle cx="12" cy="9.5" r="2.2" fill="currentColor" stroke="none"/><path d="M8.5 6.5a5 5 0 0 1 7 0"/><path d="M6 5.5a9 9 0 0 1 12 0" opacity=".45"/>',
+    satellites:  '<path d="M12 8.5l3.5 3.5-3.5 3.5-3.5-3.5z" fill="currentColor" fill-opacity=".45"/><path d="M6 3.5l4.5 4.5-2.5 2.5L3.5 6z"/><path d="M13.5 16l4.5-4.5 2.5 2.5-4.5 4.5z"/><path d="M3 15a6 6 0 0 1 6 6" opacity=".45"/><path d="M3 18.5a2.5 2.5 0 0 1 2.5 2.5"/>',
+    accuracy:    '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" opacity=".45"/><path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22"/>',
+    throttle:    '<path d="M4.5 19.5h15"/><path d="M6.5 16.5a7 7 0 0 1 11 0" opacity=".45"/><path d="M12 19.5l4.5-10"/><circle cx="16.8" cy="8.7" r="2.2" fill="currentColor" stroke="none"/>',
+    motor:       '<circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><ellipse cx="12" cy="6.5" rx="2.2" ry="4" fill="currentColor" fill-opacity=".45"/><ellipse cx="12" cy="6.5" rx="2.2" ry="4" fill="currentColor" fill-opacity=".45" transform="rotate(120 12 12)"/><ellipse cx="12" cy="6.5" rx="2.2" ry="4" fill="currentColor" fill-opacity=".45" transform="rotate(240 12 12)"/>',
+    temperature: '<path d="M10 4a2 2 0 0 1 4 0v9.3a4 4 0 1 1-4 0z"/><circle cx="12" cy="17" r="2" fill="currentColor" stroke="none"/><path d="M12 15V9" stroke-width="2.4" opacity=".45"/>',
+    home:        '<path d="M3.5 11.5L12 4l8.5 7.5"/><path d="M6 10v10h12V10"/><rect x="10" y="14" width="4" height="6" fill="currentColor" stroke="none" opacity=".45"/>',
+    rangefinder: '<rect x="2.5" y="18" width="19" height="3" rx="1" fill="currentColor" stroke="none" opacity=".45"/><path d="M12 3.5v11M8.5 11l3.5 3.5 3.5-3.5"/>',
+    time:        '<circle cx="12" cy="13" r="8"/><path d="M12 13V5a8 8 0 0 1 8 8z" fill="currentColor" stroke="none" opacity=".45"/><path d="M12 13V8.5M9.5 2.5h5M12 2.5V5M18.5 6.5l1.5-1.5"/>',
+    plane:       '<path d="M12 3l2 7h7l-2 2h-5l-1 5 2 2v1l-3-1-3 1v-1l2-2-1-5H5l-2-2h7z" fill="currentColor" fill-opacity=".45"/>',
+    waypoint:    '<path d="M5 21V4"/><path d="M5 4h13l-3 4 3 4H5z" fill="currentColor" fill-opacity=".45"/>',
+    magnet:      '<path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 4h4v5H6zM14 4h4v5h-4z" fill="currentColor" fill-opacity=".45"/>',
+  };
   var scale = Math.min(ctx.width / 320, ctx.height / 110);  // all sizes scale with the widget (settings are for the default 320x110)
   var fs = SIZE * scale, radius = RADIUS * scale;
   var v = ctx.values[0];
@@ -64,13 +106,21 @@ export const EXAMPLE_WIDGETS = [
   }
   var txt = (typeof v === 'number') ? (v * MULTIPLIER).toFixed(DIGITS) : '--';
   var st = SHOW_MAX ? ctx.stats(ctx.columns[0]) : null;
-  return '<div id="bignum" class="box" style="width:100%;height:100%;box-sizing:border-box;padding:' + (4 * scale).toFixed(1) + 'px ' + (10 * scale).toFixed(1) + 'px;background:' + BG
-    + ';border-radius:' + radius.toFixed(1) + 'px;font-family:' + FONT + ';color:' + COLOR + ';text-shadow:' + SHADOW + ';text-align:' + ALIGN + '">'
+  var icon = '';
+  if (SHOW_ICON && ICONS[ICON]) {
+    var isz = (ICON_SIZE * scale).toFixed(1);
+    icon = '<svg class="icon" viewBox="0 0 24 24" width="' + isz + '" height="' + isz + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;align-self:center;color:' + ICON_COLOR
+      + (SHADOW ? ';filter:drop-shadow(0 0 ' + (3 * scale).toFixed(1) + 'px rgba(0,0,0,.8))' : '') + '">' + ICONS[ICON] + '</svg>';
+  }
+  return '<div id="bignum" class="box" style="width:100%;height:100%;box-sizing:border-box;display:flex;align-items:flex-start;gap:' + (10 * scale).toFixed(1) + 'px;padding:' + (4 * scale).toFixed(1) + 'px ' + (10 * scale).toFixed(1) + 'px;background:' + BG
+    + ';border-radius:' + radius.toFixed(1) + 'px;font-family:' + FONT + ';color:' + COLOR + ';text-shadow:' + SHADOW + '">'
+    + (ICON_SIDE === 'left' ? icon : '')
+    + '<div class="text" style="flex:1 1 auto;min-width:0;text-align:' + ALIGN + '">'
     + (LABEL ? '<div class="label" style="font-size:' + (fs * 0.28).toFixed(1) + 'px;color:' + LABEL_COLOR + ';letter-spacing:' + (2 * scale).toFixed(1) + 'px">' + LABEL + '</div>' : '')
-    + '<div class="value" style="font-size:' + fs.toFixed(1) + 'px;font-weight:bold;line-height:1">' + txt
+    + '<div class="value" style="font-size:' + fs.toFixed(1) + 'px;font-weight:bold;line-height:1;white-space:nowrap">' + txt
     + ' <span class="unit" style="font-size:' + (fs * 0.35).toFixed(1) + 'px;font-weight:normal">' + UNIT + '</span></div>'
     + (st ? '<div class="max" style="font-size:' + (fs * 0.25).toFixed(1) + 'px;color:' + LABEL_COLOR + '">max ' + (st.max * MULTIPLIER).toFixed(DIGITS) + ' ' + UNIT + '</div>' : '')
-    + '</div>';
+    + '</div>' + (ICON_SIDE === 'left' ? '' : icon) + '</div>';
 }`,
   },
   {

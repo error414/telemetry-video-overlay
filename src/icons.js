@@ -110,6 +110,7 @@ export const GROUP_ICONS = {
   arrows: svg('<path d="M4 12h16M14 6l6 6-6 6M10 6l-6 6 6 6"/>'),
   border: svg('<rect x="4" y="4" width="16" height="16" rx="3" stroke-dasharray="4 3"/>'),
   position: svg('<path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="3"/>'),
+  icon: svg('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8l1.2 2.6 2.8.4-2 2 .5 2.8L12 14.5 9.5 15.8l.5-2.8-2-2 2.8-.4z" fill="currentColor" stroke="none"/>'),
   tune: svg(UI_ICONS.tune),
 };
 
@@ -122,6 +123,7 @@ const GROUP_RULES = [
   [/peak|hold/, 'peak'],
   [/idle/, 'idle'],
   [/anim/, 'animation'],
+  [/icon|symbol|glyph|pictogram/, 'icon'],
   [/scale|tick|ruler/, 'scale'],
   [/sticks?|gimbal/, 'sticks'],
   [/data|source|column|input|smooth|filter/, 'data'],
